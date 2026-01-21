@@ -1,0 +1,110 @@
+SELECT A.CustomerNo, B.ReviewDt
+FROM   BSADBTW..BSA_SUB_CUST_FACT A WITH (NOLOCK)
+       JOIN BSADBTW..PB_CUSTOMER_FACT D WITH (NOLOCK) on a.CIF_KEY = d.CIF_KEY
+       JOIN BSADBTW..EDD_ReviewSchedule B WITH (NOLOCK) on A.CIF_KEY = B.CIFKey and B.status = 'P' and B.ReviewDt<='2027-02-28 23:59:59.999'
+       LEFT JOIN (SELECT A.BATCHID, A.CIF_KEY, A.STATUS
+                  FROM   BSADBTW..HRS_CUST_RISK_MGMT A WITH (NOLOCK)
+                  WHERE  A.STATUS <> '3'
+                  ) C ON A.CIF_KEY = C.CIF_KEY
+WHERE  C.CIF_KEY is null and D.RecordStatus = 'O' and D.Customer_Segment <> 'NCR' 
+
+-----------
+
+
+1. 目標對象
+SELECT「客戶編號 (CustomerNo)」以及「預定的審查日期 (ReviewDt)」
+2. 篩選條件
+審查時間： 該客戶在排程表中（EDD_ReviewSchedule）的狀態為 'P'（通常代表 Pending，待處理），且審查日期是在 2027 年 2 月 28 日（含）以前。
+
+
+客戶狀態：
+必須是有效客戶（RecordStatus = 'O'，通常指 Open）。
+客戶類型不是 'NCR'  No Current Relationship (無當前往來關係)
+
+
+排除正在處理的風險案件：
+這段 SQL 使用了 LEFT JOIN ... WHERE C.CIF_KEY is null，意思是：如果這個客戶在「風險管理系統（HRS_CUST_RISK_MGMT）」裡有狀態不是 '3'（可能代表結案）的紀錄，就要把他排除掉。
+簡單來說：只找目前沒有「未結案風險管理紀錄」的客戶。
+
+
+
+
+
+
+BSADBTW..BSA_SUB_CUST_FACT
+BSADBTW..PB_CUSTOMER_FACT
+BSADBTW..EDD_ReviewSchedule
+BSADBTW..HRS_CUST_RISK_MGMT
+
+
+
+
+
+需求
+一、因應未來定審案件較多，擬針對未來屆期定審到期之個人戶進行行銀及Richart App推播提醒客戶更新資料。
+二、惠請IT協助提供以下邏輯之客戶清單。
+        邏輯：下次審查日=撈檔當日~2027/2/28之客戶清單
+        欄位：客戶ID、下次審查日
+        ※ 若檔案筆數超逾100萬筆，請拆分檔案提供。
+三、若有其他需求調整，另以Email方式補充。
+
+
+
+說明:
+1. 專案核心：數位自主更新 (KYC Self-Service)
+目的：因應 2027 年 2 月底前的審查案件高峰，透過 Richart 與行銀 App 預先推播，引導客戶自主更新資料，以緩解人工審查壓力。
+
+2. 篩選邏輯：精準找對人
+時間區間：撈取下次審查日在 今日～2027/02/28 之間的客戶。
+兩大排除條件：
+排除 NCR（久未往來戶）：不浪費資源推播給不活動的客戶。
+排除「未結案」者 (STATUS <> '3')：
+若客戶已有新案、處理中或撤案（狀態 1, 2, 4），則不推播。
+原因：避免與現有審核流程衝突，造成客戶重複補件或困擾。
+
+3. 交付要求：大數據分流
+欄位：客戶 ID、下次審查日（作為推播優先順序判斷）。
+分檔處理：因資料量極大，若超過 100 萬筆需拆分檔案，以利後續 App 系統匯入與作業安全性。
+一句話總結：
+「為了分流 2027 年初的審查高峰，我們請 IT 篩選出『非久未往來』且『目前無進行中案件』的客戶，透過 App 推播引導他們在到期前主動更新資料。」
+
+
+（STATUS <> '3'）
+1：新案 / 待處理 (New / Pending)
+2：處理中 (In Progress)
+3：已結案 / 已完成 (Closed / Completed / Approved)
+4：撤案 / 駁回 (Cancelled / Rejected)
+
+
+
+
+
+---
+這段 SQL 
+使用了四張主要的資料表，主要圍繞著
+「洗錢防制（AML）」與「客戶盡職調查（KYC）」的業務邏輯。
+
+A 表 (BSA_SUB_CUST_FACT)：身分對照表
+重點： 拿來抓客戶編號 (CustomerNo)。它是身分證號/客戶編號與系統內碼的對應表。
+
+D 表 (PB_CUSTOMER_FACT)：客戶現況表
+重點： 檢查客戶狀態。確保是「正常往來戶」並排除「久未往來戶 (NCR)」。
+
+B 表 (EDD_ReviewSchedule)：審查行事曆
+重點： 決定推播對象。找出在 2027/2/28 前「待審查 (Status='P')」的時間。
+
+C 表 (HRS_CUST_RISK_MGMT)：案件進度表
+重點： 用來過濾排除。如果客戶已經有「還沒結案 (Status <> 3)」的案子在跑，就不推播。
+
+總結邏輯：
+從行事曆 (B) 找日期，去對照表 (A) 抓 ID，用現況表 (D) 踢掉沒往來的，最後用進度表 (C) 踢掉正在審核中的。
+
+
+這段 SQL 的運作邏輯像是一個三層過濾網：
+第一層（時間過濾）：從 EDD_ReviewSchedule 找出 2027 年 2 月底前要審查的人。
+第二層（身分過濾）：透過 PB_CUSTOMER_FACT 確認這些人是「正常往來」且「非久未往來」的個人戶。
+第三層（狀態過濾）：透過 HRS_CUST_RISK_MGMT 排除掉那些「已經在處理中」的案件。
+
+最終結果：
+產出一份「乾淨、有效、且真正需要提醒」的客戶清單，讓銀行可以安心地透過 App 發送推播，而不會發錯人或是造成重複審核。
+訊息只會發給「快到期的人」，不會吵到不相關的客戶。
