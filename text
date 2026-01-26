@@ -1,11 +1,4 @@
 
-在工作上資料庫部分Oracle 跟 MS SQL 都有使用，使用 ETL 流程進行資料移動，並使用 Control-M 進行作業排程和監控。
-這句英文要怎麼口說表達
-
-So in my current role, I work with both Oracle and MS SQL databases.
-I move data using ETL processes and manage job scheduling and monitoring with Control-M. This helps keep our systems stable and running efficiently.
-
-
 
 
 Opening & Current Role
@@ -26,32 +19,16 @@ I move data using ETL processes and manage job scheduling and monitoring with Co
 This helps keep our systems stable and running efficiently.
 
 
-----------
+----
+我能與不同部門合作將業務需求轉化為可靠的技術解決方案。
+.. 講專案 .. 遇到問題 ... 解決
 
-My main focus is on keeping systems reliable and running efficiently.
+I also have experience in C# development and collaborate with different teams
+to turn business requirements into reliable technical solutions.
 
-I work on automated data workflows and batch operations to ensure data is processed accurately and on time.
-
-To maintain stability, we keep production and test environments separate, virtualize the application layer, and run databases on physical servers.
-
-To support this work, I mainly use Oracle PL/SQL for data logic, ETL processes for data movement, and Control-M for scheduling and monitoring jobs.
-
-I also have experience in C# development and collaborate with different teams to turn business requirements into reliable technical solutions.
-
-
-
-I work with a stable system setup.
-We keep production and test environments separate, virtualize the application layer, and run the database on physical servers to ensure stability.
-My main focus is keeping the system reliable and running efficiently.”
-
+我也有 C# 開發經驗，並
 ----
 
-這是一段簡潔的介紹，並在後方附上縮寫全名：
-「我的工作環境採正式與測試環境分流，並將 AP 虛擬化與 DB 實體機分離，整合了 CDC、RPA 與 MT/MX 等模組，並配置 18T 儲存空間與冷備援機制，確保系統的高效能與穩定性。」
-縮寫全名對照：
-AP: Application Server (應用程式伺服器)
-DB: Database (資料庫)
-CDC: Change Data Capture (異動資料捕捉/同步)
-RPA: Robotic Process Automation (機器人流程自動化)
-MT / MX: Message Type / XML-based Message (金融電文標準格式，如 SWIFT)
-Archive: 歸檔資料 (長期保存的歷史資料)
+
+
+
