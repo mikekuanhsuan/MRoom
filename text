@@ -12,7 +12,9 @@ I mainly deal with risk systems and a lot of financial data.
 
 
 
-
+I work with a stable system setup.
+We keep production and test environments separate, virtualize the application layer, and run the database on physical servers to ensure stability.
+My main focus is keeping the system reliable and running efficiently.”
 
 ----
 
