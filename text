@@ -1,6 +1,27 @@
 
+
 Opening & Current Role
 
 Hi, I’m Kuan-Hsuan. 
 I'm from Taiwan and I work for a bank in the IT department. 
 I mainly deal with risk systems and a lot of financial data.
+
+
+
+
+
+
+
+
+
+----
+
+這是一段簡潔的介紹，並在後方附上縮寫全名：
+「我的工作環境採正式與測試環境分流，並將 AP 虛擬化與 DB 實體機分離，整合了 CDC、RPA 與 MT/MX 等模組，並配置 18T 儲存空間與冷備援機制，確保系統的高效能與穩定性。」
+縮寫全名對照：
+AP: Application Server (應用程式伺服器)
+DB: Database (資料庫)
+CDC: Change Data Capture (異動資料捕捉/同步)
+RPA: Robotic Process Automation (機器人流程自動化)
+MT / MX: Message Type / XML-based Message (金融電文標準格式，如 SWIFT)
+Archive: 歸檔資料 (長期保存的歷史資料)
