@@ -8,7 +8,15 @@ I mainly deal with risk systems and a lot of financial data.
 
 
 
+My main focus is on keeping systems reliable and running efficiently.
 
+I work on automated data workflows and batch operations to ensure data is processed accurately and on time.
+
+To maintain stability, we keep production and test environments separate, virtualize the application layer, and run databases on physical servers.
+
+To support this work, I mainly use Oracle PL/SQL for data logic, ETL processes for data movement, and Control-M for scheduling and monitoring jobs.
+
+I also have experience in C# development and collaborate with different teams to turn business requirements into reliable technical solutions.
 
 
 
