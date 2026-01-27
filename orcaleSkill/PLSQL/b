@@ -1,0 +1,49 @@
+這份 PL/SQL 程式碼主要用到的技術與特點如下:
+
+1. PL/SQL Package（套件）
+
+使用 CREATE OR REPLACE PACKAGE 與 PACKAGE BODY,將相關函數封裝,方便管理與重用。
+
+2. 自主交易（自主交易）
+
+PRAGMA AUTONOMOUS_TRANSACTION;讓此 function 內的交易(如INSERT/COMMIT/ROLLBACK)不受外部交易影響,適合寫入log 或中斷時 rollback。
+
+3. 多變數宣告與運算
+
+宣告多個變數,並於查詢、運算、條件判斷中靈活運用。
+
+4. 動態參數傳遞
+
+依據輸入參數(如V_INPU_FLAG)動態決定查詢條件與邏輯。
+
+5. SELECT INTO(單筆多欄位回傳)
+
+用 SELECT ... INTO 方式,將查詢結果直接存入多個變數,方便後續運算。
+
+6. 多層巢狀查詢與 LEFT JOIN
+
+INSERT 時用多層巢狀 SELECT 與多個 LEFT JOIN,彙整多來源資料,進行複雜資料整合。
+
+7. CASE WHEN 條件運算
+
+大量使用 CASE WHEN 處理特殊值、異常狀況與欄位預設值。
+
+8. NVL 處理 Null 值
+
+用 NVL 給查詢結果預設值,避免NULL影響後續運算。
+
+9. GROUP BY 與聚合函數
+
+多處用 GROUP BY、SUM、COUNT、MAX、MIN 等聚合函數彙總資料。
+
+10. 子查詢(Subquery)
+
+多處用子查詢(如SELECT MAX(INQ_YR)...)作為條件或欄位來源。
+
+11. 例外處理(Exception Handling)
+
+用 EXCEPTION WHEN OTHERS THEN ... 捕捉錯誤,回傳錯誤訊息或 rollback。
+
+12. 資料表函數(Table Function)
+
+呼叫 TABLE(ODHSD.PKG_W7C_VAR1.F_W7C_VAR1(...)),將PL/SQL function 結果當成 table查詢,方便多欄位回傳。
