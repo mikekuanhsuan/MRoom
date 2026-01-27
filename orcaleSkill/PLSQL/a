@@ -1,0 +1,51 @@
+這支 PL/SQL function 綜合運用了多種 Oracle 技術層面,整理如下:
+
+1. BULK COLLECT INTO 回傳物件集合
+
+用 BULK COLLECT INTO 將結果一次性塞入物件集合(table type),提升效能並方便回傳多欄位結果。
+
+2. 多層 CTE (WITH 子句)分步處理資料
+
+利用多個 CTE (Common Table Expression)將複雜查詢拆解成多個步驟,讓邏輯更清楚、可讀性更高。
+
+3. Window Function (分析函數)
+
+使用 ROW_NUMBER(), LAG(), LEAD()等分析函數,處理前後異動紀錄排序與比對。
+
+4. CASE WHEN 條件運算
+
+大量使用 CASE WHEN 進行欄位標記、條件判斷與資料轉換。
+
+5. CURSOR(游標)與LOOP
+
+宣告多個 CURSOR,並用LOOP 逐筆比對排除名單、公司名稱等。
+
+6. 動態字串處理與標準化
+
+透過SUBSTR, INSTR, TRIM 等函數,將公司名稱標準化(去除「股份有限公司」、「有限公司」等字串)。
+
+7. 條件式資料彙總與判斷
+
+用SUM、COUNT、MIN、MAX等聚合函數,並根據條件給予特殊值(如-99999999)。
+
+8. 日期與年資計算
+
+使用 MONTHS_BETWEEN, ADD_MONTHS, TO_DATE, TRUNC 等日期函數計算年資、間隔等。
+
+9. PL/SQL 變數與流程控制
+
+宣告多個變數,並用IF/ELSE 控制流程與例外狀況處理。
+
+10. 多表 JOIN 與子查詢
+
+多次 JOIN 其他資料表(如工資表、排除名單、收入格式表等)進行資料比對與補充。
+
+11. 物件型別(Object Type) 與Table Type
+
+回傳型別為自訂物件(如W7C_VAR1_OPJ)的集合(如W7C_VAR1_TAB),方便多欄位、多筆資料回傳。
+
+總結:
+
+這支 function 結合了SQL 的進階查詢技巧(CTE、分析函數、聚合、JOIN)、PL/SQL 的流程控制、物件導向資料型別,以及效能優化(BULKCOLLECT),是典
+
+型的複雜資料處理與商業邏輯實作範例。
