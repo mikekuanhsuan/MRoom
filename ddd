@@ -1,13 +1,30 @@
--- 前面 #LEFT 與 #EDD 的部分保持不變 --
+-- 找出目前正處於風險控管中、尚未結案的客戶名單。
+-- 邏輯：從「客戶風險管理系統（HRS）」中，撈出所有狀態不是 '3' 的客戶。   (通常 '3' 代表結案)
 
--- 修改後的最後一段查詢：
+ SELECT CIF_KEY INTO #LEFT
+ FROM BSADBTW..HRS_CUST_RISK_MGMT WITH  (NOLOCK)
+ WHERE STATUS <> '3'
+
+
+-- 對每個客戶取最新的（MAX）審查日期，作為該客戶預計要進行 AML 審查的時間點。
+-- 邏輯：從「加強盡職調查（EDD）審查排程表」中，篩選狀態為 'P'（通常代表 Pending，即待審查或計畫中）的紀錄。
+
+SELECT CIFKEY, MAX(ReviewDt) ReviewDt INTO #EDD FROM BSADBTW..EDD_ReviewSchedule WHERE status='P' GROUP BY CIFKEY
+
+
+
+-- 這部分將你的原始附件名單（@TT）與上述資料進行關聯（Join）：
 SELECT 
-    '_' + A.CustomerNo AS CustomerNo, -- 建議加上 Alias 較清晰
-    CASE WHEN C.CIF_KEY IS NOT NULL THEN '' ELSE B.ReviewDt END AS NEXT_ReviewDt,
-    CASE WHEN C.CIF_KEY IS NOT NULL THEN 'Y' ELSE 'N' END AS RM_CASE
+ '_' + A.CustomerNo,
+ CASE WHEN C.CIF_KEY IS NOT NULL THEN '' ELSE B.ReviewDt END NEXT_ReviewDt,
+ CASE WHEN C.CIF_KEY IS NOT NULL THEN 'Y' ELSE 'N' END RM_CASE
 FROM @TT T
 JOIN BSADBTW..BSA_SUB_CUST_FACT AS A WITH (NOLOCK) ON A.CustomerNo = T.CustomerNo
 JOIN BSADBTW..PB_CUSTOMER_FACT AS D WITH (NOLOCK) ON A.CIF_KEY = D.CIF_KEY
-LEFT JOIN #EDD AS B ON A.CIF_KEY = B.CIFKey
+LEFT JOIN #EDD  AS B ON A.CIF_KEY = B.CIFKey
 LEFT JOIN #LEFT AS C ON A.CIF_KEY = C.CIF_KEY 
-WHERE D.customer_segment <> 'NCR' -- 在這裡新增過濾條件 (用 != 或 <> 都可以)
+
+
+我想要加上找出 重複的 A.CIF_KEY 以及 D.custormer_segment != 'NCR'
+
+要怎麼改
