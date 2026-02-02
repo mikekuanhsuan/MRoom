@@ -1,0 +1,15 @@
+這份儲存過程（Stored Procedure）
+所使用的 SQL 技巧可以精簡歸納為以下四個層面：
+
+1. 效能優化 (Performance)
+SET NOCOUNT ON：減少網路封包傳輸，提升執行效率。
+TRUNCATE TABLE：快速清空暫存表，比 DELETE 更節省系統日誌空間與時間。
+2. 資料整合 (Data Integration)
+UNION ALL：高效合併多個查詢結果（不進行去重檢查，速度最快）。
+JOIN (INNER/LEFT)：跨表關聯，精確取得主從架構的資料。
+3. 資料邏輯處理 (Logic & Transformation)
+CASE WHEN：實作條件邏輯，根據數值動態轉換輸出分類。
+ISNULL()：處理缺失值，確保運算或顯示時不會出現 NULL。
+4. 基礎查詢控制 (Basic Control)
+WHERE：精確過濾資料（如排除已刪除 IsDeleted = 0 的資料）。
+AS (Alias)：欄位與資料表別名，提升程式碼可讀性與維護性。
