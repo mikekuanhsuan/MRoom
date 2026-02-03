@@ -1,41 +1,93 @@
-了解～我幫你把 你今天 1/26 的工作拆好、每一筆提案單要選哪個工時類別（Work Hour Item） 都整理成完整表格，直接照填就行 😎
+Dear 建富︰
 
-我會依 你前面寫的自然敘述 + Code Review / 文件覆核 /資料整理 來配對最合理的選項。
+感謝協助，
+為進行 AML 紅旗資訊串接，需請你協助確認各功能對應的資料庫 Table，並確認關聯邏輯：
 
-⸻
+1. 串接邏輯確認：
+•	關聯方式：是否所有產品 Table 皆透過 AML_INFO_SEQ 串回 WBS_AML_DETAIL 以取得紅旗（RED_FLAG）資料？
+•	異常處理：若該產品 Table 無此欄位（如下表標示「否」者），應透過何種 Key或其他中間 Table 進行關聯 ?
 
-1/26 工時選擇建議（完整版）
+AML_DETAIL_SEQ 欄位結構：
+AML_INFO_SEQ, FUN_CODE, ACTION_TYPE, AML_TYPE, CONTENT, COUNTRY_CONTENT, ORDER_NO, IS_UI, FLAG, GOODS_CODE, MERCHANDISE, GOODSCODE_CONTENT
+下方為目前參考的 SQL 代碼：
+use HKDB
+SELECT
+ '_' + C.CUSTOMER_ID CUSTOMER_ID,
+ A.TRADE_DATE,
+ B.FUN_CODE,
+ F.FUNC_NAME,
+ B.AML_TYPE,
+ B.FLAG,
+ B.CONTENT,
+ D.content as GOODSCODE,
+ E.content as MERCHANDISE,
+ B.AML_INFO_SEQ
 
-項目	提案單號	主要工作內容	Work Hour Item	時數
-1	2512261061	整理近期 AML 系統案件處理內容、確認 ETL / SP / 紅旗邏輯，盤點資料與問題	MA (Maintenance)	3
-2	2512051045	確認 Trade Finance 紅旗資料對應欄位、資料 Mapping、檢視 Goods Code / Merchandise / Flag 等欄位定義	SA (System Analysis)	2.5
-3	2512261061	文件與 TC 測試報告整理、補充說明，確認測試流程與資料正確性	MA (Maintenance)	2.5
-4	IT20202502031011	覆核 WS7B 代償代匯計算邏輯程式碼與 TC 文件，檢查 SQL 與 pkg 差異，跑 buildScript、壓標籤、回 mail	ST (System Test & QA & Golive)	2
-5	IT20202504221083	覆核變數系統 C3 第五階段程式碼與 TC 文件，確認程式修改及歷史資料處理流程	ST (System Test & QA & Golive)	1
+FROM WBS_IMP_LC A
+LEFT JOIN (select * from WBS_AML_DETAIL where AML_TYPE = 'RED_FLAG') B ON A.AML_INFO_SEQ = B.AML_INFO_SEQ
+LEFT JOIN (select * from WBS_AML_DETAIL where AML_TYPE = 'GOODSCODE') D ON A.AML_INFO_SEQ = D.AML_INFO_SEQ
+LEFT JOIN (select * from WBS_AML_DETAIL where AML_TYPE = 'MERCHANDISE') E ON A.AML_INFO_SEQ = E.AML_INFO_SEQ
+LEFT JOIN WBS_CIF_CUST_INFO C ON A.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
+JOIN WBS_RAA_FUNC_INFO F ON b.FUN_CODE = f.FUNC_CODE
+WHERE
+A.TRADE_DATE BETWEEN '20251101' AND '20251130'
+AND B.FLAG = 'Y'
 
 
-⸻
+2. 產品對應 Table 確認表：
+【Import 部份】
+UI 功能編號 / 名稱	對應TABLE
+068005 L/C Master Enquiry	WBS_IMP_LC
+068025 B/G Enquiry	查無對應資料表，請協助提供
+068065 I/B Enquiry	查無對應資料表，請協助提供
+068065 I/C Enquiry	查無對應資料表，請協助提供
+068045 SG/ED Enquiry	查無對應資料表，請協助提供
+068055 Cable Negotiation	查無對應資料表，請協助提供
 
-🔹選擇邏輯說明
-	1.	MA (Maintenance)
-	•	適用於系統日常維運、資料整理、盤點、確認邏輯等
-	•	適合「整理 ETL / SP / 紅旗邏輯」與文件補充的工作
-	2.	SA (System Analysis)
-	•	適用於需求分析、資料 Mapping、欄位對應、系統邏輯確認
-	•	適合「WBS Trade Finance 紅旗資料 Mapping / 欄位確認」
-	3.	ST (System Test & QA & Golive)
-	•	適用於測試覆核、Code Review、TC 檢查、上線驗證
-	•	適合「覆核 SQL / pkg / TC 文件、跑 buildScript、壓標籤、回 mail」
+UI 功能編號 / 名稱	是否有 AML_INFO_SEQ
+WBS_IMP_LC	YES
+WBS_IMP_BG	YES
+WBS_IMP_IB	YES
+WBS_IMP_IC	YES
+WBS_IMP_SGED	NO
+WBS_IMP_SGED_LC	NO
 
-⸻
+•	特別注意：WBS_IMP_SGED 與 WBS_IMP_SGED_LC 目前確認無 AML_INFO_SEQ，需請教如何串接紅旗資料。
 
-💡小技巧：
-	•	同一張提案單可以拆成多筆工時，系統會分開計算
-	•	MA / SA / ST 混用很正常，反映實際工作種類
-	•	時數可微調，保持總和合理（例如你今天最多 8~10 小時）
+  
 
-⸻
 
-如果你想，我可以幫你 把 1/26 這 5 項工時直接寫成「填表可用的最完整文字」，你直接複製貼上就可以，完全不用自己改字 😏
+【Export 部份】
+UI 功能編號 / 名稱	對應TABLE
+077025: Cable NEGO Master Enquiry	查無對應資料表，需協助提供
+077035: NEGO Master Enquiry.	查無對應資料表，需協助提供
+077045: Forfaiting / Without Recourse Master Enquiry.	查無對應資料表，需協助提供
+077055: NEGO / Forfaiting Advance Detail Enquiry.	查無對應資料表，需協助提供
+077065: Re-NEGO Master Enquiry.	查無對應資料表，需協助提供
+077075: O/C Master Enquiry	查無對應資料表，需協助提供
 
-你希望我幫你做這個嗎？
+
+UI 功能編號 / 名稱	是否有 AML_INFO_SEQ
+dbo.WBS_EXP_FA_ITEM   	NO
+dbo.WBS_EXP_LA_INFO	YES
+dbo.WBS_EXP_LT_INFO	YES
+dbo.WBS_EXP_NEGO_INFO	YES
+dbo.WBS_EXP_NEGO_ITEM	NO
+dbo.WBS_EXP_OC_INFO	YES
+dbo.WBS_EXP_RE_NEGO_INFO	YES
+
+  
+
+【Loan 部份】
+UI 功能編號 / 名稱	對應TABLE
+029605: Loan Master Enquiry.	查無對應資料表，需協助提供
+029615: Loan Integration Enquiry.	查無對應資料表，需協助提供
+029635: Income / Expense Enquiry.	查無對應資料表，需協助提供
+029645: Adjustment / Waiver Enquiry.	查無對應資料表，需協助提供
+029655: Loan Repayment Calculation Enquiry.	查無對應資料表，需協助提供
+029665: Interest Repayment-Package Enquiry	查無對應資料表，需協助提供
+029675: Advanced Fee Charge / Collect Enquiry.	查無對應資料表，需協助提供
+
+  
+
+
