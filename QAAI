@@ -1,93 +1,32 @@
-Dear 建富︰
-
-感謝協助，
-為進行 AML 紅旗資訊串接，需請你協助確認各功能對應的資料庫 Table，並確認關聯邏輯：
-
-1. 串接邏輯確認：
-•	關聯方式：是否所有產品 Table 皆透過 AML_INFO_SEQ 串回 WBS_AML_DETAIL 以取得紅旗（RED_FLAG）資料？
-•	異常處理：若該產品 Table 無此欄位（如下表標示「否」者），應透過何種 Key或其他中間 Table 進行關聯 ?
-
-AML_DETAIL_SEQ 欄位結構：
-AML_INFO_SEQ, FUN_CODE, ACTION_TYPE, AML_TYPE, CONTENT, COUNTRY_CONTENT, ORDER_NO, IS_UI, FLAG, GOODS_CODE, MERCHANDISE, GOODSCODE_CONTENT
-下方為目前參考的 SQL 代碼：
-use HKDB
-SELECT
- '_' + C.CUSTOMER_ID CUSTOMER_ID,
- A.TRADE_DATE,
- B.FUN_CODE,
- F.FUNC_NAME,
- B.AML_TYPE,
- B.FLAG,
- B.CONTENT,
- D.content as GOODSCODE,
- E.content as MERCHANDISE,
- B.AML_INFO_SEQ
-
-FROM WBS_IMP_LC A
-LEFT JOIN (select * from WBS_AML_DETAIL where AML_TYPE = 'RED_FLAG') B ON A.AML_INFO_SEQ = B.AML_INFO_SEQ
-LEFT JOIN (select * from WBS_AML_DETAIL where AML_TYPE = 'GOODSCODE') D ON A.AML_INFO_SEQ = D.AML_INFO_SEQ
-LEFT JOIN (select * from WBS_AML_DETAIL where AML_TYPE = 'MERCHANDISE') E ON A.AML_INFO_SEQ = E.AML_INFO_SEQ
-LEFT JOIN WBS_CIF_CUST_INFO C ON A.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
-JOIN WBS_RAA_FUNC_INFO F ON b.FUN_CODE = f.FUNC_CODE
-WHERE
-A.TRADE_DATE BETWEEN '20251101' AND '20251130'
-AND B.FLAG = 'Y'
-
-
-2. 產品對應 Table 確認表：
-【Import 部份】
-UI 功能編號 / 名稱	對應TABLE
-068005 L/C Master Enquiry	WBS_IMP_LC
-068025 B/G Enquiry	查無對應資料表，請協助提供
-068065 I/B Enquiry	查無對應資料表，請協助提供
-068065 I/C Enquiry	查無對應資料表，請協助提供
-068045 SG/ED Enquiry	查無對應資料表，請協助提供
-068055 Cable Negotiation	查無對應資料表，請協助提供
-
-UI 功能編號 / 名稱	是否有 AML_INFO_SEQ
-WBS_IMP_LC	YES
-WBS_IMP_BG	YES
-WBS_IMP_IB	YES
-WBS_IMP_IC	YES
-WBS_IMP_SGED	NO
-WBS_IMP_SGED_LC	NO
-
-•	特別注意：WBS_IMP_SGED 與 WBS_IMP_SGED_LC 目前確認無 AML_INFO_SEQ，需請教如何串接紅旗資料。
-
-  
-
-
-【Export 部份】
-UI 功能編號 / 名稱	對應TABLE
-077025: Cable NEGO Master Enquiry	查無對應資料表，需協助提供
-077035: NEGO Master Enquiry.	查無對應資料表，需協助提供
-077045: Forfaiting / Without Recourse Master Enquiry.	查無對應資料表，需協助提供
-077055: NEGO / Forfaiting Advance Detail Enquiry.	查無對應資料表，需協助提供
-077065: Re-NEGO Master Enquiry.	查無對應資料表，需協助提供
-077075: O/C Master Enquiry	查無對應資料表，需協助提供
-
-
-UI 功能編號 / 名稱	是否有 AML_INFO_SEQ
-dbo.WBS_EXP_FA_ITEM   	NO
-dbo.WBS_EXP_LA_INFO	YES
-dbo.WBS_EXP_LT_INFO	YES
-dbo.WBS_EXP_NEGO_INFO	YES
-dbo.WBS_EXP_NEGO_ITEM	NO
-dbo.WBS_EXP_OC_INFO	YES
-dbo.WBS_EXP_RE_NEGO_INFO	YES
-
-  
-
-【Loan 部份】
-UI 功能編號 / 名稱	對應TABLE
-029605: Loan Master Enquiry.	查無對應資料表，需協助提供
-029615: Loan Integration Enquiry.	查無對應資料表，需協助提供
-029635: Income / Expense Enquiry.	查無對應資料表，需協助提供
-029645: Adjustment / Waiver Enquiry.	查無對應資料表，需協助提供
-029655: Loan Repayment Calculation Enquiry.	查無對應資料表，需協助提供
-029665: Interest Repayment-Package Enquiry	查無對應資料表，需協助提供
-029675: Advanced Fee Charge / Collect Enquiry.	查無對應資料表，需協助提供
-
-  
-
-
+這份錄音內容主要是關於 AML (洗錢防制) 系統 中，針對 「代償代費」 業務需求所進行的變數調整與測試討論。以下為您整理的重點內容：
+核心討論事項
+1. 業務需求與開發目標
+ * 代償代費業務：客戶向銀行借錢，可能由其他銀行（如中信）代為償還或付費，系統需根據此業務邏輯計算相關變數。
+ * 系統範圍：涉及 C3 (前置系統)、WS7C、WS5 等模組。
+ * 變數調整：
+   * 7A (行內)：增加兩個新變數進行計算。
+   * 7B (行外)：調整範圍較大，將原本僅計算「中放」的產品，加入「長放」產品一併計算。
+   * 7C：主要沿用先前的開發邏輯。
+2. 7B 模組的詳細邏輯
+ * 分群計算 (GP1 ~ GP4)：根據金額區間進行分群：
+   * GP1：金額 < 50 萬。
+   * GP2：50 萬 \le 金額 < 150 萬。
+ * 資料來源：從聯徵中心 (JCIC) 資料（如 BAM028、BAM095）判斷銀行代碼，並確認代償 (CPSE15 = Y) 或代費條件。
+ * 欄位限制：由於 7B 的欄位空間不足，部分大額區間（如 150 萬至 300 萬以上）會先算出數值後，再以文字拼接的方式處理（例如：010305）。
+測試與資料準備流程
+1. 倒檔 (Data Refresh)
+ * 需填寫主機倒檔申請單，從正式環境抓取真實資料回測試環境。
+ * 個資處理：若需保留個資進行測試，申請時需勾選「含個資但不 Mask」，並需經過相關處長簽核。測試完畢後需提供刪除佐證。
+ * 篩選條件：可透過 WHERE 條件指定特定的日期範圍或產品代碼。
+2. 測試案例 (Test Case) 產製
+ * 需先完成倒檔，取得來源資料後，再將資料塞入測試用的 Table（如 C3 的測試表）。
+ * 透過執行 Package 來抓取這些 Test Cases 進行跑批測試。
+3. 開發參考資源
+ * 工作交接文件：在組內的公用資料夾（工作交接區）中，有前一任同事留下的 7B 開發紀錄、UAT 倒檔申請單範本及程式開發模組。
+ * 7A 存放位置：主要位於 ODCSSI。
+ * 7B/7C 存放位置：主要位於 ODHSD。
+後續行動建議
+ * 優先處理 7A：因 7A 邏輯較單純（電文測試），建議先完成開發並進行初步測試。
+ * 研究 7B 倒檔與案例：前往公用資料夾查看前人的倒檔申請單與 WHERE 條件寫法，以利後續產製測試案例。
+ * 準備 UAT 環境：確認倒檔流程與個資 Mask 的規範，確保測試資料可用性。
+需要我幫您把上述內容格式化並直接貼入您的 Notion 筆記中嗎？
