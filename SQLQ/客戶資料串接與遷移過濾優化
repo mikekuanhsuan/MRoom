@@ -1,0 +1,59 @@
+📝 SQL 筆記：客戶資料串接與遷移過濾優化
+1. 核心需求
+將 Customer_Migrate_buffer (緩衝表) 與 BANCS_SK_CUST_INFO (資訊表) 進行串接，提取 CUST_RE_NO_FLG 欄位，同時排除掉已存在或異常的資料。
+2. 標準實作語法 (LEFT JOIN)
+這是最直觀且能確保資料不遺失的寫法。
+code SQL
+downloadcontent_copy
+expand_less
+SELECT 
+    b.*, 
+    s.CUST_RE_NO_FLG
+FROM Customer_Migrate_buffer b
+LEFT JOIN BANCS_SK_CUST_INFO s 
+    ON b.CustomerNo = s.SK_CUST_ID
+WHERE b.CIF_KEY NOT IN (SELECT SOURCE_CIF_KEY FROM CIF_Migrate_Mapping_TEMP)
+AND b.CIF_KEY NOT IN (SELECT CIF_KEY FROM Customer_Migrate_Exception_Table);
+💡 重點說明：
+•	JOIN 類型選擇：
+o	LEFT JOIN（推薦）：即使在 BANCS_SK_CUST_INFO 找不到對應，原本的 Buffer 資料仍會保留，欄位顯示為 NULL。
+o	INNER JOIN：僅顯示兩張表「同時存在」的資料，可能會導致 Buffer 資料因對不到而消失。
+•	關聯欄位：CustomerNo ↔ SK_CUST_ID。
+________________________________________
+3. 資料品質處理：空白字元問題
+若發現 CustomerNo 中含有空格（例如 62014807 6），會導致 JOIN 失敗。
+•	解決方案：使用 REPLACE 函數去除空格後比對。
+•	程式碼片段：
+code SQL
+downloadcontent_copy
+expand_less
+ON REPLACE(b.CustomerNo, ' ', '') = REPLACE(s.SK_CUST_ID, ' ', '')
+•	注意：此方法會使索引失效，若資料量極大（百萬級以上），建議在資料匯入階段就先完成清洗，而非在 JOIN 時處理。
+________________________________________
+4. 效能優化策略 (針對大數據量)
+當資料量達到數萬筆以上時，NOT IN 的效能會顯著下降，建議改用 NOT EXISTS。
+優化版語法：
+code SQL
+downloadcontent_copy
+expand_less
+SELECT b.*, s.CUST_RE_NO_FLG
+FROM Customer_Migrate_buffer b
+LEFT JOIN BANCS_SK_CUST_INFO s 
+    ON b.CustomerNo = s.SK_CUST_ID
+WHERE NOT EXISTS (
+    SELECT 1 FROM CIF_Migrate_Mapping_TEMP m 
+    WHERE m.SOURCE_CIF_KEY = b.CIF_KEY
+)
+AND NOT EXISTS (
+    SELECT 1 FROM Customer_Migrate_Exception_Table e 
+    WHERE e.CIF_KEY = b.CIF_KEY
+);
+🚀 效能關鍵點：
+1.	NOT EXISTS vs NOT IN：NOT EXISTS 在處理子查詢時，只要找到一筆符合條件的資料就會停止掃描，效率較高。
+2.	索引 (Index)：確保 CIF_KEY、CustomerNo、SK_CUST_ID 等關鍵欄位有建立索引。
+3.	NULL 值處理：NOT IN 在子查詢結果包含 NULL 時可能會產生非預期的結果，而 NOT EXISTS 則較為穩定。
+________________________________________
+5. 總結建議
+•	小量資料/開發測試：直接使用 LEFT JOIN + NOT IN，邏輯清晰易懂。
+•	大量資料/正式執行：使用 LEFT JOIN + NOT EXISTS，並確認關聯欄位格式一致（無多餘空格）。
+
