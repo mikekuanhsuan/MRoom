@@ -1,3 +1,42 @@
+要讓第一個查詢的結果從 936,022 變成 950,568，最核心的修改是將 JOIN 改為 LEFT JOIN。
+為什麼這樣改？
+ * 原本的 JOIN (Inner Join)：會過濾掉所有在 XREF 表中找不到對應資料的帳號。那消失的 14,546 筆，就是因為在 XREF 找不到對應，被這個 Join 動作剔除掉了。
+ * 改用 LEFT JOIN：會保留 Buffer 表中所有的帳號。即使某個帳號在 XREF 找不到對應（b 表欄位會變成 NULL），它依然會進入後面的 WHERE NOT EXISTS 判斷。只要它也沒出現在 DIM 表，就會被計入總數。
+修改後的 SQL 語法：
+請將第一張圖的語法改成如下（重點在紅字標註處）：
+SELECT COUNT(DISTINCT a.ACCT_KEY) AS Missing_But_In_XREF_Count
+FROM BSADBTW..Acct_Migrate_buffer a
+/* 改用 LEFT JOIN 確保不會過濾掉在 XREF 找不到對應的資料 */
+LEFT JOIN BSADBTW..XREF b 
+    ON SUBSTRING(a.ACCT_KEY, PATINDEX('%[^0]%', a.ACCT_KEY + ' '), LEN(a.ACCT_KEY)) = 
+       SUBSTRING(b.EXTN_REF_NO, PATINDEX('%[^0]%', b.EXTN_REF_NO + ' '), LEN(b.EXTN_REF_NO))
+WHERE NOT EXISTS (
+    SELECT 1 
+    FROM BSADBTW..ACCT_XREF_DIM d 
+    WHERE d.ACCT_KEY = 'SK_' + a.ACCT_KEY
+);
+
+為什麼這樣寫就能對齊 950,568？
+ * 全量基準：現在這段語法的基準是 Acct_Migrate_buffer 的所有資料（跟第二張圖的 EXCEPT 邏輯一致）。
+ * 排除已寫入：WHERE NOT EXISTS 會扣掉已經成功轉入 DIM 表的資料。
+ * 包含異常件：那些「在 XREF 找不到對應」且「沒轉入 DIM」的 14,546 筆，現在也會被算進來。
+驗證建議
+如果您想確認那 14,546 筆是不是真的因為 XREF 找不到，可以執行這段語法看看：
+SELECT COUNT(DISTINCT a.ACCT_KEY)
+FROM BSADBTW..Acct_Migrate_buffer a
+LEFT JOIN BSADBTW..XREF b 
+    ON SUBSTRING(a.ACCT_KEY, PATINDEX('%[^0]%', a.ACCT_KEY + ' '), LEN(a.ACCT_KEY)) = 
+       SUBSTRING(b.EXTN_REF_NO, PATINDEX('%[^0]%', b.EXTN_REF_NO + ' '), LEN(b.EXTN_REF_NO))
+WHERE b.EXTN_REF_NO IS NULL  -- 找出在 XREF 找不到對應的
+  AND NOT EXISTS (           -- 且也沒轉入 DIM 的
+      SELECT 1 FROM BSADBTW..ACCT_XREF_DIM d WHERE d.ACCT_KEY = 'SK_' + a.ACCT_KEY
+  )
+
+這段的結果預期會是 14,546。
+
+---
+
+
 從您提供的三張圖片來看，這是一個典型的資料遷移（Migration）比對問題。您發現兩個查詢產生的「未寫入數量」不一致（950568 vs 936022），價差為 14,546 筆。
 這主要是因為兩段 SQL 的邏輯判斷基準不同。以下是詳細分析：
 1. 邏輯差異分析
