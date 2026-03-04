@@ -1,3 +1,14 @@
+
+
+鞥
+
+SELECT DISTINCT ACCT_KEY 
+FROM BSADBTW..Acct_Migrate_buffer
+EXCEPT
+SELECT DISTINCT ACCT_KEY 
+FROM BSADBTW..ACCT_XREF_DIM;
+
+
 這件事講白了，就是**「銀行行員獨自帶錢外出被偷，結果銀行被政府重罰 600 萬」**。
 為什麼會被罰這麼重？重點在於這兩個「掉漆」的行為：
 1. 系統有漏洞（沒抓到單獨外出）
