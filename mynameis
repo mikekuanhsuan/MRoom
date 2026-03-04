@@ -1,3 +1,45 @@
+根據您提供的圖片邏輯，我為您撰寫了對應的 4 個 SQL 查詢語句。這些語句分別對應您想要統計的四個維度：
+1. 要寫入的帳號總數 (Total from Buffer)
+計算 Acct_Migrate_buffer 表中不重複的原始帳號數量。
+SELECT COUNT(DISTINCT ACCT_KEY) AS '要寫入的帳號總數'
+FROM BSADBTW..Acct_Migrate_buffer;
+
+2. 實際寫入的帳號總數 (Successfully Ingested)
+計算已經存在於目標表 ACCT_XREF_DIM 且帶有 SK_ 前綴的數量。
+SELECT COUNT(DISTINCT ACCT_KEY) AS '實際寫入個數'
+FROM BSADBTW..ACCT_XREF_DIM
+WHERE ACCT_KEY LIKE 'SK_%';
+
+3. 未寫入的帳號數量 (Not Ingested)
+使用 EXCEPT 找出在 Buffer 有，但在目標表找不到（補了前綴後）的差額。
+SELECT COUNT(*) AS '未寫入的數量'
+FROM (
+    SELECT 'SK_' + ACCT_KEY AS JOIN_KEY 
+    FROM BSADBTW..Acct_Migrate_buffer
+    EXCEPT
+    SELECT ACCT_KEY 
+    FROM BSADBTW..ACCT_XREF_DIM
+) AS DiffTable;
+
+4. 驗證：未寫入帳號是否原本就存在 (Existing Check)
+這是針對您第二張圖的邏輯，確認那些「沒寫入」的帳號，是否是因為 EXTN_REF_NO 補 0 後原本就存在於系統中。
+SELECT COUNT(a.ACCT_KEY) AS '原本就有的資料數量'
+FROM BSADBTW..Acct_Migrate_buffer a
+JOIN BSADBTW..XREF x ON x.EXTN_REF_NO LIKE '%' + a.ACCT_KEY
+WHERE NOT EXISTS (
+    SELECT 1 FROM BSADBTW..ACCT_XREF_DIM b
+    WHERE b.ACCT_KEY = 'SK_' + a.ACCT_KEY
+);
+
+數據關聯邏輯圖解
+下圖展示了您的 SQL 如何透過排除法（EXCEPT）與關聯（JOIN）來區分新舊資料：
+補充建議：
+您的第二張截圖顯示有 935,999 筆是因為原本就在裡面所以沒寫入，這與未寫入總數 950,568 之間存在約 14,569 筆的落差。
+需要我幫您寫一段 SQL 來找出這「消失的 1.4 萬筆」究竟是什麼原因（例如格式錯誤或空值）嗎？
+
+
+
+
 
 Opening & Current Role
 
