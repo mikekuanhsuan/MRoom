@@ -1,3 +1,18 @@
+
+SELECT COUNT(*) AS '未寫入TS的數量'
+FROM (
+    -- 將 buffer 的帳號加上 SK_ 前綴後取唯一值
+    SELECT 'SK_' + ACCT_KEY AS JOIN_KEY 
+    FROM BSADBTW..Acct_Migrate_buffer
+    
+    EXCEPT
+    
+    -- 直接從目標表取已經有 SK_ 前綴的帳號
+    SELECT ACCT_KEY 
+    FROM BSADBTW..ACCT_XREF_DIM
+) AS DiffTable;
+
+
 SELECT COUNT(*) AS '未寫入TS的數量'
 FROM (
     SELECT DISTINCT ACCT_KEY FROM BSADBTW..Acct_Migrate_buffer
