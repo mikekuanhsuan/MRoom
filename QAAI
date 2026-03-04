@@ -1,106 +1,52 @@
-
-
-恭喜！您成功跑出 950,568 這個數字了。這代表這段 SQL 已經能精準對齊之前的 EXCEPT 邏輯。
-這段語法現在表達的意思，白話來說就是在描述：「那些『應該轉入但還沒轉入』的帳號全集，不管它們在對照表中有沒有對應。」
-具體邏輯拆解如下：
-核心邏輯三部曲
- * 以 Buffer 為基準站穩腳步 (FROM ... a LEFT JOIN ... b)
-   * 這是在說：把 Acct_Migrate_buffer 裡所有的帳號（a 表）都拿出來。
-   * 重點： 因為用了 LEFT JOIN，就算某個帳號在 XREF 表（b 表）裡找不到對應，這個帳號依然會被留下來。
- * 嘗試進行格式轉換與配對 (ON SUBSTRING...)
-   * 這段複雜的 SUBSTRING 和 PATINDEX 是在做「去零化」或格式校正。
-   * 它是為了把 a.ACCT_KEY 和 b.EXTN_REF_NO 轉成一樣的格式來比對。
-   * 即使配對失敗，因為是 LEFT JOIN，這筆資料也不會消失，只是 b 表的欄位會變成空白（NULL）。
- * 過濾掉已經完成遷移的帳號 (WHERE NOT EXISTS)
-   * 這最後一關是在說：去目標表 ACCT_XREF_DIM 看一下。
-   * 如果這個帳號（加上 SK_ 前綴後）已經存在於 DIM 表了，就把它踢除。
-   * 剩下的，就是所有「還沒寫入目標表」的帳號。
-為什麼這段語法比之前的更重要？
-雖然它現在跑出的數字跟 EXCEPT 一模一樣，但這段語法能幫您做更深的分析：
- * 原本的查詢 (936,022)： 只看到「格式正確且有對照資料，但沒轉入」的人。這會讓您誤以為只剩下 93 萬筆要處理。
- * 現在這段查詢 (950,568)： 幫您抓出了那隱藏的 14,546 筆（950,568 - 936,022）。
-> 這段語法的真實含義是： 告訴您總共有 95 萬筆沒進去，而且其中有 1.4 萬筆可能是因為 XREF 對照表資料缺失 或是 帳號格式太奇怪 導致原本配對不到。
-> 
-下一步建議
-如果您想看看那 14,546 筆到底是哪些「邊緣人」帳號，您可以把 SELECT COUNT(...) 改成：
-SELECT TOP 100 a.ACCT_KEY, b.EXTN_REF_NO 
-FROM ... (後面不變)
-WHERE b.EXTN_REF_NO IS NULL  -- 加上這句就能直接看到那些在 XREF 找不到的人
-
-需要我幫您把這 14,546 筆的清單抓出來的語法寫得更完整一點嗎？
-
-
-
-要讓第一個查詢的結果從 936,022 變成 950,568，最核心的修改是將 JOIN 改為 LEFT JOIN。
-為什麼這樣改？
- * 原本的 JOIN (Inner Join)：會過濾掉所有在 XREF 表中找不到對應資料的帳號。那消失的 14,546 筆，就是因為在 XREF 找不到對應，被這個 Join 動作剔除掉了。
- * 改用 LEFT JOIN：會保留 Buffer 表中所有的帳號。即使某個帳號在 XREF 找不到對應（b 表欄位會變成 NULL），它依然會進入後面的 WHERE NOT EXISTS 判斷。只要它也沒出現在 DIM 表，就會被計入總數。
-修改後的 SQL 語法：
-請將第一張圖的語法改成如下（重點在紅字標註處）：
-SELECT COUNT(DISTINCT a.ACCT_KEY) AS Missing_But_In_XREF_Count
-FROM BSADBTW..Acct_Migrate_buffer a
-/* 改用 LEFT JOIN 確保不會過濾掉在 XREF 找不到對應的資料 */
-LEFT JOIN BSADBTW..XREF b 
-    ON SUBSTRING(a.ACCT_KEY, PATINDEX('%[^0]%', a.ACCT_KEY + ' '), LEN(a.ACCT_KEY)) = 
-       SUBSTRING(b.EXTN_REF_NO, PATINDEX('%[^0]%', b.EXTN_REF_NO + ' '), LEN(b.EXTN_REF_NO))
-WHERE NOT EXISTS (
-    SELECT 1 
-    FROM BSADBTW..ACCT_XREF_DIM d 
-    WHERE d.ACCT_KEY = 'SK_' + a.ACCT_KEY
+從你提供的圖片來看，你目前是手動複製 CIF_KEY 到 IN 條件中進行查詢。當資料量變多時，這種方法不但累人，還容易出錯。
+既然你已經有一個 CIF_Migrate_Mapping_TEMP 表記錄了新舊 Key 的對應關係，最專業且高效的方法是使用 SQL JOIN（關聯查詢） 或 子查詢 (Subquery)。
+以下是三種更推薦的方法：
+1. 使用 JOIN (最推薦，效能最好)
+直接將「資料表」與「對應表」串連，一次查出所有相關資訊。這樣你就不需要手動輸入那串長長的 UUID。
+SELECT 
+    f.customerno, 
+    f.*, 
+    m.SOURCE_CIF_KEY -- 順便把舊的 Key 查出來對照
+FROM bsa_sub_cust_fact f
+INNER JOIN CIF_Migrate_Mapping_TEMP m 
+    ON f.CIF_KEY = m.NEW_CIF_KEY
+WHERE m.SOURCE_CIF_KEY IN (
+    '8ace48b8-1f27-ed11-a943-00505686dbae',
+    'f0b9621d-0026-ed11-a943-00505686dbae',
+    'ccb9621d-0026-ed11-a943-00505686dbae'
 );
 
-為什麼這樣寫就能對齊 950,568？
- * 全量基準：現在這段語法的基準是 Acct_Migrate_buffer 的所有資料（跟第二張圖的 EXCEPT 邏輯一致）。
- * 排除已寫入：WHERE NOT EXISTS 會扣掉已經成功轉入 DIM 表的資料。
- * 包含異常件：那些「在 XREF 找不到對應」且「沒轉入 DIM」的 14,546 筆，現在也會被算進來。
-驗證建議
-如果您想確認那 14,546 筆是不是真的因為 XREF 找不到，可以執行這段語法看看：
-SELECT COUNT(DISTINCT a.ACCT_KEY)
-FROM BSADBTW..Acct_Migrate_buffer a
-LEFT JOIN BSADBTW..XREF b 
-    ON SUBSTRING(a.ACCT_KEY, PATINDEX('%[^0]%', a.ACCT_KEY + ' '), LEN(a.ACCT_KEY)) = 
-       SUBSTRING(b.EXTN_REF_NO, PATINDEX('%[^0]%', b.EXTN_REF_NO + ' '), LEN(b.EXTN_REF_NO))
-WHERE b.EXTN_REF_NO IS NULL  -- 找出在 XREF 找不到對應的
-  AND NOT EXISTS (           -- 且也沒轉入 DIM 的
-      SELECT 1 FROM BSADBTW..ACCT_XREF_DIM d WHERE d.ACCT_KEY = 'SK_' + a.ACCT_KEY
-  )
+2. 使用子查詢 (邏輯最清晰)
+如果你只想查詢在對應表裡存在的資料，可以使用 IN 搭配子查詢。
+SELECT customerno, *
+FROM bsa_sub_cust_fact
+WHERE CIF_KEY IN (
+    SELECT NEW_CIF_KEY 
+    FROM CIF_Migrate_Mapping_TEMP
+    WHERE SOURCE_CIF_KEY IN (
+        '8ace48b8-1f27-ed11-a943-00505686dbae',
+        'f0b9621d-0026-ed11-a943-00505686dbae',
+        'ccb9621d-0026-ed11-a943-00505686dbae'
+    )
+);
 
-這段的結果預期會是 14,546。
-
----
-
-
-從您提供的三張圖片來看，這是一個典型的資料遷移（Migration）比對問題。您發現兩個查詢產生的「未寫入數量」不一致（950568 vs 936022），價差為 14,546 筆。
-這主要是因為兩段 SQL 的邏輯判斷基準不同。以下是詳細分析：
-1. 邏輯差異分析
-第一張圖（找出的數量：936,022）
-這段語法使用了 JOIN。
- * 關鍵邏輯：它同時滿足了兩個條件：
-   * ACCT_KEY 必須在 XREF 表中能透過複雜的 SUBSTRING + PATINDEX 找到對應。
-   * 該對應的 SK_ 鍵值在 ACCT_XREF_DIM 中不存在。
- * 隱藏陷阱：如果 Acct_Migrate_buffer 裡的某些帳號在 XREF 表中根本找不到對應（Join 不到），這些帳號就不會被這段 SQL 計算進去。
-第二張圖（找出的數量：950,568）
-這段語法使用了 EXCEPT。
- * 關鍵邏輯：它是用「預計要寫入的全量」減去「實際上已經在目標表（DIM）的全量」。
- * 特點：它不關心 XREF 表，只要 Buffer 裡有、但 DIM 裡沒有，它就會算進去。
-2. 為什麼數字對不起來？（那 14,546 筆去哪了？）
-這通常是因為資料中存在以下情況：
- * 無效關聯或格式問題：有 14,546 筆帳號在 Acct_Migrate_buffer 裡，但因為某些原因（例如格式不符、長度不同、或根本沒資料），導致它們無法通過第一張圖那個複雜的 JOIN ON SUBSTRING... 條件。
- * Join 類型限制：第一張圖用的是 JOIN（即 Inner Join），這會過濾掉所有在 XREF 中找不到對應的 Buffer 資料。而第二張圖的 EXCEPT 是以 Buffer 為主體，不會被過濾。
-3. 哪一個才是對的？
-這取決於您的業務需求：
- * 如果您想知道「所有沒進去的人」：950,568 是對的（第二張圖）。它代表了遷移漏掉的總數。
- * 如果您只想知道「在 XREF 有對應，但沒進 DIM 的人」：936,022 是對的（第一張圖）。
-4. 建議驗證步驟
-您可以執行以下 SQL 來找出這消失的 14,546 筆到底是哪些資料：
-SELECT COUNT(*)
-FROM BSADBTW..Acct_Migrate_buffer a
-WHERE NOT EXISTS (
-    SELECT 1 FROM BSADBTW..XREF b
-    WHERE SUBSTRING(a.ACCT_KEY, PATINDEX('%[^0]%', a.ACCT_KEY + ' '), LEN(a.ACCT_KEY)) = 
-          SUBSTRING(b.EXTN_REF_NO, PATINDEX('%[^0]%', b.EXTN_REF_NO + ' '), LEN(b.EXTN_REF_NO))
+3. 使用公用資料表運算式 (CTE)
+如果你的邏輯很複雜，或者想要讓 SQL 看起來更整潔，可以用 WITH 先把暫存表的資料過濾出來。
+WITH TargetKeys AS (
+    SELECT NEW_CIF_KEY
+    FROM CIF_Migrate_Mapping_TEMP
+    WHERE SOURCE_CIF_KEY IN ('8ace48b8...', 'f0b9621d...', 'ccb9621d...')
 )
+SELECT f.*
+FROM bsa_sub_cust_fact f
+WHERE EXISTS (
+    SELECT 1 FROM TargetKeys t WHERE t.NEW_CIF_KEY = f.CIF_KEY
+);
 
-> 結論：第一張圖的 JOIN 條件太嚴苛（或是 XREF 資料不全），導致一些明明沒寫入、但在 XREF 也找不到的帳號被漏掉了。
-> 
-您需要我幫您微調第一張圖的 SQL，讓它改成 LEFT JOIN 來包含那些找不到對應的資料嗎？
+為什麼這些方法更好？
+ * 自動化： 你只需要輸入一次原始的 SOURCE_CIF_KEY，不需要手動去對照輸出結果再貼到另一個查詢。
+ * 減少錯誤： 手動複製 UUID 很容易少複製一個字元或貼錯行，JOIN 會幫你精確比對。
+ * 動態擴展： 如果你要查 100 個 Key，你只需要修改 IN 裡面的條件，或是直接關聯整個 TEMP 表，而不需要複製貼上 100 次。
+小提醒：
+從截圖看，你的第一段 SQL 裡 UUID 沒有加單引號（紅色波浪線），這在大多數資料庫（如 SQL Server, Oracle）會報錯。使用上述方法可以完全避免這個語法問題。
+你想嘗試將這兩個查詢合併成一個 JOIN 語句嗎？我可以幫你檢查語法。
