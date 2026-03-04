@@ -1,3 +1,49 @@
+
+既然你需要看到具體的比對結果（例如 ACCT_KEY 到底對應到了 XREF 表中的哪一筆 EXTN_REF_NO），我們必須捨棄 EXISTS 改用 LEFT JOIN。
+這樣改的好處是能將兩張表的欄位並排顯示。因為資料量大，我加入了 TOP 1000 確保你在幾秒鐘內就能看到結果，這對於「證明邏輯正確」來說已經足夠。
+1. 驗證「遺漏」的資料（並顯示比對過程）
+這段代碼會列出前 1000 筆在 DIM 表找不到，且在 XREF 表也找不到的資料。
+SELECT TOP 1000 
+    'SK_' + a.ACCT_KEY AS MISSING_KEY,
+    a.ACCT_KEY         AS SRC_KEY,
+    x.EXTN_REF_NO      AS MATCHED_IN_XREF -- 這裡應該會全是 NULL，證明真的找不到
+FROM BSADBTW..Acct_Migrate_buffer a
+LEFT JOIN BSADBTW..XREF x 
+    ON x.EXTN_REF_NO LIKE '%' + a.ACCT_KEY
+WHERE NOT EXISTS (
+    SELECT 1 FROM BSADBTW..ACCT_XREF_DIM b 
+    WHERE b.ACCT_KEY = 'SK_' + a.ACCT_KEY
+)
+AND x.EXTN_REF_NO IS NULL; -- 只看在 XREF 也找不到的
+
+2. 驗證「原本就有」的資料（看它到底對到誰）
+這段代碼最重要，它能讓你親眼看到 LIKE 比對的結果，證明你的關聯邏輯是對的。
+SELECT TOP 1000 
+    a.ACCT_KEY         AS SRC_KEY,
+    x.EXTN_REF_NO      AS MATCHED_IN_XREF, -- 你可以看到 XREF 裡的完整字串
+    'SK_' + a.ACCT_KEY AS EXPECTED_DIM_KEY
+FROM BSADBTW..Acct_Migrate_buffer a
+-- 使用 INNER JOIN 確保只顯示「有對到」的資料
+JOIN BSADBTW..XREF x 
+    ON x.EXTN_REF_NO LIKE '%' + a.ACCT_KEY
+WHERE NOT EXISTS (
+    SELECT 1 FROM BSADBTW..ACCT_XREF_DIM b
+    WHERE b.ACCT_KEY = 'SK_' + a.ACCT_KEY
+);
+
+為什麼這樣改就能看到比對？
+ * 欄位可見性：原本你的 x 定義在 NOT EXISTS 的小括號內，這在 SQL 裡叫「相關子查詢」，外層是讀不到內層變數的。改用 JOIN 後，x 表就變成了查詢的主體之一。
+ * 效能與證明的平衡：
+   * TOP 1000：資料庫只要找到 1000 筆符合條件的資料就會立刻停止運算輸出結果，不會去掃描剩下的 94 萬筆。
+   * 人工抽驗：你可以看輸出結果的 SRC_KEY 是否真的出現在 MATCHED_IN_XREF 的字串尾端。
+進階小技巧：
+如果你發現執行速度還是有點慢，可以嘗試在 JOIN 條件加上字串長度限制，這能稍微縮小掃描範圍：
+ON x.EXTN_REF_NO LIKE '%' + a.ACCT_KEY AND LEN(x.EXTN_REF_NO) >= LEN(a.ACCT_KEY)
+執行這兩段之後，如果看到 MATCHED_IN_XREF 欄位有正確帶出資料，就足以證明你的比對邏輯在技術上是成立的。還需要我針對結果異常的部分做調整嗎？
+
+
+
+
 抽驗 1,000 筆是非常合理的做法。在 95 萬筆資料中，1,000 筆（約佔 0.1%）已足以驗證 SQL 邏輯是否正確、過濾條件是否失效。
 這就像是「品管抽樣」，你不需要吃完一整桶湯才知道它鹹不鹹。
 為什麼這還是跑很久？
