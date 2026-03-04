@@ -1,23 +1,57 @@
-這四張投圖片是關於**「上海商業儲蓄銀行重大裁罰案」**的法遵宣導，主要針對內部員工挪用款項及異常行為的管理缺失進行檢討。
-以下是該案例的重點摘要：
-1. 案例背景與處分
- * 事由： 前行員挪用客戶款項及員工異常行為管理機制缺失。
- * 法規： 違反《銀行法》相關規定。
- * 處分： 核處新臺幣 1,200 萬元罰鍰。
-2. 核心缺失事項（四大重點）
-一、 內部控制制度未完善建立 (圖1、圖2)
- * 缺乏監測機制： 未能有效偵測員工異常行為（如：客戶存款移轉至員工帳戶、員工與特定帳戶頻繁金流、延遲入帳等）。
- * 系統控管不足： 行員可利用他人未登出的電腦變更客戶資料，缺乏「強制登出」或「非本人作業阻斷」機制，且變更資料後缺乏檢核。
-二、 內部控制制度未確實執行 (圖3、圖4)
- * 作業程序流於形式： 雖然有規定，但未落實。例如：親簽核對不實、對帳單寄送缺失、外工作業未落實雙人覆核。
- * 主管監督失靈： 多次出現主管未核對交易明細、未查核外務日誌等情形，顯示分行管理深度不足。
-三、 洗錢防制與帳戶監控缺失 (圖4)
- * 審查不嚴： 針對洗錢表徵案件，僅採信行員解釋（如：個人帳戶資金調度），未從資金來源帳戶深入調查。
-四、 誠信文化與道德行為不足 (圖4)
- * 忽略徵兆： 未落實員工生活考核。涉案行員因個人投資虧損、高利貸壓力或週轉困難而挪用款項，但管理階層未能及時察覺並介入。
-總結宣導訊息：
-這份資料旨在要求銀行員工：
- * 嚴守作業規範： 絕不可挪用客戶款項，必須落實雙人覆核及臨櫃覆點。
- * 落實系統安全： 離開座位必須登出系統。
- * 加強管理監督： 主管需切實審核交易明細，不能只做表面文書工作。
- * 建立誠信文化： 重視員工生活考核，及早發現可能導致舞弊的財務壓力徵兆。
+根據您的需求，我將這 4 個指標整理成標準的 SQL 語法。
+您可以直接在查詢視窗中執行這些指令來獲取報表數據：
+1. 要寫入的帳號有幾個 (Total Count)
+從緩衝區中計算所有不重複的原始帳號。
+-- 1. 緩衝區中的總帳號數
+SELECT COUNT(DISTINCT ACCT_KEY) AS [要寫入的帳號總數]
+FROM BSADBTW..Acct_Migrate_buffer;
+
+2. 實際寫入幾個 (Success Count)
+計算目標表中已經成功補上 SK_ 前綴的資料量。
+-- 2. 實際已寫入目標表的個數
+SELECT COUNT(*) AS [實際寫入個數]
+FROM BSADBTW..ACCT_XREF_DIM
+WHERE ACCT_KEY LIKE 'SK_%';
+
+3. 未寫入幾個 (Not Written Count)
+利用 EXCEPT（差集）找出存在於 Buffer 但不在目標表中的帳號數量。
+-- 3. 未寫入的數量 (Buffer 有，但 TS 表沒有)
+SELECT COUNT(*) AS [未寫入的數量]
+FROM (
+    SELECT 'SK_' + ACCT_KEY AS JOIN_KEY 
+    FROM BSADBTW..Acct_Migrate_buffer
+    EXCEPT
+    SELECT ACCT_KEY 
+    FROM BSADBTW..ACCT_XREF_DIM
+) AS DiffTable;
+
+4. 未寫入帳號是不是原本就有的 (Validation)
+這是最關鍵的步驟，用來證明「沒寫入」的原因是因為該帳號在舊系統（XREF）中已經補 0 存在了。
+-- 4. 驗證：未寫入的帳號中，有多少是本來就存在於系統內的
+SELECT COUNT(DISTINCT a.ACCT_KEY) AS [原本就有的資料數量]
+FROM BSADBTW..Acct_Migrate_buffer a
+JOIN BSADBTW..XREF x ON x.EXTN_REF_NO LIKE '%' + a.ACCT_KEY
+WHERE NOT EXISTS (
+    SELECT 1 FROM BSADBTW..ACCT_XREF_DIM b
+    WHERE b.ACCT_KEY = 'SK_' + a.ACCT_KEY
+);
+
+💡 進階分析建議
+根據您提供的圖片數字：
+ * 未寫入總數：950,568 筆
+ * 原本就有（補0存在）：935,999 筆
+ * 中間差額：14,569 筆
+這 1.4 萬筆 既沒有寫入成功，也不在「原本就有」的清單內。如果您想找出這些資料的去向，可以使用下列這段 SQL 來「抓出這 1.4 萬筆的名單」：
+-- 找出那 1.4 萬筆「消失的資料」具體清單
+SELECT 'SK_' + a.ACCT_KEY AS MISSING_KEY
+FROM BSADBTW..Acct_Migrate_buffer a
+WHERE NOT EXISTS (
+    SELECT 1 FROM BSADBTW..ACCT_XREF_DIM b 
+    WHERE b.ACCT_KEY = 'SK_' + a.ACCT_KEY
+)
+AND NOT EXISTS (
+    SELECT 1 FROM BSADBTW..XREF x 
+    WHERE x.EXTN_REF_NO LIKE '%' + a.ACCT_KEY
+);
+
+這段 SQL 可以幫助您確認這 1.4 萬筆是否因為帳號長度錯誤、空值或是其他邏輯問題被過濾掉了。
