@@ -1,81 +1,34 @@
+要找出這兩張表筆數不一致的原因，通常是因為 LoadTrxn_Migrate_buffer 中的某些 CIF_KEY 在 CIF_Migrate_Mapping_TEMP 中找不到對應的資料，或是該欄位存在 NULL 值。
+你可以利用以下幾種 SQL 思路來精確定位問題：
+1. 找出「沒被對應到」的資料 (最推薦)
+使用 LEFT JOIN 並篩選右表為 NULL 的資料，這樣你可以直接看到是哪些交易（Trxn）被遺漏了。
+SELECT a.*
+FROM LoadTrxn_Migrate_buffer a
+LEFT JOIN CIF_Migrate_Mapping_TEMP b ON a.CIF_KEY = b.SOURCE_CIF_KEY
+WHERE b.SOURCE_CIF_KEY IS NULL;
 
-這封信看起來是在回報關於 SK CIF 驗證測試 的異常結果，主要針對「TS 無註記」以及「查無此 CIF」的問題進行資料核對。
-既然是工作上的回信，建議採取**「分點敘述、結論先行」**的方式，讓收件人（育豪）能一眼看出哪幾筆資料有問題。以下提供兩個版本的草稿供你參考：
-選項一：專業清晰版（推薦，適合正式回報）
-主旨： RE:【請協助】SK CIF 驗證問題回報
-育豪你好，
-針對 SK CIF 驗證測試中發現的異常，經比對新光來源資料，初步查核結果如下：
- * 問題 1：TS 無註記情況
-   * 客戶號碼 B822478231：於來源資料中 IsSARFiled 欄位顯示為 NULL，導致 TS 無註記。
- * 問題 2：查無此 CIF / 客戶狀態關閉
-   * 清單中多筆資料（如 74274882）在新光來源資料中查無此號碼。
-   * 部分企業戶（如 07805679、08152438 等）雖有負面新聞或黑名單註記，但於系統中仍呈現 TS 無註記或狀態為關閉。
-詳細的資料截圖請參考附件（或下方圖示）。再請協助確認是否為資料同步或邏輯判斷之問題。
-謝謝。
-選項二：簡潔重點版（適合內部快速溝通）
-主旨： RE: SK CIF 驗證問題說明
-育豪，
-有關 SK CIF 的驗證問題，目前查找新光來源資料比對結果如下：
- * 針對 TS 無註記： 以客戶 B822478231 為例，來源端欄位確實為 NULL（詳見截圖）。
- * 針對查無此 CIF： 客戶號碼 74274882 在新光資料中完全找不到紀錄。
- * 其他異常： 包含 62828748 等多筆企業戶亦有 TS 無註記或狀態關閉之情形。
-目前看來問題都與新光端提供的來源資料狀態相符，再請你評估後續處理方式，謝謝。
-💡 寫作小建議：
- * 標記重點： 如果信件是在討論特定的「客戶號碼」，建議在信件中直接打出該號碼（如我草稿中所列），方便對方直接複製搜尋，不用看著截圖手打。
- * 附件提醒： 既然你有截圖，記得在信中提到「詳如截圖」，引導對方查看證據。
-需要我幫你針對其中某一個特定的個案再加強描述嗎？
+ * 目的： 列出所有在 buffer 表中存在，但在 Mapping 表中找不到對應 SOURCE_CIF_KEY 的原始資料。
+2. 檢查重複性 (Duplicate Check)
+有時候筆數對不上是因為對應表中有重複的 Key，導致 Join 之後筆數變多（雖然你的案例是變少，但這是常見隱患）。
+SELECT SOURCE_CIF_KEY, COUNT(*) 
+FROM CIF_Migrate_Mapping_TEMP 
+GROUP BY SOURCE_CIF_KEY 
+HAVING COUNT(*) > 1;
 
+3. 檢查 NULL 值
+IN 子句對於 NULL 值的處理比較特殊。如果 CIF_KEY 欄位有空值，它不會被包含在 IN (SELECT...) 的結果中。
+SELECT COUNT(*) 
+FROM LoadTrxn_Migrate_buffer 
+WHERE CIF_KEY IS NULL;
 
+4. 快速統計差異原因
+如果你想快速知道有多少「Key」是缺失的，可以用這個簡單的統計：
+SELECT COUNT(DISTINCT CIF_KEY) FROM LoadTrxn_Migrate_buffer;
+-- 對比
+SELECT COUNT(DISTINCT SOURCE_CIF_KEY) FROM CIF_Migrate_Mapping_TEMP;
 
-從你提供的圖片來看，你目前是手動複製 CIF_KEY 到 IN 條件中進行查詢。當資料量變多時，這種方法不但累人，還容易出錯。
-既然你已經有一個 CIF_Migrate_Mapping_TEMP 表記錄了新舊 Key 的對應關係，最專業且高效的方法是使用 SQL JOIN（關聯查詢） 或 子查詢 (Subquery)。
-以下是三種更推薦的方法：
-1. 使用 JOIN (最推薦，效能最好)
-直接將「資料表」與「對應表」串連，一次查出所有相關資訊。這樣你就不需要手動輸入那串長長的 UUID。
-SELECT 
-    f.customerno, 
-    f.*, 
-    m.SOURCE_CIF_KEY -- 順便把舊的 Key 查出來對照
-FROM bsa_sub_cust_fact f
-INNER JOIN CIF_Migrate_Mapping_TEMP m 
-    ON f.CIF_KEY = m.NEW_CIF_KEY
-WHERE m.SOURCE_CIF_KEY IN (
-    '8ace48b8-1f27-ed11-a943-00505686dbae',
-    'f0b9621d-0026-ed11-a943-00505686dbae',
-    'ccb9621d-0026-ed11-a943-00505686dbae'
-);
-
-2. 使用子查詢 (邏輯最清晰)
-如果你只想查詢在對應表裡存在的資料，可以使用 IN 搭配子查詢。
-SELECT customerno, *
-FROM bsa_sub_cust_fact
-WHERE CIF_KEY IN (
-    SELECT NEW_CIF_KEY 
-    FROM CIF_Migrate_Mapping_TEMP
-    WHERE SOURCE_CIF_KEY IN (
-        '8ace48b8-1f27-ed11-a943-00505686dbae',
-        'f0b9621d-0026-ed11-a943-00505686dbae',
-        'ccb9621d-0026-ed11-a943-00505686dbae'
-    )
-);
-
-3. 使用公用資料表運算式 (CTE)
-如果你的邏輯很複雜，或者想要讓 SQL 看起來更整潔，可以用 WITH 先把暫存表的資料過濾出來。
-WITH TargetKeys AS (
-    SELECT NEW_CIF_KEY
-    FROM CIF_Migrate_Mapping_TEMP
-    WHERE SOURCE_CIF_KEY IN ('8ace48b8...', 'f0b9621d...', 'ccb9621d...')
-)
-SELECT f.*
-FROM bsa_sub_cust_fact f
-WHERE EXISTS (
-    SELECT 1 FROM TargetKeys t WHERE t.NEW_CIF_KEY = f.CIF_KEY
-);
-
-為什麼這些方法更好？
- * 自動化： 你只需要輸入一次原始的 SOURCE_CIF_KEY，不需要手動去對照輸出結果再貼到另一個查詢。
- * 減少錯誤： 手動複製 UUID 很容易少複製一個字元或貼錯行，JOIN 會幫你精確比對。
- * 動態擴展： 如果你要查 100 個 Key，你只需要修改 IN 裡面的條件，或是直接關聯整個 TEMP 表，而不需要複製貼上 100 次。
-小提醒：
-從截圖看，你的第一段 SQL 裡 UUID 沒有加單引號（紅色波浪線），這在大多數資料庫（如 SQL Server, Oracle）會報錯。使用上述方法可以完全避免這個語法問題。
-你想嘗試將這兩個查詢合併成一個 JOIN 語句嗎？我可以幫你檢查語法。
+建議排查步驟：
+ * 先執行第 1 段語法：這能讓你直接看到那消失的 138,040 筆資料（7,473,989 - 7,335,949）長什麼樣子。
+ * 觀察特徵：看看這些沒對應到的 CIF_KEY 是否有共同點（例如：全是某個特定的 TrxnType？或者是舊系統遺留的髒資料？）。
+ * 檢查對應表完整性：確認 CIF_Migrate_Mapping_TEMP 是否包含了所有需要移轉的客戶代碼。
+需要我幫你撰寫更複雜的排除邏輯（例如檢查資料格式是否一致）嗎？
