@@ -1,96 +1,45 @@
-
-
-了解，如果 LoadTrxn_Migrate_buffer (交易檔) 裡面只有 CIF_KEY 而沒有 CustomerNo，那我們就必須透過「兩步走」的方式來串接。
-既然你已經有一段 SQL 可以找出那些 FLG = '1' 的客戶清單，我們可以把那段邏輯當作 子查詢 (Subquery)，直接去對比交易檔的筆數。
-驗證語法：計算因 FLG=1 被排除的交易筆數
-你可以執行這段語法，看看算出來的筆數是不是剛好等於你消失的那 138,040 筆：
-SELECT COUNT(*) AS Missing_TXN_Count
-FROM LoadTrxn_Migrate_buffer
-WHERE CIF_KEY IN (
-    -- 這裡放你截圖中找出的「FLG=1 且不在 Mapping 表」的客戶
-    SELECT b.CIF_KEY
-    FROM Customer_Migrate_buffer b
-    INNER JOIN BANCS_SK_CUST_INFO s ON b.CustomerNo = s.SK_CUST_ID
-    WHERE s.CUST_RE_NO_FLG = '1'
-    AND NOT EXISTS (
-        SELECT 1 FROM CIF_Migrate_Mapping_TEMP m WHERE m.SOURCE_CIF_KEY = b.CIF_KEY
-    )
-);
-
-為什麼會這樣？(原因分析)
-根據你的截圖邏輯，我們可以推斷出這條「斷鏈」的路徑：
- * 來源端：Customer_Migrate_buffer 裡本來有這群人。
- * 過濾層：在產生 CIF_Migrate_Mapping_TEMP (對應表) 的時候，程式判斷 FLG = '1' 的人不需要移轉，所以沒幫他們建立新舊代碼對應。
- * 交易端：當你執行 SELECT count(*) ... WHERE CIF_KEY IN (SELECT SOURCE_CIF_KEY FROM CIF_Migrate_Mapping_TEMP) 時，因為對應表裡沒有這些人，他們的交易自然就被排除了。
-接下來你可以怎麼做？
- * 確認總數是否吻合：如果上面的 Missing_TXN_Count 加上你原本查到的 7,335,949 等於 7,473,989，那就 100% 確定是這個原因了。
- * 導出清單給業務單位：如果需要證明，可以把 COUNT(*) 改成 SELECT TOP 100 *，抓出幾筆交易給相關人員看，確認「這些 FLG=1 的客戶交易不移轉」是否符合業務需求。
-你需要我幫你把這段邏輯改成更有效率的 JOIN 寫法，好讓你產出完整的差異明細報表嗎？
-
-
-從你提供的新截圖來看，你已經成功捕捉到了一批關鍵資料！這段 SQL 語法確實揭示了為什麼筆數會對不上的原因。
-你的邏輯分析
-這張圖中的 SQL 查詢（Query）精確地找出了那些：
- * 存在於 Customer_Migrate_buffer (b)。
- * 符合 s.CUST_RE_NO_FLG = '1'（代表可能是某種特定標記，例如已銷戶或特殊狀態）。
- * 不存在於 對應表 CIF_Migrate_Mapping_TEMP (m)。
- * 不存在於 異常表 Customer_Migrate_Exception_Table (e)。
-這表示，CUST_RE_NO_FLG = '1' 的資料確實被你的移轉邏輯過濾掉了，這就是造成筆數差異（138,040 筆）的主因之一。
-如何驗證「全部差異」是否都來自 FLG = 1？
-為了確認這是否為唯一原因，建議你執行以下這段「總量檢查」語法：
+從你提供的照片來看，你的需求是在執行下方的 SELECT 語句之前，需要先從 Customer_Migrate_buffer 表中關聯出 CustomerNo。
+目前的腳本中，下方的查詢已經在使用 Customer_Migrate_buffer b，但如果你需要透過某個關聯（例如 CIF_KEY）來補齊 CustomerNo，通常有兩種改法：
+1. 使用 JOIN 直接關聯
+如果 CustomerNo 存在於 Customer_Migrate_buffer 之中，你可以直接在 INNER JOIN 的條件中使用它。如果它是存在於另一個表（例如 Customer_Table），則需要多加一個 LEFT JOIN 或 INNER JOIN。
+假設你的邏輯是：Customer_Migrate_buffer 裡有 CIF_KEY，而你想透過這個 KEY 去抓到對應的 CustomerNo，可以參考以下寫法：
 SELECT 
-    s.CUST_RE_NO_FLG, 
-    COUNT(*) as Gap_Count
-FROM LoadTrxn_Migrate_buffer b
-INNER JOIN BANCS_SK_CUST_INFO s ON b.CustomerNo = s.SK_CUST_ID
-WHERE NOT EXISTS (
-    SELECT 1 FROM CIF_Migrate_Mapping_TEMP m 
-    WHERE m.SOURCE_CIF_KEY = b.CIF_KEY
+    s.CUST_RE_NO_FLG,
+    b.CIF_KEY,
+    b.CustomerNo  -- 確保這裡選取的是正確的欄位
+FROM Customer_Migrate_buffer b
+-- 如果 CustomerNo 不在 b 表裡，這裡要改為 JOIN 其他含有 CustomerNo 的表
+INNER JOIN BANCS_SK_CUST_INFO s ON b.CustomerNo = s.SK_CUST_ID 
+WHERE s.CUST_RE_NO_FLG = '1'
+  AND NOT EXISTS (
+      SELECT 1 FROM CIF_Migrate_Mapping_TEMP m WHERE m.SOURCE_CIF_KEY = b.CIF_KEY
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM Customer_Migrate_Exception_Table e WHERE e.CIF_KEY = b.CIF_KEY
+  );
+
+2. 使用 CTE (Common Table Expression) 提高可讀性
+如果抓取 CustomerNo 的過程比較複雜（例如需要先過濾或從第三張表撈取），建議用 WITH 語法，先把「有 CustomerNo 的暫存資料」準備好：
+WITH Prepared_Buffer AS (
+    SELECT CIF_KEY, CustomerNo 
+    FROM Customer_Migrate_buffer
+    -- 可以在這裡做預處理，例如排除重複或 JOIN 取得 CustomerNo
 )
-GROUP BY s.CUST_RE_NO_FLG;
+SELECT 
+    s.CUST_RE_NO_FLG,
+    pb.CIF_KEY,
+    pb.CustomerNo
+FROM Prepared_Buffer pb
+INNER JOIN BANCS_SK_CUST_INFO s ON pb.CustomerNo = s.SK_CUST_ID
+WHERE s.CUST_RE_NO_FLG = '1'
+  AND NOT EXISTS (
+      SELECT 1 FROM CIF_Migrate_Mapping_TEMP m WHERE m.SOURCE_CIF_KEY = pb.CIF_KEY
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM Customer_Migrate_Exception_Table e WHERE e.CIF_KEY = pb.CIF_KEY
+  );
 
-執行結果解讀：
- * 如果結果只有一行 FLG = '1'：那麼恭喜你，原因完全鎖定，就是因為這些標記為 1 的資料被排除在對應表之外，導致交易資料抓不到對應。
- * 如果有 FLG = '0' 或其他數值：表示除了 FLG=1 之外，還有其他原因導致資料沒進對應表（例如：開戶資料不完整、證號錯誤等）。
-下一步建議
-既然已經找出這些資料了，你可以進一步確認：
- * 業務邏輯確認：詢問 User 或規畫人員，CUST_RE_NO_FLG = '1' 的客戶是否本來就不應該移轉？
- * 補齊對應表：如果這些資料「應該」要移轉，那你需要將這些缺失的 CIF_KEY 補進 CIF_Migrate_Mapping_TEMP 中，筆數就會對齊了。
-需要我幫你寫一段語法，直接計算這群 FLG=1 的資料在交易檔中佔了多少筆嗎？
-
-
-
-要找出這兩張表筆數不一致的原因，通常是因為 LoadTrxn_Migrate_buffer 中的某些 CIF_KEY 在 CIF_Migrate_Mapping_TEMP 中找不到對應的資料，或是該欄位存在 NULL 值。
-你可以利用以下幾種 SQL 思路來精確定位問題：
-1. 找出「沒被對應到」的資料 (最推薦)
-使用 LEFT JOIN 並篩選右表為 NULL 的資料，這樣你可以直接看到是哪些交易（Trxn）被遺漏了。
-SELECT a.*
-FROM LoadTrxn_Migrate_buffer a
-LEFT JOIN CIF_Migrate_Mapping_TEMP b ON a.CIF_KEY = b.SOURCE_CIF_KEY
-WHERE b.SOURCE_CIF_KEY IS NULL;
-
- * 目的： 列出所有在 buffer 表中存在，但在 Mapping 表中找不到對應 SOURCE_CIF_KEY 的原始資料。
-2. 檢查重複性 (Duplicate Check)
-有時候筆數對不上是因為對應表中有重複的 Key，導致 Join 之後筆數變多（雖然你的案例是變少，但這是常見隱患）。
-SELECT SOURCE_CIF_KEY, COUNT(*) 
-FROM CIF_Migrate_Mapping_TEMP 
-GROUP BY SOURCE_CIF_KEY 
-HAVING COUNT(*) > 1;
-
-3. 檢查 NULL 值
-IN 子句對於 NULL 值的處理比較特殊。如果 CIF_KEY 欄位有空值，它不會被包含在 IN (SELECT...) 的結果中。
-SELECT COUNT(*) 
-FROM LoadTrxn_Migrate_buffer 
-WHERE CIF_KEY IS NULL;
-
-4. 快速統計差異原因
-如果你想快速知道有多少「Key」是缺失的，可以用這個簡單的統計：
-SELECT COUNT(DISTINCT CIF_KEY) FROM LoadTrxn_Migrate_buffer;
--- 對比
-SELECT COUNT(DISTINCT SOURCE_CIF_KEY) FROM CIF_Migrate_Mapping_TEMP;
-
-建議排查步驟：
- * 先執行第 1 段語法：這能讓你直接看到那消失的 138,040 筆資料（7,473,989 - 7,335,949）長什麼樣子。
- * 觀察特徵：看看這些沒對應到的 CIF_KEY 是否有共同點（例如：全是某個特定的 TrxnType？或者是舊系統遺留的髒資料？）。
- * 檢查對應表完整性：確認 CIF_Migrate_Mapping_TEMP 是否包含了所有需要移轉的客戶代碼。
-需要我幫你撰寫更複雜的排除邏輯（例如檢查資料格式是否一致）嗎？
+關鍵點檢查：
+ * 欄位來源：請確認 Customer_Migrate_buffer 裡是否已經有 CustomerNo 這個欄位。如果沒有，你需要告訴我 CustomerNo 是從哪張表根據什麼 Key 關聯出來的。
+ * 效能建議：目前的 NOT EXISTS 寫法對於大型 Migration 是比較穩妥的，能避免 LEFT JOIN ... IS NULL 產生的重複資料問題。
+請問 CustomerNo 目前是存在於哪一張表中呢？如果需要更精確的 JOIN 邏輯，我可以幫你補上。
