@@ -1,3 +1,36 @@
+
+從你提供的新截圖來看，你已經成功捕捉到了一批關鍵資料！這段 SQL 語法確實揭示了為什麼筆數會對不上的原因。
+你的邏輯分析
+這張圖中的 SQL 查詢（Query）精確地找出了那些：
+ * 存在於 Customer_Migrate_buffer (b)。
+ * 符合 s.CUST_RE_NO_FLG = '1'（代表可能是某種特定標記，例如已銷戶或特殊狀態）。
+ * 不存在於 對應表 CIF_Migrate_Mapping_TEMP (m)。
+ * 不存在於 異常表 Customer_Migrate_Exception_Table (e)。
+這表示，CUST_RE_NO_FLG = '1' 的資料確實被你的移轉邏輯過濾掉了，這就是造成筆數差異（138,040 筆）的主因之一。
+如何驗證「全部差異」是否都來自 FLG = 1？
+為了確認這是否為唯一原因，建議你執行以下這段「總量檢查」語法：
+SELECT 
+    s.CUST_RE_NO_FLG, 
+    COUNT(*) as Gap_Count
+FROM LoadTrxn_Migrate_buffer b
+INNER JOIN BANCS_SK_CUST_INFO s ON b.CustomerNo = s.SK_CUST_ID
+WHERE NOT EXISTS (
+    SELECT 1 FROM CIF_Migrate_Mapping_TEMP m 
+    WHERE m.SOURCE_CIF_KEY = b.CIF_KEY
+)
+GROUP BY s.CUST_RE_NO_FLG;
+
+執行結果解讀：
+ * 如果結果只有一行 FLG = '1'：那麼恭喜你，原因完全鎖定，就是因為這些標記為 1 的資料被排除在對應表之外，導致交易資料抓不到對應。
+ * 如果有 FLG = '0' 或其他數值：表示除了 FLG=1 之外，還有其他原因導致資料沒進對應表（例如：開戶資料不完整、證號錯誤等）。
+下一步建議
+既然已經找出這些資料了，你可以進一步確認：
+ * 業務邏輯確認：詢問 User 或規畫人員，CUST_RE_NO_FLG = '1' 的客戶是否本來就不應該移轉？
+ * 補齊對應表：如果這些資料「應該」要移轉，那你需要將這些缺失的 CIF_KEY 補進 CIF_Migrate_Mapping_TEMP 中，筆數就會對齊了。
+需要我幫你寫一段語法，直接計算這群 FLG=1 的資料在交易檔中佔了多少筆嗎？
+
+
+
 要找出這兩張表筆數不一致的原因，通常是因為 LoadTrxn_Migrate_buffer 中的某些 CIF_KEY 在 CIF_Migrate_Mapping_TEMP 中找不到對應的資料，或是該欄位存在 NULL 值。
 你可以利用以下幾種 SQL 思路來精確定位問題：
 1. 找出「沒被對應到」的資料 (最推薦)
