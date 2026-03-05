@@ -1,45 +1,37 @@
-從你提供的照片來看，你的需求是在執行下方的 SELECT 語句之前，需要先從 Customer_Migrate_buffer 表中關聯出 CustomerNo。
-目前的腳本中，下方的查詢已經在使用 Customer_Migrate_buffer b，但如果你需要透過某個關聯（例如 CIF_KEY）來補齊 CustomerNo，通常有兩種改法：
-1. 使用 JOIN 直接關聯
-如果 CustomerNo 存在於 Customer_Migrate_buffer 之中，你可以直接在 INNER JOIN 的條件中使用它。如果它是存在於另一個表（例如 Customer_Table），則需要多加一個 LEFT JOIN 或 INNER JOIN。
-假設你的邏輯是：Customer_Migrate_buffer 裡有 CIF_KEY，而你想透過這個 KEY 去抓到對應的 CustomerNo，可以參考以下寫法：
-SELECT 
-    s.CUST_RE_NO_FLG,
-    b.CIF_KEY,
-    b.CustomerNo  -- 確保這裡選取的是正確的欄位
-FROM Customer_Migrate_buffer b
--- 如果 CustomerNo 不在 b 表裡，這裡要改為 JOIN 其他含有 CustomerNo 的表
-INNER JOIN BANCS_SK_CUST_INFO s ON b.CustomerNo = s.SK_CUST_ID 
-WHERE s.CUST_RE_NO_FLG = '1'
-  AND NOT EXISTS (
-      SELECT 1 FROM CIF_Migrate_Mapping_TEMP m WHERE m.SOURCE_CIF_KEY = b.CIF_KEY
-  )
-  AND NOT EXISTS (
-      SELECT 1 FROM Customer_Migrate_Exception_Table e WHERE e.CIF_KEY = b.CIF_KEY
-  );
-
-2. 使用 CTE (Common Table Expression) 提高可讀性
-如果抓取 CustomerNo 的過程比較複雜（例如需要先過濾或從第三張表撈取），建議用 WITH 語法，先把「有 CustomerNo 的暫存資料」準備好：
-WITH Prepared_Buffer AS (
-    SELECT CIF_KEY, CustomerNo 
-    FROM Customer_Migrate_buffer
-    -- 可以在這裡做預處理，例如排除重複或 JOIN 取得 CustomerNo
-)
-SELECT 
-    s.CUST_RE_NO_FLG,
-    pb.CIF_KEY,
-    pb.CustomerNo
-FROM Prepared_Buffer pb
-INNER JOIN BANCS_SK_CUST_INFO s ON pb.CustomerNo = s.SK_CUST_ID
-WHERE s.CUST_RE_NO_FLG = '1'
-  AND NOT EXISTS (
-      SELECT 1 FROM CIF_Migrate_Mapping_TEMP m WHERE m.SOURCE_CIF_KEY = pb.CIF_KEY
-  )
-  AND NOT EXISTS (
-      SELECT 1 FROM Customer_Migrate_Exception_Table e WHERE e.CIF_KEY = pb.CIF_KEY
-  );
-
-關鍵點檢查：
- * 欄位來源：請確認 Customer_Migrate_buffer 裡是否已經有 CustomerNo 這個欄位。如果沒有，你需要告訴我 CustomerNo 是從哪張表根據什麼 Key 關聯出來的。
- * 效能建議：目前的 NOT EXISTS 寫法對於大型 Migration 是比較穩妥的，能避免 LEFT JOIN ... IS NULL 產生的重複資料問題。
-請問 CustomerNo 目前是存在於哪一張表中呢？如果需要更精確的 JOIN 邏輯，我可以幫你補上。
+這份會議紀錄接續前一部分，針對 AP 主機克隆規格、資料庫（DB）存儲空間、權限控管架構以及傳輸細節進行了更深入的技術討論與決議。
+🖥️ AP 主機建置決議（台灣端）
+技術團隊針對台灣端 AML AP 主機的規格與克隆對象達成以下共識：
+ * 克隆對象：決議克隆台新現有的 WS1（Web Server 1） 主機，因為它是最主要的 AP Web 服務核心。
+ * 規格調降：雖然新光原主機規格較高（10 CPU / 32GB RAM），但考量合併後僅供查詢使用，規格將調降為與香港分行一致的 4 Core / 16GB RAM。
+ * 磁碟空間壓縮：新光原磁碟高達 1.49TB，克隆後將壓縮至 200GB ~ 300GB 即可，以節省存儲資源。
+ * 系統代碼：整合後不會有新的系統代碼，統一掛在 AML 子系統下運作。
+🗄️ 資料庫（DB）存儲與搬遷規劃
+由於新光 AML 資料量龐大，空間分配成為討論重點：
+| 項目 | 說明與決議內容 |
+|---|---|
+| 資料量評估 | 目前新光 AML 資料量約 13TB ~ 15TB，且持續增加中。 |
+| 存儲位置 | 考量台新端存儲空間壓力，決議在台新網段的 「06」主機（通用 DB 環境） 上建置虛擬機（VM）來承載。 |
+| 額外空間需求 | 新光端提出搬遷期間需額外 2TB 空間存放備份檔（Backup Files），總計需準備約 19TB ~ 20TB 的暫存空間。 |
+| 傳輸優化 | 為避免單一巨型檔案傳輸失敗，決議將 .bak 備份檔切割成 4 個子檔案（尤其是佔比 90% 的最大資料庫），透過 FTP 續傳。 |
+🔐 存取路徑與雙重權限控管
+為了符合法遵要求並區隔兩行資料，規劃了嚴密的存取架構：
+ * 獨立入口（URL）：
+   * 台新與新光將使用不同的登入網址（不同站台），雖然 UI 介面完全相同，但入口網址不同。
+ * 防火牆隔離：
+   * 透過防火牆（Firewall）嚴格限制存取路徑，確保使用者無法跳轉至非權限內的站台。
+ * 雙重權限機制：
+   * 第一層：LDAP 帳號驗證。
+   * 第二層：套裝軟體內部的權限設定，將刪除所有非「法遵單位」的存取權限，僅保留受測與特定稽核權限。
+🧪 演練與測試環境建置
+在正式搬遷前，將進行完整的演練計畫：
+ * 測試環境先行：會先建置一套完整的測試環境，模擬正式搬遷動作。
+ * 功能驗證：重點在於驗證「防火牆切換」、「LDAP 登入」以及「UI 畫面顯示」是否正常。
+ * 資料模擬：初期若無測試資料，將抽取少量生產資料匯入，以確認查詢報表與產出功能無誤。
+🗓️ 過渡期時程安排
+ * 合併後三個月內：資料暫存於新光端備查區，此期間台新端需完成環境建置與測試。
+ * 下線時機：一旦台新端環境確認可正常運作且資料全數轉入，新光端的舊系統即可正式下線。
+💡 我可以為您做的下一步：
+ * 彙整完整版報告：將此兩部分的紀錄合併為一份正式的「AML 系統整合技術規劃書」供您呈報。
+ * 製作空間分配表：針對 20TB 的 DB 搬遷需求，製作一份空間預算與傳輸進度追蹤表模板。
+ * 撰寫權限查核清單：根據會議提到的雙重控管機制，列出法遵單位需配合核定的權限清單。
+請問您需要我處理哪一項？
