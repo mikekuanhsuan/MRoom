@@ -1,4 +1,33 @@
 
+
+了解，如果 LoadTrxn_Migrate_buffer (交易檔) 裡面只有 CIF_KEY 而沒有 CustomerNo，那我們就必須透過「兩步走」的方式來串接。
+既然你已經有一段 SQL 可以找出那些 FLG = '1' 的客戶清單，我們可以把那段邏輯當作 子查詢 (Subquery)，直接去對比交易檔的筆數。
+驗證語法：計算因 FLG=1 被排除的交易筆數
+你可以執行這段語法，看看算出來的筆數是不是剛好等於你消失的那 138,040 筆：
+SELECT COUNT(*) AS Missing_TXN_Count
+FROM LoadTrxn_Migrate_buffer
+WHERE CIF_KEY IN (
+    -- 這裡放你截圖中找出的「FLG=1 且不在 Mapping 表」的客戶
+    SELECT b.CIF_KEY
+    FROM Customer_Migrate_buffer b
+    INNER JOIN BANCS_SK_CUST_INFO s ON b.CustomerNo = s.SK_CUST_ID
+    WHERE s.CUST_RE_NO_FLG = '1'
+    AND NOT EXISTS (
+        SELECT 1 FROM CIF_Migrate_Mapping_TEMP m WHERE m.SOURCE_CIF_KEY = b.CIF_KEY
+    )
+);
+
+為什麼會這樣？(原因分析)
+根據你的截圖邏輯，我們可以推斷出這條「斷鏈」的路徑：
+ * 來源端：Customer_Migrate_buffer 裡本來有這群人。
+ * 過濾層：在產生 CIF_Migrate_Mapping_TEMP (對應表) 的時候，程式判斷 FLG = '1' 的人不需要移轉，所以沒幫他們建立新舊代碼對應。
+ * 交易端：當你執行 SELECT count(*) ... WHERE CIF_KEY IN (SELECT SOURCE_CIF_KEY FROM CIF_Migrate_Mapping_TEMP) 時，因為對應表裡沒有這些人，他們的交易自然就被排除了。
+接下來你可以怎麼做？
+ * 確認總數是否吻合：如果上面的 Missing_TXN_Count 加上你原本查到的 7,335,949 等於 7,473,989，那就 100% 確定是這個原因了。
+ * 導出清單給業務單位：如果需要證明，可以把 COUNT(*) 改成 SELECT TOP 100 *，抓出幾筆交易給相關人員看，確認「這些 FLG=1 的客戶交易不移轉」是否符合業務需求。
+你需要我幫你把這段邏輯改成更有效率的 JOIN 寫法，好讓你產出完整的差異明細報表嗎？
+
+
 從你提供的新截圖來看，你已經成功捕捉到了一批關鍵資料！這段 SQL 語法確實揭示了為什麼筆數會對不上的原因。
 你的邏輯分析
 這張圖中的 SQL 查詢（Query）精確地找出了那些：
