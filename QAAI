@@ -1,3 +1,10 @@
-'(' || SUBSTR(V_CHAR_PHONE,1,3) || ') ' ||  
-SUBSTR(V_CHAR_PHONE,4,3) || '-'  ||  
-SUBSTR(V_CHAR_PHONE,7,4) 
+DECODE(IN_GENDER, 'M', 'MALE', 'F', 'FEMALE', 'UNK') 
+
+
+DECODE(TRUE,   
+AGE < 20, 'LESS THAN 20',   
+AGE  >=  20 AND AGE  <=  29, '20 TO 29',  
+AGE  >=  30 AND AGE  <=  39, '30 TO 39',  
+AGE  >=  40 AND AGE  <=  49, '40 TO 49',   
+AGE  >=  50 AND AGE  <=  60, '50 TO 60',  
+AGE  >=  60, 'GREATER THAN 60') 
