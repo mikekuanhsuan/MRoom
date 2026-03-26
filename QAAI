@@ -1,5 +1,6 @@
-ISNULL(DIM_EMPLOYEE_ID) AND Source_EMPLOYEE_ID != 99999
-
-NOT ISNULL(DIM_EMPLOYEE_ID) AND Source_EMPLOYEE_ID != 99999
-
-Source_EMPLOYEE_ID = 99999
+$$MAX_DISCOUNT
+Type	Parameter
+Datatype	Decimal
+Precision	15
+Scale	2
+Initial Value	17.25
