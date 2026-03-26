@@ -1,6 +1,5 @@
-$$MAX_DISCOUNT
-Type	Parameter
-Datatype	Decimal
-Precision	15
-Scale	2
-Initial Value	17.25
+IIF(
+  IN_DISCOUNT > $$MAX_DISCOUNT,
+  :LKP.LKP_DIM_PROMOTIONS(PROMO_ID),
+  IN_DISCOUNT
+)
