@@ -1,14 +1,11 @@
-OUT_UNITS_SOLD = SUM(IN_SALES_QTY)
+hi 信達，
+香港紅旗那邊有寄出 F01 , F02  
+(RE: Request 請WBS將相關貿易金融貸款 (Loan)資料下檔至ODS - 規格書)
+接下來我該做什麼事情?
+
+有一點不懂的是我的ECP流程管理系統沒有收到新的提案單?
 
 
 
-OUT_REVENUE =
-SUM(
- (IN_SELLING_PRICE * IN_SALES_QTY)
- - DISCOUNT
- - HOLDBACK
- - REBATE
-)
 
-
-OUT_COST = SUM(IN_UNIT_COST)
+我這樣說話可以?
