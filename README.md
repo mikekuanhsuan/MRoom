@@ -2,14 +2,12 @@
 
 
 
+[‎2026/‎3/‎25 下午 03:45]  
+貫軒您好,
+麻煩協助確認AMLIST、AMLDBOBT、AMLDBT patch更新是否正常並回覆mail~
+將安排後續正式機更新時間謝謝! 
+ ---
+如果我回說
+好的因為我在等香港提新的提案申請單，後續會照流程確認後回覆，感謝幫忙
 
-Hi [收件人名稱],
-
-I’ve checked the F01 and it looks fine.
-
-Could you please submit a new proposal for extracting Trade Finance red flag data from WBS to ODS? This is so that HOIT AML can generate the monthly report with complete loan data.
-
-Even though we already have a previous proposal (IT20202512051045), we still need a new one for the follow-up development process.
-
-Thanks!
-[你的名字]
+這樣回可以?
