@@ -32,3 +32,19 @@ XXXX-XXX      XXXXXXX
 由於貿易金融紅旗等相關交易包括貿易金融貸款 (Loan)，但現況是目前放款主檔資料僅存在於「WBS主機」- LON_INFO欄位AML_INFO_SEQ而未下檔至ODS, HOIT AML提取不到貿易金融貸款資料，所以提交提案單及規格書請WBS將相關資料下檔至ODS，方便HOIT AML提取資料，整合報表。
 
 以上為主要兩大流程。
+
+
+---
+
+
+9.	測試需求(  NA ) 此提案單及規格書為請HOIT AML從WBS提取所需香港分行(Trade Finance)貿易金融資訊(經FAM)產出月報報表及HOIT WBS將相關資料下檔至ODS，方便HOIT AML提取資料，整合報表，HKAML從FAM下載。
+	測試範圍確認 (如列舉與該需求系統有資料傳輸之系統，以利後續測試跨系統資料傳輸之正確性)
+	測試項目、Cycle day (如記息日,月底日 …….) 
+	測試天數
+10.	系統上線後驗證與監控(  NA ) 此提案單及規格書為請HOIT AML從WBS提取所需香港分行(Trade Finance)貿易金融資訊(經FAM)產出月報報表及HOIT WBS將相關資料下檔至ODS，方便HOIT AML提取資料，整合報表，HKAML從FAM下載。
+
+
+
+---
+
+這是香港給的需求規格書，給我重點，並且幫我看看有什麼該注意的
