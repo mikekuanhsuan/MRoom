@@ -3,3 +3,165 @@
 
 
 好的，我目前在等香港提交新的提案申請單，後續我會依照流程確認 patch 更新是否正常，再回覆您。感謝您的協助！
+
+
+
+
+
+好的，我幫你把這份香港給的需求規格書整理重點，並分析注意事項。為了方便理解，我分成 需求重點、流程重點、測試與上線注意事項 三個部分：
+
+⸻
+
+1️⃣ 需求重點整理
+
+目的 / 背景：
+	•	因應香港內部稽核建議，要優化 HKAML組每月下載的 Trade Finance 紅旗月報，方便 AML 管治及匯報。
+	•	月報內容需包含 紅旗交易及相關細節（如 AML Type、Red Flag Reason、Goods Code、Vessel Name、客戶 CIF、交易金額等）。
+	•	資料來源：目前紅旗及細節只在 WBS 系統 顯示，不在 AML PO 系統。
+
+資料需求：
+	•	只抓 當月交易，母體條件可在 FAM 下載。
+	•	出表頻率：每月第一天，對應前一個月交易資料。
+	•	例子：抓 2025/11/01~2025/11/30 的 060010 交易，紅旗欄位 = Y 的客戶清單，並輸出所需欄位資訊。
+	•	貿易金融貸款資料目前只在 WBS 主機 LON_INFO 的 AML_INFO_SEQ，未下檔至 HKODS，需透過提案單讓 WBS 將資料下檔至 ODS，以便 HOIT AML 提取並整合報表。
+
+主要欄位：
+	•	紅旗相關：AML Type, Red Flag, Red Flag Reason and Content, Remarks, AML_Info_Seq
+	•	交易相關：CIF, Trade Date, Function Code & Name, Transaction Amount
+	•	商品/船舶：Goods Code, Merchandise, Vessel Name, Flag of Vessel
+
+效益：
+	•	節省人工整理時間
+	•	增加 AML 報告的完整性和準確性
+	•	達成內部稽核要求
+
+⸻
+
+2️⃣ 流程重點
+
+主要流程分兩條：
+	1.	資料提取流程：
+	•	HOIT AML 從 WBS 提取香港分行 Trade Finance 資料 → 經 FAM 生成月報 → HKAML 組下載月報。
+	2.	資料下檔流程：
+	•	由於部分紅旗交易（特別是 Trade Finance Loan）只在 WBS 主機存在，需 WBS 將資料下檔至 ODS → HOIT AML 可提取 → 整合報表。
+
+流程關鍵點：
+	•	交易範圍、欄位需明確
+	•	需和現有 FAM 月報整合
+	•	貿易金融貸款資料下檔至 ODS 是核心需求
+
+⸻
+
+3️⃣ 測試與上線注意事項
+
+測試範圍：
+	•	確認 WBS → FAM → ODS → HKAML 的資料傳輸是否完整
+	•	測試項目：月初生成報表是否包含完整當月紅旗交易
+	•	Cycle Day: 每月初
+	•	測試天數: 依各月交易量決定
+
+系統上線後驗證：
+	•	確認 HKAML 每月下載的月報資料正確
+	•	紅旗欄位、交易金額、商品與客戶資料是否一致
+	•	AML 報表的完整性及可用性
+
+⸻
+
+4️⃣ 注意事項 / 風險點
+	1.	資料完整性
+	•	貿易金融貸款資料若 WBS 未下檔至 ODS，HOIT AML 無法生成完整報表 → 提案單核心。
+	•	要確認每月提取時，欄位 AML_Info_Seq、交易金額、CIF 等都完整。
+	2.	時間與排程
+	•	月報要在每月第一天生成，抓的是前一個月的交易 → 要確保交易截止日及 FAM 下載時間一致。
+	3.	系統依賴性
+	•	WBS、FAM、ODS 三套系統資料傳輸正確
+	•	FAM 月報格式是否需變動
+	4.	欄位及資料格式
+	•	注意船名、商品、交易金額的資料格式
+	•	Red Flag Reason 和 Content 是否需要做清洗或合併
+	5.	內部稽核追蹤
+	•	月報生成後要可追蹤至原交易明細，以符合 AML 監管要求
+
+⸻
+
+💡 總結一句話：
+這個需求重點是 自動化生成香港 Trade Finance 紅旗月報，核心挑戰是 貿易金融貸款資料的下檔與完整性，以及 確保每月月報能自動產生並可追蹤到原交易。
+
+⸻
+
+如果你願意，我可以幫你把這份規格書整理成一個 「流程與欄位對照表 + 注意事項清單」，這樣你直接可以給開發或 HOIT 做評估，不用看整份長文。
+
+你想要我幫你做這個嗎？
+
+
+
+
+
+
+太好了，我幫你整理成一個 清楚的表格 + 注意事項清單，方便直接給開發或 HOIT 參考：
+
+⸻
+
+1️⃣ 流程與欄位對照表
+
+流程階段	系統/單位	動作	輸出資料 / 欄位	備註
+交易資料存放	WBS	記錄紅旗交易及交易明細	AML Type, Red Flag, Red Flag Reason & Content, Remarks, AML_Info_Seq, Goods Code, Merchandise, Vessel Name, Flag of Vessel, 客戶 CIF, Trade Date, Function Code & Name, Transaction Amount	貿易金融貸款資料僅存在 WBS LON_INFO AML_INFO_SEQ
+資料提取	HOIT AML	從 WBS 提取 Trade Finance 資料 → 生成月報	以上欄位	月報只抓當月交易；紅旗 = Y
+月報下載	HKAML 組	透過 FAM 下載月報	月報 Excel / CSV	每月第一天下載，對應前一個月資料
+貿易金融貸款下檔	WBS → ODS	將 WBS LON_INFO AML_INFO_SEQ 下檔至 ODS	交易及貸款資料完整性	HOIT AML 從 ODS 提取整合報表
+
+
+⸻
+
+2️⃣ 核心欄位清單
+
+紅旗相關
+	•	AML Type
+	•	Red Flag
+	•	Red Flag Reason & Content
+	•	Remarks
+	•	AML_Info_Seq
+
+交易相關
+	•	客戶 CIF
+	•	Trade Date
+	•	Function Code & Name
+	•	Transaction Amount
+
+商品 / 船舶
+	•	Goods Code
+	•	Merchandise
+	•	Vessel Name
+	•	Flag of Vessel
+
+⸻
+
+3️⃣ 注意事項 / 風險點
+	1.	資料完整性
+	•	確保貿易金融貸款資料下檔到 ODS，否則月報不完整。
+	•	AML_Info_Seq、交易金額、CIF 等欄位必須完整。
+	2.	時間與排程
+	•	月報每月第一天產出，抓取前一個月的交易。
+	•	注意 FAM 的下載時間與月末交易結束日期一致。
+	3.	系統依賴性
+	•	WBS → FAM → ODS → HKAML，資料傳輸需正確。
+	•	FAM 月報格式是否需要調整或新增欄位。
+	4.	欄位格式
+	•	Red Flag Reason、Content、Vessel Name、商品名稱需保持一致性。
+	•	數字欄位（交易金額）需正確格式化。
+	5.	內部稽核追蹤
+	•	每筆紅旗交易應可追蹤至原始 WBS 交易明細。
+	•	月報應保留可供稽核的參考欄位（AML_Info_Seq, Trade Date, CIF 等）。
+
+⸻
+
+💡 建議做法
+	•	確認 WBS 下檔資料欄位與 FAM 月報欄位完全對應
+	•	測試月初生成報表流程，確保資料完整性與準確性
+	•	對關鍵欄位做格式檢核，減少後續整理工作
+
+⸻
+
+如果你願意，我可以幫你把這個整理再做一個 「視覺化流程圖 + 月報生成步驟」，這樣給 HOIT 或內部同事看會更直覺，也可以標出 關鍵風險點。
+
+你想要我做這個流程圖嗎？
