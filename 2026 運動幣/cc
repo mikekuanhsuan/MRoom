@@ -1,26 +1,39 @@
-												
-	模組類型	Table Name	編號備註欄位	交易備註欄位	備註欄位							
-	LC	WBS_IMP_LC	LC_NO_REMARK	TRANSACTION_REMARK				WBS_IMP_LC	WBS_IMP_BG	WBS_IMP_IB	WBS_IMP_IC	WBS_IMP_SGED
-	BG	WBS_IMP_BG	BG_NO_REMARK	—	REMARK			COLUMN_NAME(%AMT)	COLUMN_NAME(%AMT)	BILL_AMT	BILL_AMT	BILL_AMT
-	IB	WBS_IMP_IB	IB_NO_REMARK	TRANSACTION_REMARK				COMBINE_LC_AMT	BG_AMT	DECREASE_BILL_AMT	DECREASE_BILL_AMT	IB_OVERDRAWN_AMT
-	IC	WBS_IMP_IC	IC_NO_REMARK	TRANSACTION_REMARK				COMBINE_TOTAL_AMT	BG_DECREASE_AMT	DEDUCTION_BILL_AMT	INCREASE_BILL_AMT	IC_PAID_AMT
-	SGED	WBS_IMP_SGED	SGED_NO_REMARK	TRANSACTION_REMARK				LC_AMT	BG_INCREASE_AMT	DISCOUNT_AMT	INTEREST_AMT	IMP_SGED_MARGIN_OS_AMT
-								LC_DECREASE_AMT	BG_ORIG_AMT	DISCOUNT_INT_AMT	LOAN_AMT	MARGIN_AMT
-	模組類型	Table Name	編號備註欄位	交易備註欄位	備註欄位			LC_INCREASE_AMT	BG_OS_AMT	DRAWDOWN_AMT	NEW_BILL_AMT	MARGIN_RELEASE_AMT
-	LA	WBS_EXP_LA_INFO			REMARK			LC_NO_AMT	FEE_AMT	EQU_BILL_AMT	NOSTRO_AMT	SGED_AMT
-	LT	WBS_EXP_LT_INFO			REMARK			LC_ORIG_AMT	MARGIN_AMT	IB_OVERDRAWN_AMT	TOTAL_DECREASE_BILL_AMT	SGED_OS_AMT
-	OC	WBS_EXP_OC_INFO		TRANSACTION_REMARK	REMARK			LC_OS_AMT	MARGIN_OS_AMT	INCREASE_BILL_AMT	TOTAL_INCREASE_BILL_AMT	TOTAL_OVERDRAWN_AMT
-	NEGO	WBS_EXP_NEGO_INFO		TRANSACTION_REMARK				LC_OS_NORMAL_AMT	MARGIN_RELEASE_AMT	INTEREST_AMT		
-	RE_NEGO	WBS_EXP_RE_NEGO_INFO						MARGIN_AMT	NEW_AMT	LC_OS_AMT		
-								MARGIN_OS_AMT	NEW_MARGIN_AMT	LC_OS_NORMAL_AMT		
-	模組類型	Table Name	編號備註欄位	交易備註欄位	備註欄位			NEW_AMT	RELEASE_AMT	LOAN_AMT		
-	LON	WBS_LON_INFO		MED_TXN_REMARK				NEW_LIABILITY_AMT	RISKPAR_AMT	MARGIN_OS_AMT		
-								NEW_MARGIN_AMT	TOTAL_DECREASE_AMT	NEW_BILL_AMT		
-								OVERDRAWN_AMT	TOTAL_INCREASE_AMT	NOSTRO_AMT		
-								OVERDRAWN_DECREASE_AMT	TOTAL_LIABILITY_AMT	RELEASE_MARGIN_AMT		
-								OVERDRAWN_OS_AMT				
-								TOTAL_LC_DECREASE_AMT				
-								TOTAL_LC_INCREASE_AMT				
-								TOTAL_LIABILITY_AMT				
-								TOTAL_OVERDRAWN_AMT				
-								VARIATION_AMT				
+既然你已經辛苦整理出這麼詳細的對照表，這就是你的**「秘密武器」**。
+建議這封信採用**「重點條列 + 附表參考」**的方式。這樣既能展現 IT 的專業盤點功力（讓對方知道你不是沒做事，而是系統真的複雜），又能把球精準踢回給業務去定奪。
+以下是幫你整合好的信件草稿，分為**「主文」**與**「附件表格」**：
+### 📩 需求釐清信件（專業盤點版）
+**Subject：【重要確認】關於 HK AML 月報欄位定義與 WBS 資料來源對照**
+Hi Ling,
+針對 HK AML 月報需求，IT 團隊已針對現有 WBS 各模組資料庫進行初步欄位盤點。由於系統中「金額」與「備註」存在多種層級與定義，為確保報表邏輯正確，需請您協助針對以下重點進行業務定義確認：
+**1. Transaction Amount (交易金額)**
+目前資料庫中針對不同模組有不同的金額表達方式（詳見下方附表）。
+ * **請確認：** 報表應顯示「單筆交易發生額」（如：Bill/Drawdown Amt）、「當前未清餘額」（如：OS Amt）還是「原始申請總額」（如：Original Amt）？
+**2. Remarks (備註)**
+系統在『編號層級』與『交易層級』均有對應備註欄位。
+ * **請確認：** 您預期在報表看到的是該筆業務的「基本備註」還是每一筆動用的「交易說明」？（亦或是兩者皆需合併顯示？）
+**3. Vessel Name / Flag of Vessel (船名與船旗)**
+**【重要】** 經初步盤點，WBS 核心模組 Table 中目前**查無此兩項欄位**。
+ * **請確認：** 該資訊在貴單位作業畫面上是否可見？若系統無紀錄，此欄位是否可接受以「空白」產出，或由貴單位後續人工補入？
+**4. 欄位對照參考 (初步盤點結果)**
+為方便您理解，以下為我方初步整理的對應關係，請協助指認哪一類符合您的需求：
+| 業務類別 | 常用欄位參考 (IT 盤點結果) | 說明 |
+|---|---|---|
+| **金額類** | LC_AMT / BILL_AMT / INCREASE_AMT / OS_AMT | 包含主額、增加額、餘額等 |
+| **備註類** | LC_NO_REMARK / TRANSACTION_REMARK / REMARK | 區分編號層級或交易層級 |
+| **船務類** | (查無直接欄位) | 需確認業務端錄入位置 |
+若以上定義確認完成，我將同步聯繫 HKWBS 技術團隊進行最終的底層欄位對接。
+謝謝您的協助。
+Best Regards,
+[Your Name]
+### 💡 為什麼要這樣發？（操作細節）
+ 1. **為什麼不給整張 Excel 表？**
+   你手頭上那張表太細（有幾十個 AMT），直接丟給業務她會崩潰。我在信中把它**簡化成「類別」**，只要她說「我要看 OS（餘額）」，你回頭看你的對照表就能立刻對上 LC_OS_AMT。
+ 2. **關於 Vessel（船）的策略：**
+   這是這封信的「地雷區」。你大膽講「查無欄位」，迫使她必須去翻系統畫面給你看。如果她翻不到，那 IT 就不需要負開發不出來的責任。
+ 3. **關於金額的處理：**
+   你查到的 COMBINE_LC_AMT、LC_INCREASE_AMT 這些，對業務來說太艱深。用「主額、增加額、餘額」這種**業務語言**去問，她才回得了你。
+### 🚀 接下來你可以怎麼做？
+ * **第一步：** 直接寄出這封信。
+ * **第二步：** 把你自己整理的那張**超詳細對照表**存好（或印出來放在桌上）。
+ * **第三步：** 等 Ling 回覆後，如果她說「金額要 Outstanding」，你拿著你的表去找 HKWBS 的 IT 說：「業務確認金額要 OS，我查到 Table 是 WBS_IMP_LC，對應欄位是 LC_OS_AMT，請幫我確認是否正確。」
+**這樣做，你就是一個「手握數據、邏輯清晰」的高級 IT 窗口！** 需要我再針對哪個部分細修嗎？
