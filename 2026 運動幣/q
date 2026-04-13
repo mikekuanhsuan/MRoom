@@ -1,0 +1,616 @@
+以下是我幫你完整重整後的版本。
+我採用「金額類型 × 模組」對照表呈現，讓閱讀者可以：
+
+✅ 橫向比較同類型金額
+✅ 快速看出哪些模組有該欄位
+✅ 適合放入規格書 / DW Mapping / 對帳邏輯文件
+（此做法符合資料庫文件清楚呈現 Schema 與欄位說明的最佳實務）
+
+✅ WBS 金額欄位完整對照表（整理版）
+一、原始金額類 (Original Amount)
+金額類型	IMP_LC	IMP_BG	IMP_IB	IMP_IC	IMP_SGED
+原始金額	LC_ORIG_AMT	BG_ORIG_AMT	-	-	SGED_AMT
+新增原始	NEW_AMT	NEW_AMT	NEW_BILL_AMT	NEW_BILL_AMT	-
+新負債	NEW_LIABILITY_AMT	TOTAL_LIABILITY_AMT	-	-	-
+二、帳單 / 貸款金額類
+金額類型	IMP_LC	IMP_BG	IMP_IB	IMP_IC	IMP_SGED
+帳單金額	LC_AMT	BG_AMT	BILL_AMT	BILL_AMT	-
+貸款金額	-	-	LOAN_AMT	LOAN_AMT	-
+折讓金額	-	-	DISCOUNT_AMT	-	-
+折讓利息	-	-	DISCOUNT_INT_AMT	-	-
+手續費	-	FEE_AMT	-	-	-
+NOSTRO	-	-	NOSTRO_AMT	NOSTRO_AMT	-
+三、增加金額類 (Increase)
+金額類型	IMP_LC	IMP_BG	IMP_IB	IMP_IC	IMP_SGED
+增加金額	LC_INCREASE_AMT	BG_INCREASE_AMT	INCREASE_BILL_AMT	INCREASE_BILL_AMT	-
+總增加	TOTAL_LC_INCREASE_AMT	TOTAL_INCREASE_AMT	TOTAL_INCREASE_BILL_AMT	TOTAL_INCREASE_BILL_AMT	-
+四、減少金額類 (Decrease)
+金額類型	IMP_LC	IMP_BG	IMP_IB	IMP_IC	IMP_SGED
+減少金額	LC_DECREASE_AMT	BG_DECREASE_AMT	DECREASE_BILL_AMT	DECREASE_BILL_AMT	-
+總減少	TOTAL_LC_DECREASE_AMT	TOTAL_DECREASE_AMT	TOTAL_DECREASE_BILL_AMT	TOTAL_DECREASE_BILL_AMT	-
+扣款	-	-	DEDUCTION_BILL_AMT	-	-
+五、未清償餘額 (Outstanding / OS)
+金額類型	IMP_LC	IMP_BG	IMP_IB	IMP_IC	IMP_SGED
+未清償餘額	LC_OS_AMT	BG_OS_AMT	LC_OS_AMT	-	SGED_OS_AMT
+正常餘額	LC_OS_NORMAL_AMT	-	LC_OS_NORMAL_AMT	-	-
+未清償保證金	MARGIN_OS_AMT	MARGIN_OS_AMT	MARGIN_OS_AMT	-	IMP_SGED_MARGIN_OS_AMT
+透支餘額	OVERDRAWN_OS_AMT	-	IB_OVERDRAWN_AMT	-	TOTAL_OVERDRAWN_AMT
+六、保證金 (Margin)
+金額類型	IMP_LC	IMP_BG	IMP_IB	IMP_IC	IMP_SGED
+保證金	MARGIN_AMT	MARGIN_AMT	-	-	MARGIN_AMT
+新增保證金	NEW_MARGIN_AMT	NEW_MARGIN_AMT	-	-	-
+保證金釋放	-	MARGIN_RELEASE_AMT	RELEASE_MARGIN_AMT	-	MARGIN_RELEASE_AMT
+七、利息類
+金額類型	IMP_LC	IMP_BG	IMP_IB	IMP_IC	IMP_SGED
+利息	-	-	INTEREST_AMT	INTEREST_AMT	-
+八、透支類
+金額類型	IMP_LC	IMP_BG	IMP_IB	IMP_IC	IMP_SGED
+透支金額	OVERDRAWN_AMT	-	IB_OVERDRAWN_AMT	-	TOTAL_OVERDRAWN_AMT
+透支減少	OVERDRAWN_DECREASE_AMT	-	-	-	-
+九、總計 / 彙總類
+金額類型	IMP_LC	IMP_BG	IMP_IB	IMP_IC	IMP_SGED
+負債總額	TOTAL_LIABILITY_AMT	TOTAL_LIABILITY_AMT	-	-	-
+總透支	TOTAL_OVERDRAWN_AMT	-	-	-	TOTAL_OVERDRAWN_AMT
+變動金額	VARIATION_AMT	-	-	-	-
+風險參數	-	RISKPAR_AMT	-	-	-
+✅ 命名規則補充說明（建議放在文件前面）
+字尾	說明
+AMT	金額
+OS	Outstanding（未清償）
+ORIG	原始
+INCREASE	增加
+DECREASE	減少
+TOTAL_	彙總
+MARGIN	保證金
+OVERDRAWN	透支
+🎯 這個版本的優點
+✅ 適合系統規格書
+✅ 適合資料倉儲欄位 Mapping
+✅ 適合對帳邏輯說明
+✅ 開會討論可以直接橫向比較
+
+如果你願意，我可以再幫你：
+
+✅ 轉成 Excel 可直接貼上格式
+✅ 產出 Word 文件版面排好
+✅ 幫你做「模組關聯圖」
+✅ 幫你整理成簡報版本（主管易讀版）
+你打算用在哪個場景？我幫你做成最適合的版本。
+
+2026-04-13 17:02:19
+
+沒有大家都有的AMT?
+2026-04-13 17:03:08
+
+AI
+
+你這個問題其實問得非常關鍵 👍
+答案是：目前這五個模組「沒有一個完全共用、名稱一致的 AMT 欄位」。
+
+也就是說——
+👉 沒有一個欄位名稱是 五個 Table 都同時存在且語意一致 的。
+
+✅ 為什麼會這樣？
+從命名來看，各模組是依「業務語意」命名，而不是用統一核心欄位，例如：
+
+模組	主金額欄位
+IMP_LC	LC_AMT
+IMP_BG	BG_AMT
+IMP_IB	BILL_AMT
+IMP_IC	BILL_AMT
+IMP_SGED	SGED_AMT
+你會發現：
+
+都是「某種主金額」
+但名稱被綁在模組代碼上（LC / BG / SGED）
+IB / IC 用的是 BILL_AMT
+並沒有一個叫做 BASE_AMT 或 MAIN_AMT 的共用欄位
+這其實違反了資料命名「一致性原則」——
+資料庫設計最佳實務強調一致且可預測的命名規則，避免同一概念在不同表有不同名稱。
+
+✅ 如果你問的是「語意上大家都有的 AMT 是哪個？」
+語意上最接近「共通主金額」的是：
+
+類型	各模組對應
+主帳金額	LC_AMT / BG_AMT / BILL_AMT / SGED_AMT
+但名稱不同。
+
+✅ 如果是做 DW 或報表整合
+實務上會這樣做 👇
+
+建立一個標準化欄位，例如：
+
+程式碼
+複製STD_MAIN_AMT
+Mapping 規則：
+
+模組	來源欄位	對應到
+IMP_LC	LC_AMT	STD_MAIN_AMT
+IMP_BG	BG_AMT	STD_MAIN_AMT
+IMP_IB	BILL_AMT	STD_MAIN_AMT
+IMP_IC	BILL_AMT	STD_MAIN_AMT
+IMP_SGED	SGED_AMT	STD_MAIN_AMT
+這樣後續做：
+
+合併查詢
+統一報表
+Risk aggregation
+IFRS9 / 曝險計算
+都會容易很多。
+
+✅ 結論
+問題	答案
+有沒有完全共用的 AMT 欄位？	❌ 沒有
+有沒有語意上共通的主金額？	✅ 有（但名稱不同）
+是否建議建立標準欄位？	✅ 強烈建議
+如果你願意，我可以幫你：
+
+🔹 做一版「共通核心欄位模型圖」
+🔹 幫你設計一個標準化欄位架構（適合DW）
+🔹 幫你分析目前命名是否需要重構
+你現在是要做整併？還是只是確認欄位一致性問題？
+
+2026-04-13 17:03:29
+
+Transaction amount（交易金額）
+ 可能是哪個?
+2026-04-13 17:03:53
+
+AI
+
+針對你問的 Transaction Amount（交易金額）可能是哪個欄位？
+我幫你從「語意」而不是單純名稱來判斷，會比較準確。
+
+同時依據資料庫命名最佳實務，欄位名稱應該「清楚表達實際業務意義」而非僅模組代碼。
+
+✅ 一、什麼叫 Transaction Amount？
+一般在金融系統中，Transaction Amount 指的是：
+
+✅ 單筆交易實際發生的金額
+✅ 當次動作產生的金額（新增 / 減少 / 動用）
+❌ 不是總額
+❌ 不是未清餘額（OS）
+❌ 不是彙總 TOTAL
+
+✅ 二、依你現有欄位推測
+🎯 最可能是「交易金額」的欄位
+✅ 在 IB / IC 模組
+模組	可能欄位	判斷理由
+IMP_IB	BILL_AMT	單筆帳單金額
+IMP_IC	BILL_AMT	同上
+👉 如果系統是以「開立一張Bill為一筆交易」，
+那 BILL_AMT 最像 Transaction Amount
+
+✅ 在 LC 模組
+欄位	判斷
+LC_INCREASE_AMT	動用金額（比較像交易）
+LC_DECREASE_AMT	沖銷金額
+LC_AMT	主金額（可能不是單筆交易）
+✅ 若是「開狀動用」場景
+→ LC_INCREASE_AMT 比較像交易金額
+
+✅ 在 BG 模組
+欄位	判斷
+BG_INCREASE_AMT	當次增加
+BG_DECREASE_AMT	當次減少
+BG_AMT	主金額
+→ 通常 BG_INCREASE_AMT / BG_DECREASE_AMT 比較像 Transaction Amount
+
+✅ 在 SGED 模組
+欄位	判斷
+SGED_AMT	主交易金額（最像）
+MARGIN_RELEASE_AMT	釋放金額（交易性質）
+👉 SGED_AMT 應該是交易金額本體
+
+✅ 三、快速判斷公式
+你可以用這個邏輯：
+
+程式碼
+複製如果是「單筆發生」→ Transaction Amount
+如果是「累計或餘額」→ 不是
+如果是「TOTAL_」→ 不是
+如果是「OS」→ 不是
+✅ 四、如果你要統一一個欄位叫 Transaction Amount
+我會建議這樣 Mapping：
+
+模組	Transaction Amount 對應欄位
+IMP_LC	LC_INCREASE_AMT
+IMP_BG	BG_INCREASE_AMT
+IMP_IB	BILL_AMT
+IMP_IC	BILL_AMT
+IMP_SGED	SGED_AMT
+（前提是你定義交易為「當次新增動作」）
+
+✅ 五、我想再確認一下
+你現在問這個是因為：
+
+1️⃣ 做報表欄位英文翻譯？
+2️⃣ 要對應外部系統欄位？
+3️⃣ 要做DW整併？
+4️⃣ 有人問你「Transaction amount是哪個？」
+
+如果你告訴我使用場景，我可以幫你給出「最安全、不會被挑錯」的正式說法。
+
+2026-04-13 17:04:16
+
+WBS_IMP_LC	WBS_IMP_BG	WBS_IMP_IB	WBS_IMP_IC	WBS_IMP_SGED
+COLUMN_NAME(%AMT)	COLUMN_NAME(%AMT)	BILL_AMT	BILL_AMT	BILL_AMT
+COMBINE_LC_AMT	BG_AMT	DECREASE_BILL_AMT	DECREASE_BILL_AMT	IB_OVERDRAWN_AMT
+COMBINE_TOTAL_AMT	BG_DECREASE_AMT	DEDUCTION_BILL_AMT	INCREASE_BILL_AMT	IC_PAID_AMT
+LC_AMT	BG_INCREASE_AMT	DISCOUNT_AMT	INTEREST_AMT	IMP_SGED_MARGIN_OS_AMT
+LC_DECREASE_AMT	BG_ORIG_AMT	DISCOUNT_INT_AMT	LOAN_AMT	MARGIN_AMT
+LC_INCREASE_AMT	BG_OS_AMT	DRAWDOWN_AMT	NEW_BILL_AMT	MARGIN_RELEASE_AMT
+LC_NO_AMT	FEE_AMT	EQU_BILL_AMT	NOSTRO_AMT	SGED_AMT
+LC_ORIG_AMT	MARGIN_AMT	IB_OVERDRAWN_AMT	TOTAL_DECREASE_BILL_AMT	SGED_OS_AMT
+LC_OS_AMT	MARGIN_OS_AMT	INCREASE_BILL_AMT	TOTAL_INCREASE_BILL_AMT	TOTAL_OVERDRAWN_AMT
+LC_OS_NORMAL_AMT	MARGIN_RELEASE_AMT	INTEREST_AMT		
+MARGIN_AMT	NEW_AMT	LC_OS_AMT		
+MARGIN_OS_AMT	NEW_MARGIN_AMT	LC_OS_NORMAL_AMT		
+NEW_AMT	RELEASE_AMT	LOAN_AMT		
+NEW_LIABILITY_AMT	RISKPAR_AMT	MARGIN_OS_AMT		
+NEW_MARGIN_AMT	TOTAL_DECREASE_AMT	NEW_BILL_AMT		
+OVERDRAWN_AMT	TOTAL_INCREASE_AMT	NOSTRO_AMT		
+OVERDRAWN_DECREASE_AMT	TOTAL_LIABILITY_AMT	RELEASE_MARGIN_AMT		
+OVERDRAWN_OS_AMT				
+TOTAL_LC_DECREASE_AMT				
+TOTAL_LC_INCREASE_AMT				
+TOTAL_LIABILITY_AMT				
+TOTAL_OVERDRAWN_AMT				
+VARIATION_AMT				
+
+
+因為我是IT 我能看到我們有的 ，但要怎麼問香港他們需求是什麼? 要哪個欄位? 要怎麼問
+2026-04-13 17:05:13
+
+AI
+
+你這個情境其實很典型 👍
+IT看得到欄位，但業務講的是「概念」，不是欄位名稱。
+如果直接問「你要哪個欄位？」通常對方會回答不出來。
+
+根據需求確認與資料需求定義的最佳實務，關鍵不是問「欄位名稱」，而是先確認業務定義與使用情境；同時在溝通時要把技術語言轉成業務語言，避免只丟技術名詞。
+
+✅ 一、你不要這樣問 ❌
+請問你們要 LC_AMT 還是 LC_INCREASE_AMT？
+
+香港業務不會知道差異。
+
+✅ 二、你應該這樣問 ✅（先問「定義」）
+你可以用「三步驟釐清法」：
+
+✅ Step 1：先問業務定義（最重要）
+你可以這樣問：
+
+想跟您確認一下，這次需求中的「Transaction Amount」
+是指： 1️⃣ 每一筆實際發生的交易金額？
+2️⃣ 還是目前未清償餘額（Outstanding Amount）？
+3️⃣ 還是整筆業務的原始金額（Original Amount）？
+
+👉 這一題會直接決定是：
+
+INCREASE_AMT
+OS_AMT
+ORIG_AMT
+BILL_AMT
+✅ Step 2：確認時間點
+再補一句：
+
+此金額是要「交易發生當下的金額」，
+還是「報表日餘額」？
+
+因為：
+
+業務說法	IT對應可能
+交易發生金額	INCREASE_AMT / BILL_AMT
+報表餘額	OS_AMT
+總額	TOTAL_XXX_AMT
+✅ Step 3：請他們舉例
+這句非常好用 👇
+
+可否提供一筆範例資料（或畫面截圖），
+說明你們預期看到的金額是哪一種？
+
+✅ 有例子 = 不會猜錯
+✅ 沒例子 = 高風險需求
+
+這也是需求驗證的標準做法。
+
+✅ 三、我幫你寫一封可以直接寄的信（專業版）
+你可以直接用 👇
+
+📩 Email 範本
+Subject: Clarification on "Transaction Amount" Definition
+
+Hi [HK Team],
+
+We would like to clarify the definition of "Transaction Amount" in your requirement to ensure we provide the correct data field.
+
+Could you please confirm whether this refers to:
+
+The amount of each individual transaction when it occurs
+The outstanding balance as of reporting date
+The original facility / bill amount
+The total accumulated amount
+Also, is this amount expected to reflect:
+
+The transaction date value, or
+The reporting date balance?
+If possible, please provide a sample record or screenshot to illustrate the expected value.
+
+Once confirmed, we will map it to the appropriate system field.
+
+Thank you.
+
+✅ 四、為什麼這樣問比較安全？
+因為：
+
+你沒有直接丟欄位名稱（避免技術落差）
+你用「業務語意」讓對方選
+你把責任放回需求定義
+你留下書面紀錄（避免之後改口）
+這是最保護IT的問法。
+
+✅ 五、如果你想更進階（避免來回三封信）
+你也可以主動附上「候選欄位對照表」：
+
+例如：
+
+Business Term	Possible Field
+Transaction Amount	LC_INCREASE_AMT
+Outstanding Amount	LC_OS_AMT
+Original Amount	LC_ORIG_AMT
+然後問：
+
+Please confirm which definition applies.
+
+這樣會顯得你已經分析過，而不是單純丟問題。
+
+🎯 最後給你一個IT心法
+永遠不要問：
+
+你要哪個欄位？
+
+要問：
+
+你要什麼業務意義？
+
+欄位是IT的責任
+定義是業務的責任
+
+如果你願意，我可以幫你：
+
+✅ 做一版「LC / BG / IB 對照業務語意表」
+✅ 幫你寫會議問答腳本（開會直接用）
+✅ 幫你做一頁式澄清簡報
+你現在是要發信？還是要開會講？我幫你準備對應版本。
+
+2026-04-13 17:05:47
+
+那這個 
+				
+				
+模組類型	Table Name	編號備註欄位	交易備註欄位	備註欄位
+LC	WBS_IMP_LC	LC_NO_REMARK	TRANSACTION_REMARK	
+BG	WBS_IMP_BG	BG_NO_REMARK	—	REMARK
+IB	WBS_IMP_IB	IB_NO_REMARK	TRANSACTION_REMARK	
+IC	WBS_IMP_IC	IC_NO_REMARK	TRANSACTION_REMARK	
+SGED	WBS_IMP_SGED	SGED_NO_REMARK	TRANSACTION_REMARK	
+				
+模組類型	Table Name	編號備註欄位	交易備註欄位	備註欄位
+LA	WBS_EXP_LA_INFO			REMARK
+LT	WBS_EXP_LT_INFO			REMARK
+OC	WBS_EXP_OC_INFO		TRANSACTION_REMARK	REMARK
+NEGO	WBS_EXP_NEGO_INFO		TRANSACTION_REMARK	
+RE_NEGO	WBS_EXP_RE_NEGO_INFO			
+				
+模組類型	Table Name	編號備註欄位	交易備註欄位	備註欄位
+LON	WBS_LON_INFO		MED_TXN_REMARK	
+
+
+我要怎麼問?  他只跟我說要有Remarks（備註）
+2026-04-13 17:07:11
+
+AI
+
+在回覆你之前，我先說一句重點：
+現在香港講「要有 Remarks」，這句話在需求定義上是完全不完整的。
+
+根據需求管理最佳實務，IT 需要先「釐清定義、使用情境與欄位層級」，而不是直接給欄位。
+
+✅ 你現在真正要問的不是「用哪個欄位」
+而是三件事：
+
+1️⃣ 這個 Remarks 是哪一層級？
+2️⃣ 是哪個模組都要？還是特定產品？
+3️⃣ 是編號層級還是交易層級？
+
+因為你現在看到的其實有三種不同概念：
+
+類型	代表欄位
+編號層級備註	LC_NO_REMARK / BG_NO_REMARK
+交易層級備註	TRANSACTION_REMARK / MED_TXN_REMARK
+一般備註	REMARK
+這三個業務意義完全不同。
+
+✅ 你可以這樣問（安全又專業）
+📩 建議問法（簡潔版）
+Hi HK Team,
+
+To ensure correct implementation, could you please clarify the definition of "Remarks" in your request?
+
+Specifically:
+
+Should the remarks be at:
+
+Facility / Contract level (e.g. LC No. level)?
+Transaction level (each drawdown / bill)?
+Or general module-level remarks?
+Does this apply to:
+
+All modules (LC, BG, IB, IC, SGED, LA, LT, etc.)?
+Or only specific products?
+Should multiple remarks fields be combined into one output field?
+
+Once confirmed, we will map the correct system field accordingly.
+
+✅ 為什麼一定要這樣問？
+因為實際上你們系統有：
+
+📌 不同層級
+LC_NO_REMARK → LC主檔備註
+TRANSACTION_REMARK → 交易備註
+REMARK → 模組主檔備註
+MED_TXN_REMARK → 特殊交易備註
+如果你直接選一個：
+
+👉 可能漏資料
+👉 可能抓錯層級
+👉 可能報表會重複
+
+之後責任會在IT。
+
+✅ 更進階（避免來回信件）
+你可以直接附這個表給他們：
+
+Level	Description	Example Field
+Contract Level	Remark at contract / facility number	LC_NO_REMARK
+Transaction Level	Remark per transaction	TRANSACTION_REMARK
+General Remark	Module general remark	REMARK
+然後請他們「勾選」。
+
+✅ 如果你想更精準一點
+再加一句：
+
+Should the Remarks be free-text maintained by users, or system-generated notes?
+
+因為有些是人工輸入
+有些是系統帶入
+
+✅ IT 保命原則
+當業務只說：
+
+We need Remarks.
+
+你的標準回應流程應該是：
+
+釐清層級
+釐清模組
+釐清是否合併
+取得書面確認
+這樣你才有 Traceability（需求可追溯性）。
+
+🎯 我幫你總結一句話
+不要問：
+
+要哪個欄位？
+
+要問：
+
+Remarks 是在哪個業務層級與使用情境？
+
+如果你願意，我可以幫你：
+
+✅ 做一張「所有模組 Remarks 架構圖」
+✅ 幫你整理成一頁簡報給主管
+✅ 幫你寫一版更強勢（但禮貌）的澄清信
+
+你是要發信？還是要開會直接問？我幫你準備對話稿。
+
+2026-04-13 17:07:46
+
+我前面已經發
+Hi Ling，
+
+目前依據貴單位提供之需求，月報預計需包含以下欄位：
+•	AML Type
+•	Red Flag
+•	Red Flag Reason and Content
+•	Remarks
+•	Goods Code
+•	Merchandise
+•	Vessel Name
+•	Flag of Vessel
+•	AML_Info_Seq
+•	客戶 CIF
+•	Trade Date
+•	Function Code and Name
+•	Transaction Amount
+•	及其他必要識別欄位
+________________________________________
+目前我們已可自資料庫取得以下對應欄位：
+•	AML_TYPE（AML Type）
+•	FLAG（Red Flag）
+•	CONTENT（Red Flag Reason and Content）
+•	GOODSCODE（Goods Code）
+•	MERCHANDISE（Merchandise）
+•	AML_INFO_SEQ
+•	CUSTOMER_ID（客戶 CIF）
+•	TRADE_DATE
+•	FUN_CODE（Function Code）
+•	FUNC_NAME（Function Name）
+惟以下欄位目前尚未找到明確對應之資料來源，需再與 HKWBS 確認是否可提供：
+•	Remarks（備註）
+•	Vessel Name（船名）
+•	Flag of Vessel（船旗）
+•	Transaction Amount（交易金額）
+
+想請您協助確認：
+若以現有可取得之欄位產出報表，是否已可滿足貴單位申報需求？
+上述尚未對應之欄位是否屬「必要必備欄位」？ 
+
+謝謝您的協助與確認。
+
+我是不是要重新發信? 但是我•	Vessel Name（船名）
+•	Flag of Vessel（船旗）
+我完全找不到
+
+我的信該怎麼發?我現在該怎麼做?
+2026-04-13 17:09:36
+
+我前面已經發
+Hi Ling，
+
+目前依據貴單位提供之需求，月報預計需包含以下欄位：
+•	AML Type
+•	Red Flag
+•	Red Flag Reason and Content
+•	Remarks
+•	Goods Code
+•	Merchandise
+•	Vessel Name
+•	Flag of Vessel
+•	AML_Info_Seq
+•	客戶 CIF
+•	Trade Date
+•	Function Code and Name
+•	Transaction Amount
+•	及其他必要識別欄位
+________________________________________
+目前我們已可自資料庫取得以下對應欄位：
+•	AML_TYPE（AML Type）
+•	FLAG（Red Flag）
+•	CONTENT（Red Flag Reason and Content）
+•	GOODSCODE（Goods Code）
+•	MERCHANDISE（Merchandise）
+•	AML_INFO_SEQ
+•	CUSTOMER_ID（客戶 CIF）
+•	TRADE_DATE
+•	FUN_CODE（Function Code）
+•	FUNC_NAME（Function Name）
+惟以下欄位目前尚未找到明確對應之資料來源，需再與 HKWBS 確認是否可提供：
+•	Remarks（備註）
+•	Vessel Name（船名）
+•	Flag of Vessel（船旗）
+•	Transaction Amount（交易金額）
+
+想請您協助確認：
+若以現有可取得之欄位產出報表，是否已可滿足貴單位申報需求？
+上述尚未對應之欄位是否屬「必要必備欄位」？ 
+
+謝謝您的協助與確認。
+
+我是不是要重新發信? 但是我•	Vessel Name（船名）
+•	Flag of Vessel（船旗）
+我完全找不到
+
+我的信該怎麼發?我現在該怎麼做?
