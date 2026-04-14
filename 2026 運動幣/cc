@@ -1,16 +1,17 @@
-Dear 建富 您好:
+s）"}
+Dear 建富 您好：
 
 因應香港使用者需求，需協助確認以下資料欄位之來源與結構，敬請協助說明：
 
+目前涉及 Tables（供參考）  
+Import | Export | Loan  
+WBS_IMP_LC | WBS_EXP_LA_INFO | WBS_LON_INFO（可能需新增欄位）  
+WBS_IMP_BG | WBS_EXP_LT_INFO |  
+WBS_IMP_IB | WBS_EXP_NEGO_INFO |  
+WBS_IMP_IC | WBS_EXP_OC_INFO |  
+WBS_IMP_SGED | WBS_EXP_RE_NEGO_INFO |  
 
-目前涉及Table 清單
-Import	Export 	Loan
-WBS_IMP_LC	WBS_EXP_LA_INFO	WBS_LON_INFO (需加欄位)
-WBS_IMP_BG	WBS_EXP_LT_INFO	　
-WBS_IMP_IB	WBS_EXP_NEGO_INFO	　
-WBS_IMP_IC	WBS_EXP_OC_INFO	　
-WBS_IMP_SGED	WBS_EXP_RE_NEGO_INFO	　
-
+---
 
 1. Transaction Amount（單筆交易金額）  
 需為每筆實際動用金額（如 Bill Amount / Drawdown Amount，非 Facility / Approved Amount）。  
@@ -18,7 +19,6 @@ WBS_IMP_SGED	WBS_EXP_RE_NEGO_INFO	　
 - 該金額存放之資料表  
 - 是否位於 WBS_IMP_、WBS_EXP_、WBS_LON_INFO 等 *_INFO 表，或其他明細表  
 - 若為其他表，請提供與主檔之關聯鍵（PK/FK）
-
 
 2. Vessel 資訊（Flag / Vessel Name）  
 用於辨識高風險船旗國及對應船舶。  
@@ -34,10 +34,7 @@ WBS_IMP_SGED	WBS_EXP_RE_NEGO_INFO	　
 
 若無法批次取得，本次可不納入。
 
-
 如需進一步說明，請隨時告知，謝謝。
 
-
-
-
-  我加上了一個表格 如何?  然後給我一下主旨
+Best regards,  
+[Your N
