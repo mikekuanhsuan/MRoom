@@ -1,41 +1,29 @@
-主旨：資料欄位確認－Transaction Amount、Vessel 資訊及 Remarks
-
 HKWBS 團隊 您好：
 
-因應香港使用者需求（可參考原有月報－高風險國家〔多為船旗〕及所涉及物品），現需確認以下資料欄位來源及資料結構，敬請協助說明：
+因應香港使用者需求（參考原有高風險國家月報），擬確認以下資料欄位之來源與結構，敬請協助說明：
 
-一、Transaction Amount（單筆交易金額）
-本次所需為「單筆實際發生／動用之交易金額」，例如：
+1. Transaction Amount（單筆交易金額）  
+需為每筆實際動用金額（如 Bill Amount / Drawdown Amount，非 Facility / Approved Amount）。  
+請協助確認：  
+- 該金額存放之資料表  
+- 是否位於 WBS_IMP_、WBS_EXP_、WBS_LON_INFO 等 *_INFO 表，或其他明細表  
+- 若為其他表，請提供與主檔之關聯鍵（PK/FK）
 
-Bill Amount
-Drawdown Amount
-即每筆交易實際動用或撥付之金額（非 Facility / Approved Amount）。
+2. Vessel 資訊（Flag / Vessel Name）  
+用於辨識高風險船旗國及對應船舶。  
+請協助確認：  
+- 資料存放之資料表  
+- 所屬層級（LC / Bill / Shipping Document 等）  
+- 與主檔之關聯鍵（PK/FK）
 
-敬請協助確認：
+3. Remarks（非必要）  
+若系統有落地：  
+- 請提供資料表名稱  
+- 是否可透過 SQL / 報表擷取  
 
-該實際交易層級金額係存放於哪一張資料表？
-是否存於 WBS_IMP_、WBS_EXP_、WBS_LON_INFO 等 *_INFO 表，或另有交易／動撥明細表？
-若屬其他明細表，請提供與主檔資料表之關聯鍵值（Primary / Foreign Key）。
-二、Vessel 資訊（Flag of Vessel & Vessel Name）
-此部分主要用於辨識是否涉及高風險船旗國，並可顯示該筆交易所對應之船舶資訊。
+若無法批次取得，本次可不納入。
 
-敬請協助確認：
+如需進一步說明，請隨時告知，謝謝。
 
-Vessel 相關資訊係存放於哪一張資料表？
-Flag of Vessel 及 Vessel Name 係存於 LC 層級、Bill 層級、Shipping Document 層級或其他層級？
-該資料表與 WBS_IMP_、WBS_EXP_ 或其他主檔之關聯鍵值為何？
-三、Remarks 欄位（非必要）
-Remarks 原非必要欄位，當初僅考量 OP 可能會於該欄位補充有助於判斷紅旗風險之資訊。
-
-若系統無法批次 extract，本次需求可不納入。
-
-惟仍請協助確認：
-
-Remarks 是否有實際落地於資料表？
-若有，係存放於哪一張 table？
-是否可透過報表或 SQL 批次擷取？
-Kindly contact us should you require further clarification.
-
-謝謝。
-
-  我這樣發信他們看了董?  幫我寫的不要太冗長
+Best regards,  
+[Your Name]
