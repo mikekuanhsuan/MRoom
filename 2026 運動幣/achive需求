@@ -1,24 +1,37 @@
-1.	需求概述
-優化 AML 系統 2026 年度之系統日常維運，針對 Workflow 中之原 FTP 拋檔 TASK (COMMAND TYPE，例如：Command_PUT_HOLDING_TITAN) 進行功能調整。主要目的為將該任務設定為 Disable，停止執行該項拋轉作業，以符合現行維運需求並減少冗餘執行紀錄。詳情請參考提案單裏的規格書。
-2.	測試項目概述 
+是的，**驗收測試計畫 (Acceptance Test Plan)** 必須同步修改。
+因為測試計畫必須涵蓋需求規格書中的「所有」變動。現在你的需求包含了 **「FTP 移除」** 與 **「Archive 作業調整」**，如果測試計畫只寫 FTP，則 Archive 的部分會變成「未經驗證就上線」，這在銀行審計中是不合規的。
+以下是為你整合後的版本，格式完全不變：
+### **驗收測試計畫**
+**1. 需求概述**
+優化 AML 系統 2026 年度之系統日常維運，包含以下兩項主要功能調整：
+ 1. **Workflow 任務調整**：針對原 FTP 拋檔 TASK (COMMAND TYPE，例如：Command_PUT_HOLDING_TITAN) 設定為 Disable，停止執行拋轉作業以減少冗餘紀錄。
+ 2. **Archive 作業優化**：配合原廠調整 Archive 作業內容，針對 CDDArchive_Backup_new.sql 進行相對應之程式調整與部署，確保 CDD 資料備份機制之正確性。
+   詳情請參考提案單裏的規格書。
+**2. 測試項目概述**
 依據需求規格書針對系統測試內容進行條列。
-跨模組、跨系統或跨平台間之資料傳遞正確性：
-驗證 Workflow 設定中 TASK 狀態切換之正確性（Enable 轉 Disable）。
-確認 Workflow 執行後，下游系統（原 FTP 接收端）無收到該任務產出之檔案，確保資料拋轉停止。
-依據規格書相關功能之測試，確認 Workflow Monitor 顯示狀態符合預期。
-3.	測試範圍、情境與排除情況
-1.	測試範圍(必填)：
-AML 系統 Workflow 管理模組、工作流監控介面 (Workflow Monitor) 及系統執行 Log 紀錄。
-2.	測試情境(必填)：
-情境一（調整前）： 確認 TASK 處於 Enable 狀態時，Workflow 執行成功且 Log 有拋轉記錄。
-情境二（調整後）：將 TASK 設定為 Disable，執行 Workflow 後確認 Monitor 狀態為 Disabled，且系統 Log 無出現該 Command 之執行紀錄。
-情境三（端對端）： 確認整體 Workflow 在該 TASK 禁用後，其餘後續關聯任務仍能正常串接執行。
-3.	排除情況(選填)：
-除本次指定之 FTP 拋檔 TASK 外，其餘 Workflow 內之正常交易與排程邏輯不在本次測試異動範圍。
-
-
-
-我的驗收測試計畫是不是也要改?  格是不要變
+ * **跨模組、跨系統或跨平台間之資料傳遞正確性：**
+   * 驗證 Workflow TASK 狀態切換之正確性（Enable 轉 Disable）。
+   * 確認下游系統（原 FTP 接收端）無收到該任務產出之檔案，確保資料拋轉停止。
+   * **驗證 Archive 作業程式 CDDArchive_Backup_new.sql 執行之正確性與備份結果。**
+   * 依據規格書相關功能之測試，確認 Workflow Monitor 與資料庫執行狀態符合預期。
+**3. 測試範圍、情境與排除情況**
+ 1. **測試範圍 (必填)：**
+   AML 系統 Workflow 管理模組、工作流監控介面 (Workflow Monitor)、**資料庫 Archive 作業模組**及相關系統執行 Log 紀錄。
+ 2. **測試情境 (必填)：**
+ * **情境一（FTP 調整前）：** 確認 TASK 處於 Enable 狀態時，Workflow 執行成功且 Log 有拋轉記錄。
+ * **情境二（FTP 調整後）：** 將 TASK 設定為 Disable，執行 Workflow 後確認 Monitor 狀態為 Disabled，且系統 Log 無出現該 Command 執行紀錄。
+ * **情境三（Archive 作業執行）：** **觸發調整後之 Archive 作業，確認 CDDArchive_Backup_new.sql 執行無誤，且 CDD 備份資料正確產生。**
+ * **情境四（端對端驗證）：** 確認整體 Workflow 在 TASK 禁用及 Archive 作業調整後，其餘後續關聯任務仍能正常串接執行。
+ 3. **排除情況 (選填)：**
+   除本次指定之 FTP 拋檔 TASK 及 Archive 調整腳本外，其餘 Workflow 內之正常交易與排程邏輯不在本次測試異動範圍。
+**(後續 4. 測試時程 與 5. 測試資料 建議維持前一版的內容即可)**
+### **💡 修改重點說明：**
+ 1. **同步需求：** 在「需求概述」與「測試範圍」都加入了 **Archive / SQL 腳本** 相關的字眼。
+ 2. **增加情境：** 額外增加了「情境三（Archive 作業執行）」，這樣才能證明你有測過那個新的 SQL 檔案。
+ 3. **提案名稱同步：** 記得這份測試計畫的文件抬頭名稱，也要改成：
+   > **AML系統2026年度維運：移除FTP拋檔TASK暨Archive作業調整案 - 驗收測試計畫**
+   > 
+這樣兩份文件（規格書、測試計畫）就完美對應了！
 
 ====================
 好的，根據你新增的「原廠 Archive 作業調整」需求，我幫你重新整合了**需求規格書**。
