@@ -1,24 +1,30 @@
-測試個案 
-項目	交易功能	案例說明	預期結果	包含之相關系統代號	驗證結果
-1.	程式執行	進行資料Archive備份功能	執行結果Succeeded	N/A	Succeeded
-
- 
-測試結果
-項目	交易功能	案例說明	預期結果	驗證結果
-1.	程式執行	進行資料Archive備份功能	執行結果Succeeded	Succeeded
-
-Before: 執行後錯誤
- 
-
-訂正
- 
-
- 
-
-After: 修正後執行完成
- 
-
- 
-
-反向案例: 原功能不受影響，Table都有備份出來
- 
+既然是要寫給香港那邊的窗口（Ling），建議用**專業、條列式且帶點廣東口語習慣（或港式商務英文）**的方式。香港金融圈溝通講求效率，重點要放在「我需要什麼」以及「為什麼需要」。
+以下為你準備的草稿，你可以直接複製修改：
+### 建議郵件草稿
+**Subject:** Regarding System Integration: Requirements for AML Tab and Transaction Data
+Hi Ling,
+早晨（或 Hi Ling），
+關於上週與建富討論的系統對接需求，為了確保我們能完整擷取 **AML（反洗錢）** 相關資訊，我整理了目前的發現與需要你們協助的地方：
+**1. 業務模組範疇 (Business Modules Focus)**
+目前我們鎖定三大模組：**Import (進口)**、**Export (出口)** 及 **Loan (授信/貸款)**。
+ * 我們發現並非所有查詢功能（Enquiry）都有交易資料。
+ * 最重要的觀察是：**並非每個交易頁面都有「AML」分頁（Tab）**。
+**2. 資訊需求清單 (Data Requirements)**
+針對有「AML 分頁」的項目，我們需要擷取以下關鍵欄位（Fields）：
+ * **Vessel Information:** Vessel name (船名), Flag of vessel (船籍), Carrier/Charter/Agent.
+ * **Shipping Detail:** Shipping route (Loading/Discharge port), Destination.
+ * **Risk Indicators:** **Red Flag (紅旗警訊)**, Goods Description (貨物名稱), Country of Origin.
+ * **Entities:** Originating and recipient entities (進出口商資訊).
+**3. 下一步行動 (Next Steps)**
+為了精準定位資料來源，建富建議我們**約一個時間遠端連線（Remote Screen Sharing）**。
+ * 我們需要逐一確認哪些 Enquiry 畫面點進去後是有 AML 分頁的。
+ * 麻煩妳確認一下這兩天建富或是妳那邊方便的時間，我們對一下畫面，這樣你們提供資訊也會比較準確。
+Thanks for your help!
+Best regards,
+[你的名字]
+### 給你的小撇步（為什麼這樣寫）：
+ 1. **直接說重點**：香港商務溝通不喜歡繞圈子，直接把重點放在「不是每個功能都有 AML 分頁」這件事上。
+ 2. **術語通用**：在香港銀行業，**"Red Flag"**、**"Vessel Name"**、**"Enquiry"** 都是標準術語，不需要翻譯成中文，直接用英文他們看最快。
+ 3. **遠端連線**：你提到的「遠端連線畫面」，在香港常用 **"Remote"** 或 **"Screen Sharing"**。
+ 4. **親切感**：開頭可以用 "Hi Ling" 或是加個 "早晨" (Jo-San)，會更有在地溝通的感覺。
+這封信應該能讓對方清楚知道你現在卡在「找哪些頁面有 AML 分頁」以及「需要裡面的具體欄位」，希望能幫到你的 AML 系統整合專案！加油！
