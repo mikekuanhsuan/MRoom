@@ -2,13 +2,11 @@
 
 echo 正在執行 SQL 腳本...
 
-for /l %%i in (1,1,418) do (
-    echo 正在執行 Table_%%i.sql ...
-    
-    sqlcmd -S amlist -U aml -P aml1234 -d SARCaseWarehouse ^
-    -i "dbo.SAR_Trxn_Detail_All.Table_%%i.sql" ^
-    -o "SAR_Trxn_Detail_All.Table_%%i.log"
-)
+sqlcmd -S amlist -U aml -P aml1234 -d SARCaseWarehouse -i"dbo.SAR_Trxn_Detail.Table_1.sql" -o"SAR_Trxn_Detail.Table_1.log"
 
-echo 全部執行完畢，請檢查對應的 .log 檔案。
+echo 執行完畢，請檢查對應的 .log 檔案。
 pause
+
+
+
+幫我寫到210
