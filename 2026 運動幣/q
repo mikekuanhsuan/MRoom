@@ -1,14 +1,6 @@
-@echo off
-
-echo 正在執行 SQL 腳本...
-
-for /l %%i in (1,1,210) do (
-    echo 正在執行 Table_%%i.sql ...
-    
-    sqlcmd -S amlist -U aml -P aml1234 -d SARCaseWarehouse ^
-    -i "dbo.SAR_Trxn_Detail.Table_%%i.sql" ^
-    -o "SAR_Trxn_Detail.Table_%%i.log"
-)
-
-echo 全部執行完畢，請檢查對應的 .log 檔案。
-pause
+是的，你的描述完全正確。這張圖清楚地列出了 Export（出口）、Import（進口） 和 Loan（授信/貸款） 這三個大方向的系統功能選單，並且特別標註了你需要點擊進去後的具體畫面截圖。
+為了確保你後續收集資料或溝通時更精確，我幫你整理了圖中標註的重點：
+1. 三大業務模組
+• Import (進口): 主要包含 L/C (信用狀) Master Enquiry、B/G (保證函) Master Enquiry、SG/ED (擔保提貨/背書放單) 等查詢功能。
+• Export (出口): 主要包含 L/C Advising (信用狀通知)、NEGO (押匯) Master Enquiry、Forfaiting (福費廷) 等查詢功能。
+• Loan (貸款/授信): 主要包含 Loan Master Enquiry (撥款主檔查詢)、Repayment (還款計算)、Interest (利息查詢) 等功能。
