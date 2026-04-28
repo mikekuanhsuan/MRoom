@@ -1,0 +1,165 @@
+好，我直接給你「可以在 Windows PowerShell 直接跑的完整版本 + 操作步驟」，你照做就能跑起來。
+
+🧠 你要做的事本質
+你這支 PowerShell 腳本在做：
+Excel → FIFO供需配對 → 輸出 Excel（明細 + 總結）
+
+🚀 Step 1：Windows 先準備環境（只做一次）
+1️⃣ 開 PowerShell（用管理員也可以）
+
+2️⃣ 安裝 Excel 模組（很重要）
+Install-Module ImportExcel -Scope CurrentUser
+如果跳詢問 → 按 Y
+
+📁 Step 2：準備檔案
+把這兩個放同一資料夾：
+input.xlsx
+fifo.ps1
+
+🧾 Step 3：完整 PowerShell 腳本（直接存成 fifo.ps1）
+👉 這份是可直接跑版本（已幫你整理乾淨）
+Import-Module ImportExcel
+
+# ===== 輸入輸出 =====
+$inputFile = "input.xlsx"
+$outputFile = "output.xlsx"
+
+# ===== 讀 Excel =====
+$data = Import-Excel $inputFile
+
+# ===== 欄位修正 =====
+foreach ($row in $data) {
+    if ($row.列標號) {
+        $row.月份 = $row.列標號
+    }
+}
+
+# ===== 找 _ 開頭欄位 =====
+$columns = $data[0].PSObject.Properties.Name | Where-Object { $_ -like "_*" }
+
+$allResults = @()
+
+# ===== FIFO function =====
+function Allocate($data, $col) {
+
+    $demand = @()
+    $supply = @()
+
+    foreach ($r in $data) {
+
+        $val = [double]$r.$col
+
+        if ($val -gt 0) {
+            $demand += ,@($r.月份, $val)
+        }
+        elseif ($val -lt 0) {
+            $supply += ,@($r.月份, [math]::Abs($val))
+        }
+    }
+
+    $result = @()
+
+    $i = 0
+    $j = 0
+
+    while ($i -lt $demand.Count -and $j -lt $supply.Count) {
+
+        $d_month = $demand[$i][0]
+        $d_val   = $demand[$i][1]
+
+        $s_month = $supply[$j][0]
+        $s_val   = $supply[$j][1]
+
+        $alloc = [math]::Min($d_val, $s_val)
+
+        $result += [pscustomobject]@{
+            '需求月份' = $d_month
+            '供給月份' = $s_month
+            '分配量'   = $alloc
+            '欄位'     = $col
+        }
+
+        $demand[$i][1] -= $alloc
+        $supply[$j][1] -= $alloc
+
+        if ($demand[$i][1] -eq 0) { $i++ }
+        if ($supply[$j][1] -eq 0) { $j++ }
+    }
+
+    return $result
+}
+
+# ===== 主迴圈 =====
+foreach ($col in $columns) {
+
+    Write-Host "處理中: $col"
+
+    $res = Allocate $data $col
+    $allResults += $res
+}
+
+# ===== 明細輸出 =====
+$allResults | Export-Excel $outputFile -WorksheetName "明細" -AutoSize
+
+# ===== 總結 =====
+$summary = $allResults |
+    Group-Object 欄位 |
+    Select-Object @{Name="欄位";Expression={$_.Name}},
+                  @{Name="總分配量";Expression={($_.Group | Measure-Object 分配量 -Sum).Sum}}
+
+$summary | Export-Excel $outputFile -WorksheetName "總結" -AutoSize -Append
+
+Write-Host "完成！輸出：$outputFile"
+
+▶️ Step 4：執行方式（Windows PowerShell）
+進到檔案資料夾：
+cd "你的資料夾路徑"
+例如：
+cd C:\Users\mike\Desktop\project
+
+▶️ 執行腳本
+.\fifo.ps1
+
+📊 輸出結果
+Excel 會有：
+📄 明細
+| 需求月份 | 供給月份 | 分配量 | 欄位 |
+
+📄 總結
+| 欄位 | 總分配量 |
+
+⚠️ 常見錯誤（你可能會遇到）
+❌ 1. 無法執行 script
+execution policy
+👉 解法：
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+❌ 2. ImportExcel 找不到
+Install-Module ImportExcel
+
+❌ 3. Excel 沒輸出
+👉 確認 input.xlsx 在同一資料夾
+
+🧠 最重要理解（給你升級觀念）
+你這套其實已經是：
+🔥 Supply-Demand Allocation Engine
+業界對應：
+* ERP（SAP）
+* supply chain planning
+* inventory matching system
+
+🚀 如果你下一步要升級（我可以幫）
+我可以幫你做：
+🔵 PowerShell版2.0
+* supply剩餘量
+* unmet demand
+* 每月缺口
+🟢 Python企業版
+* flow chart
+* dashboard
+* heatmap
+* KPI report
+
+只要你說一句：
+👉「我要升級成報表版」
+我可以幫你變成主管會直接拿去開會的版本 👍
