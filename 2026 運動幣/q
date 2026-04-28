@@ -1,90 +1,17 @@
-這份 SQL 語法與您提供的系統截圖（進出口貿易融資與放款系統，看起來有 Import、Export、Loan 的查詢選單）高度相關。
-我幫您將這些 SQL 查詢依照**業務模組（放款、進口、出口、洗錢防制防制）**進行分類與結構化整理，並標示出對應的資料表與關鍵欄位。同時，我也幫您修正了最後一段 SQL 語法中的小錯誤（重複了 WHERE 條件）。
-### 📊 系統資料表對應總覽
-| 業務模組 | 交易類型 (對應畫面選單) | 後端資料表 (Table) | 紀錄編號欄位 | 金額欄位 | 洗錢防制序號 |
-|---|---|---|---|---|---|
-| **Loan (放款)** | Loan Creation | HKWBS.LON_INFO | LON_NO | LON_AMT | AML_INFO_SEQ |
-| **Import (進口)** | L/C (信用狀) | HKWBS.IMP_LC | LC_NO | LC_NO_AMT / NEW_AMT | AML_INFO_SEQ |
-|  | SG/ED (擔保提貨/副提單背書) | HKWBS.IMP_SGED | SGED_NO | SGED_AMT | *(無)* |
-|  | I/B (進口單據) | HKWBS.IMP_IB | IB_NO | BILL_AMT1 | AML_INFO_SEQ |
-|  | I/C (進口託收) | HKWBS.IMP_IC | IC_NO | BILL_AMT | AML_INFO_SEQ |
-| **Export (出口)** | L/A (信用狀通知) | HKWBS.Exp_La_Info | la_no | LC_AMT | AML_INFO_SEQ |
-|  | L/T (信用狀轉讓) | HKWBS.EXP_LT_INFO | LT_NO | LT_AMT | *(無)* |
-|  | NEGO (出口押匯) | HKWBS.EXP_NEGO_INFO | NEGO_NO | BILL_AMT | AML_INFO_SEQ |
-|  | RE-NEGO (轉押匯) | HKWBS.EXP_RE_NEGO_INFO | REF_NO | BILL_AMT | AML_INFO_SEQ |
-|  | O/C (出口託收) | HKWBS.EXP_OC_INFO | OC_NO | BILL_AMT | AML_INFO_SEQ |
-### 💻 分類後的 SQL 語法
-以下是幫您整理並排版過的 SQL 語法，方便您直接複製使用：
-#### 1. 放款業務 (Loan)
-```sql
--- LOAN CREATION
-SELECT LI.LON_NO, LI.LON_CCY, LI.LON_AMT, LI.AML_INFO_SEQ
-FROM HKWBS.LON_INFO LI;
+202706(新增)	202707(新增)	202708(新增)	202709(新增)	202710(新增)	202711(新增)	202712(新增)				
+-1074	-86	-153	-148	-358	-206	-182
 
-```
-#### 2. 進口業務 (Import)
-```sql
--- L/C CREATION (信用狀建立)
-SELECT LC.LC_NO, LC.LC_NO_CCY, LC.LC_NO_AMT, LC.AML_INFO_SEQ
-FROM HKWBS.IMP_LC LC;
 
--- L/C AMENDMENT (信用狀修編)
-SELECT LC.LC_NO, LC.LC_NO_CCY, LC.NEW_AMT, LC.AML_INFO_SEQ
-FROM HKWBS.IMP_LC LC;
+這堆 加起來是2027
 
--- SG/ED CREATION (擔保提貨/副提單背書)
-SELECT SGED.SGED_NO, SGED.SGED_CCY, SGED.SGED_AMT
-FROM HKWBS.IMP_SGED SGED;
+下面是需要分配的欄位
+202607(新增)	202608(新增)	202609(新增)	202610(新增)	202611(新增)	202612(新增)	202701(新增)	202702(新增)	202703(新增)	202704(新增)	202705(新增)
 
--- I/B CREATION (進口單據)
-SELECT IB.IB_NO, IB.BILL_CCY, IB.BILL_AMT1, IB.AML_INFO_SEQ
-FROM HKWBS.IMP_IB IB;
+40	202	159	196	240	183	261	216	254	291	165
 
--- I/C CREATION (進口託收)
-SELECT IC.IC_NO, IC.BILL_CCY, IC.BILL_AMT, IC.AML_INFO_SEQ
-FROM HKWBS.IMP_IC IC;
 
-```
-#### 3. 出口業務 (Export)
-```sql
--- L/A CREATION/AMENDMENT (信用狀通知)
-SELECT LA.LA_NO, LA.LC_CCY, LA.LC_AMT, LA.AML_INFO_SEQ
-FROM HKWBS.EXP_LA_INFO LA;
+我需要知道他們分別被哪個日期的資料分配了
+例如202607(新增)	202608(新增)	202609(新增) 都是由202706 來分配 因為他夠
 
--- L/T CREATION/AMENDMENT (信用狀轉讓)
-SELECT LT.LT_NO, LT.LC_CCY, LT.LT_AMT
-FROM HKWBS.EXP_LT_INFO LT;
 
--- NEGO CREATION/AMENDMENT (出口押匯)
-SELECT ENI.NEGO_NO, ENI.BILL_CCY, ENI.BILL_AMT, ENI.AML_INFO_SEQ
-FROM HKWBS.EXP_NEGO_INFO ENI;
-
--- RENEGO CREATION (轉押匯)
-SELECT ERN.REF_NO, ERN.BILL_CCY, ERN.BILL_AMT, ERN.AML_INFO_SEQ
-FROM HKWBS.EXP_RE_NEGO_INFO ERN;
-
--- O/C CREATION/AMENDMENT (出口託收)
-SELECT OC.OC_NO, OC.BILL_CCY, OC.BILL_AMT, OC.AML_INFO_SEQ
-FROM HKWBS.EXP_OC_INFO OC;
-
-```
-#### 4. 洗錢防制與異動紀錄 (AML & History)
-*註：最後一個 L/T History 的查詢，原本的語法有兩個 WHERE，我已將其合併為 AND。*
-```sql
--- AML (洗錢防制資訊查詢)
-SELECT A.AML_INFO_SEQ, B.CONTENT, B.COUNTRY_CONTENT, B.FLAG
-FROM HKWBS.AML_INFO A
-INNER JOIN HKWBS.AML_DETAIL B ON A.AML_INFO_SEQ = B.AML_INFO_SEQ
-WHERE B.AML_TYPE LIKE 'TAG44%';
-
--- L/T HISTORY (信用狀轉讓歷史異動查詢)
-SELECT X.EXP_ACTION_ITEM_SEQ, X.LT_NO, X.LC_CCY, X.LC_AMT, 
-       X.LT_AMT, X.LT_NEW_AMT, X.INCREASE_LT_AMT, X.DECREASE_LT_AMT
-FROM HKWBS.EXP_LT_INFO_HS X
-WHERE X.LT_NO = 'TSHK23LT00032900'
-  AND X.LT_NEW_AMT <> 0 
-  AND X.LT_NEW_AMT <> X.LT_AMT
-ORDER BY 1;
-
-```
-請問您接下來是需要把這些表格透過 AML_INFO_SEQ (洗錢防制序號) 串接起來產生一份綜合報表，還是需要幫您針對截圖中的特定功能寫出對應的關聯查詢呢？
+有什麼辦法可以快速的做這件事
