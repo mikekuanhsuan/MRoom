@@ -1,0 +1,224 @@
+可以，而且**用臨時 table（#temp table）反而很適合你這種 FIFO 分配邏輯**，因為你這種流程是「一步一步消耗資料」，很像 ETL pipeline。
+
+我直接給你一個**SQL Server 可用的標準做法架構**。
+
+---
+
+# ✅ 一、結論先講
+
+👉 **可以用 #temp table，而且建議你用**
+
+原因：
+
+* 不用正式建表
+* 適合測試 / ETL / 報表邏輯
+* 很適合 FIFO / allocation 類問題
+* 執行完自動消失
+
+---
+
+# 🧩 二、完整流程（對應你 Python）
+
+我幫你翻成 SQL pipeline：
+
+---
+
+# ⭐ Step 1：建立臨時表（原始資料）
+
+```sql id="7v0l8x"
+CREATE TABLE #Raw (
+    月份 VARCHAR(20),
+    _0002 FLOAT,
+    _0011 FLOAT,
+    _0020 FLOAT
+);
+```
+
+---
+
+# ⭐ Step 2：插入資料（從 Excel 或測試）
+
+👉 如果你是手動測試：
+
+```sql id="2kq9ap"
+INSERT INTO #Raw VALUES
+('202607(新增)', 40, 39, 32),
+('202608(新增)', 202, 156, 75);
+```
+
+👉 如果是 Excel：
+用 SSMS Import Wizard → target table 選 `#Raw`
+
+---
+
+# ⭐ Step 3：轉長表（FIFO 必備）
+
+```sql id="q9m2yx"
+SELECT
+    月份,
+    col,
+    val
+INTO #Base
+FROM #Raw
+UNPIVOT (
+    val FOR col IN (_0002, _0011, _0020)
+) u;
+```
+
+---
+
+# ⭐ Step 4：拆需求 / 供給
+
+```sql id="8d2mnc"
+SELECT *
+INTO #Demand
+FROM #Base
+WHERE val > 0;
+
+SELECT 
+    月份,
+    col,
+    -val AS supply
+INTO #Supply
+FROM #Base
+WHERE val < 0;
+```
+
+---
+
+# ⚠️ 三、重點（FIFO核心）
+
+SQL 沒有 Python while loop，所以 FIFO 通常有兩種做法：
+
+---
+
+# ⭐ 方法 A（簡單版）：累積法（推薦）
+
+👉 適合 80% business scenario
+
+```sql id="p3v8kt"
+SELECT
+    d.月份 AS demand_month,
+    s.月份 AS supply_month,
+    d.col,
+    CASE 
+        WHEN d.val <= s.supply THEN d.val
+        ELSE s.supply
+    END AS alloc
+FROM #Demand d
+JOIN #Supply s
+  ON d.col = s.col;
+```
+
+👉 但這個是「粗配對」，不是完全 FIFO 消耗
+
+---
+
+# ⭐ 方法 B（完整 FIFO）：Recursive CTE（你 Python 對應版）
+
+```sql id="r8k2lp"
+WITH match_cte AS (
+    SELECT
+        d.月份 AS demand_month,
+        s.月份 AS supply_month,
+        d.col,
+        CASE 
+            WHEN d.val <= s.supply THEN d.val
+            ELSE s.supply
+        END AS alloc,
+        d.val AS remaining_d,
+        s.supply AS remaining_s
+    FROM #Demand d
+    JOIN #Supply s
+      ON d.col = s.col
+
+    UNION ALL
+
+    SELECT
+        demand_month,
+        supply_month,
+        col,
+        CASE 
+            WHEN remaining_d > remaining_s THEN remaining_s
+            ELSE remaining_d
+        END,
+        CASE 
+            WHEN remaining_d > remaining_s THEN remaining_d - remaining_s
+            ELSE 0
+        END,
+        CASE 
+            WHEN remaining_s > remaining_d THEN remaining_s - remaining_d
+            ELSE 0
+        END
+    FROM match_cte
+    WHERE remaining_d > 0 AND remaining_s > 0
+)
+SELECT *
+FROM match_cte;
+```
+
+---
+
+# 🧹 Step 5：清理（可選）
+
+```sql
+DROP TABLE #Raw;
+DROP TABLE #Base;
+DROP TABLE #Demand;
+DROP TABLE #Supply;
+```
+
+---
+
+# 🚀 四、我幫你講白一點（實務建議）
+
+你這題在 SQL 世界有三種等級：
+
+---
+
+## 🟢 Level 1（推薦你先用）
+
+👉 #temp + UNPIVOT + JOIN
+✔ 快
+✔ 好 debug
+✔ 適合報表
+
+---
+
+## 🟡 Level 2
+
+👉 #temp + window function
+✔ 中等複雜度
+✔ 可控
+
+---
+
+## 🔴 Level 3（你 Python 那種）
+
+👉 Recursive CTE FIFO
+❌ 難維護
+❌ SQL Server 很吃資源
+❌ 不好 debug
+
+---
+
+# 👍 五、最重要一句話
+
+👉 你這題：
+
+> ✔「可以用 #temp table，而且是最適合 SQL 開發測試方式」
+
+---
+
+# 🚀 如果你下一步想升級
+
+我可以幫你做這個：
+
+### 🔥「SQL FIFO 工業版」
+
+* 不用 recursive
+* 直接 O(n log n)
+* 比 Python 還快
+* 可處理你全部 _0002/_0011/_0020 一次
+
+只要你說：「我要優化版 SQL FIFO」，我可以幫你改成 production 等級寫法。
