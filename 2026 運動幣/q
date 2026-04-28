@@ -1,139 +1,90 @@
-這是一個非常好的問題，也點出了處理超大資料量時真正的痛點。當資料量達到億級，「重建索引」本身就會成為一個巨大的工程。
+這份 SQL 語法與您提供的系統截圖（進出口貿易融資與放款系統，看起來有 Import、Export、Loan 的查詢選單）高度相關。
+我幫您將這些 SQL 查詢依照**業務模組（放款、進口、出口、洗錢防制防制）**進行分類與結構化整理，並標示出對應的資料表與關鍵欄位。同時，我也幫您修正了最後一段 SQL 語法中的小錯誤（重複了 WHERE 條件）。
+### 📊 系統資料表對應總覽
+| 業務模組 | 交易類型 (對應畫面選單) | 後端資料表 (Table) | 紀錄編號欄位 | 金額欄位 | 洗錢防制序號 |
+|---|---|---|---|---|---|
+| **Loan (放款)** | Loan Creation | HKWBS.LON_INFO | LON_NO | LON_AMT | AML_INFO_SEQ |
+| **Import (進口)** | L/C (信用狀) | HKWBS.IMP_LC | LC_NO | LC_NO_AMT / NEW_AMT | AML_INFO_SEQ |
+|  | SG/ED (擔保提貨/副提單背書) | HKWBS.IMP_SGED | SGED_NO | SGED_AMT | *(無)* |
+|  | I/B (進口單據) | HKWBS.IMP_IB | IB_NO | BILL_AMT1 | AML_INFO_SEQ |
+|  | I/C (進口託收) | HKWBS.IMP_IC | IC_NO | BILL_AMT | AML_INFO_SEQ |
+| **Export (出口)** | L/A (信用狀通知) | HKWBS.Exp_La_Info | la_no | LC_AMT | AML_INFO_SEQ |
+|  | L/T (信用狀轉讓) | HKWBS.EXP_LT_INFO | LT_NO | LT_AMT | *(無)* |
+|  | NEGO (出口押匯) | HKWBS.EXP_NEGO_INFO | NEGO_NO | BILL_AMT | AML_INFO_SEQ |
+|  | RE-NEGO (轉押匯) | HKWBS.EXP_RE_NEGO_INFO | REF_NO | BILL_AMT | AML_INFO_SEQ |
+|  | O/C (出口託收) | HKWBS.EXP_OC_INFO | OC_NO | BILL_AMT | AML_INFO_SEQ |
+### 💻 分類後的 SQL 語法
+以下是幫您整理並排版過的 SQL 語法，方便您直接複製使用：
+#### 1. 放款業務 (Loan)
+```sql
+-- LOAN CREATION
+SELECT LI.LON_NO, LI.LON_CCY, LI.LON_AMT, LI.AML_INFO_SEQ
+FROM HKWBS.LON_INFO LI;
 
-你問：「有沒有可以大量資料轉移到有 index table 的方法？」
+```
+#### 2. 進口業務 (Import)
+```sql
+-- L/C CREATION (信用狀建立)
+SELECT LC.LC_NO, LC.LC_NO_CCY, LC.LC_NO_AMT, LC.AML_INFO_SEQ
+FROM HKWBS.IMP_LC LC;
 
-直接的答案是：有，但通常不會比「先刪除再重建」來得快。 直接寫入有索引的資料表，每一筆資料都會引發索引的即時更新，這包括了日誌記錄、B-Tree 的頁面分裂 (Page Split) 等，當資料量達到一億筆時，這個累積的成本會非常驚人，極有可能比「重建一次索引」還要慢得多，而且更容易導致交易日誌 (Transaction Log) 爆滿。
+-- L/C AMENDMENT (信用狀修編)
+SELECT LC.LC_NO, LC.LC_NO_CCY, LC.NEW_AMT, LC.AML_INFO_SEQ
+FROM HKWBS.IMP_LC LC;
 
-所以，我們的思考方向不應該是「如何快速寫入有索引的表」，而應該是：「既然重建索引是必要的，我要如何讓這整個過程（包含重建）達到最快？」
+-- SG/ED CREATION (擔保提貨/副提單背書)
+SELECT SGED.SGED_NO, SGED.SGED_CCY, SGED.SGED_AMT
+FROM HKWBS.IMP_SGED SGED;
 
-對於一億筆資料的規模，標準的 DROP -> INSERT -> CREATE 流程需要進一步優化。以下是針對超大資料量轉移的進階策略，你可以跟廠商或DBA團隊討論這些方案：
+-- I/B CREATION (進口單據)
+SELECT IB.IB_NO, IB.BILL_CCY, IB.BILL_AMT1, IB.AML_INFO_SEQ
+FROM HKWBS.IMP_IB IB;
 
-策略一：分區資料表 (Table Partitioning) - 最高效的方案
-如果你的目標資料表（例如 TRSF_MTHLY_ACCT_SMRY）是按時間（如 YYYYMM）或某個欄位分區的，那麼你可以使用一種叫做 「分區交換 (Partition Switching)」 的技術，這幾乎是處理這種場景的最快方法。
+-- I/C CREATION (進口託收)
+SELECT IC.IC_NO, IC.BILL_CCY, IC.BILL_AMT, IC.AML_INFO_SEQ
+FROM HKWBS.IMP_IC IC;
 
-操作流程：
+```
+#### 3. 出口業務 (Export)
+```sql
+-- L/A CREATION/AMENDMENT (信用狀通知)
+SELECT LA.LA_NO, LA.LC_CCY, LA.LC_AMT, LA.AML_INFO_SEQ
+FROM HKWBS.EXP_LA_INFO LA;
 
-建立一個暫存的「中繼資料表」(Staging Table)： 這個中-繼資料表的結構和你的目標資料表完全一樣，包含所有的索引。
-寫入中繼表： 將你從 LoadTrxn_Migrate_buffer 來的資料，全部 INSERT 到這個中繼資料表裡。因為這個表是空的，即使有索引，初次寫入的速度也相對較快。
-分區交換： 使用 ALTER TABLE ... SWITCH PARTITION 命令，在毫秒級的時間內，將這個準備好的中繼資料表，直接「交換」成目標資料表的一個新分區。
-優點：
+-- L/T CREATION/AMENDMENT (信用狀轉讓)
+SELECT LT.LT_NO, LT.LC_CCY, LT.LT_AMT
+FROM HKWBS.EXP_LT_INFO LT;
 
-近乎瞬時完成： 分區交換只是一個中繼資料操作 (Metadata Operation)，資料本身沒有移動。它只是告訴 SQL Server：「從現在開始，這個資料區塊屬於目標資料表了」。
-不影響線上服務： 在準備中繼資料表時，你的正式目標資料表完全可以正常提供查詢服務。交換的瞬間非常短，對使用者的影響降到最低。
-索引已經建好： 因為你在中繼資料表上已經把索引建好了，所以交換後索引自然就在那裡，省去了在巨大的目標表上重建索引的時間。
-前提條件：
+-- NEGO CREATION/AMENDMENT (出口押匯)
+SELECT ENI.NEGO_NO, ENI.BILL_CCY, ENI.BILL_AMT, ENI.AML_INFO_SEQ
+FROM HKWBS.EXP_NEGO_INFO ENI;
 
-目標資料表必須是分區資料表。
-中繼資料表必須和目標表在同一個檔案群組 (Filegroup)。
-兩邊的結構和索引必須完全一致。
-策略二：最小化日誌記錄 (Minimal Logging)
-如果你的資料庫復原模式是「簡單 (Simple)」或「大量記錄 (Bulk-Logged)」，那麼在執行大量寫入時，可以觸發最小化日誌記錄，大幅減少 I/O 並提升速度。
+-- RENEGO CREATION (轉押匯)
+SELECT ERN.REF_NO, ERN.BILL_CCY, ERN.BILL_AMT, ERN.AML_INFO_SEQ
+FROM HKWBS.EXP_RE_NEGO_INFO ERN;
 
-觸發條件：
+-- O/C CREATION/AMENDMENT (出口託收)
+SELECT OC.OC_NO, OC.BILL_CCY, OC.BILL_AMT, OC.AML_INFO_SEQ
+FROM HKWBS.EXP_OC_INFO OC;
 
-目標資料表是空的，或者沒有非叢集索引 (Non-clustered Index)。
-在 INSERT ... SELECT 語句中使用 (TABLOCK) 提示。
-操作流程：
+```
+#### 4. 洗錢防制與異動紀錄 (AML & History)
+*註：最後一個 L/T History 的查詢，原本的語法有兩個 WHERE，我已將其合併為 AND。*
+```sql
+-- AML (洗錢防制資訊查詢)
+SELECT A.AML_INFO_SEQ, B.CONTENT, B.COUNTRY_CONTENT, B.FLAG
+FROM HKWBS.AML_INFO A
+INNER JOIN HKWBS.AML_DETAIL B ON A.AML_INFO_SEQ = B.AML_INFO_SEQ
+WHERE B.AML_TYPE LIKE 'TAG44%';
 
-刪除非叢集索引： 在 INSERT 前，只刪除目標資料表上的非叢集索引，保留叢集索引 (Clustered Index)。
-執行寫入： 使用 INSERT INTO TargetTable WITH (TABLOCK) SELECT ...。
-重建非叢集索引： 資料寫入完成後，再把非叢集索引建立回來。
-優點：
+-- L/T HISTORY (信用狀轉讓歷史異動查詢)
+SELECT X.EXP_ACTION_ITEM_SEQ, X.LT_NO, X.LC_CCY, X.LC_AMT, 
+       X.LT_AMT, X.LT_NEW_AMT, X.INCREASE_LT_AMT, X.DECREASE_LT_AMT
+FROM HKWBS.EXP_LT_INFO_HS X
+WHERE X.LT_NO = 'TSHK23LT00032900'
+  AND X.LT_NEW_AMT <> 0 
+  AND X.LT_NEW_AMT <> X.LT_AMT
+ORDER BY 1;
 
-比完整的日誌記錄快很多。
-避免了交易日誌的過度增長。
-策略三：平行處理 (Parallelism)
-重建索引是一個非常耗費 CPU 和 I/O 的操作。你可以確保 SQL Server 使用平行處理來加速這個過程。
-
-操作流程：
-
-在 CREATE INDEX 語句中，可以使用 MAXDOP (Maximum Degree of Parallelism) 選項來指定要用多少個 CPU 核心來同時建立索引。
-確保伺服器有足夠的記憶體和 I/O 頻寬來支撐平行處理。
-總結與建議
-面對一億筆資料，你可以這樣跟廠商或內部團隊溝通：
-
-我們理解「先刪除再重建索引」是標準作法，但由於我們資料量高達一億筆，重建索引本身就非常耗時。
-
-為了應對這個挑戰，我們建議探討以下幾種更進階的方案：
-
-分區交換 (Partition Switching)： 這是我們的首選方案。請問我們的目標資料表（例如 TRSF_MTHLY_ACCT_SMRY）是否已經是或可以改成分區資料表？如果可以，我們就能建立一個帶有索引的中繼資料表，寫滿資料後瞬間交換進去，這樣可以完全避免在主表上重建索引的漫長等待。
-
-優化索引重建過程： 如果分區不可行，我們需要專注於如何加速索引重建。
-
-我們能否在寫入時觸發最小化日誌記錄？
-在重建索引時，能否利用平行處理 (MAXDOP) 來最大化硬體資源，縮短重建時間？
-我們的目標是找到一個在可接受的時間內完成整個資料轉移流程的方案。期待與你們一起評估這些策略的可行性。
-
-這樣溝通，既能展現你的專業度，也能引導大家朝著解決超大資料量問題的正確方向前進。
-
-
-
-
-好的，這個問題非常核心。廠商提到的 "bulk insert" (大量批次寫入) 指的並不是某一個特定的指令，而是一種操作行為。
-
-在您的 DataMigrator_Integrate_20260422_Index.sql 腳本中，所有符合 INSERT INTO ... SELECT FROM ... 或 MERGE ... WHEN NOT MATCHED THEN INSERT ... 這種從一個或多個資料表讀取大量資料，然後寫入另一個資料表的語句，都屬於 "bulk insert" 的範疇。
-
-這些操作會因為目標資料表上的索引而變慢。
-
-我幫您標示出腳本中幾個最關鍵的 "bulk insert" 區段：
-
-1. CIF 模組中
-主要目標： dbo.BSA_SUB_CUST_FACT
-
-相關程式碼 (第 120 - 205 行):
-
-影響： 如果 dbo.BSA_SUB_CUST_FACT 上有索引，MERGE 語句中每一次 INSERT 都會觸發索引更新，導致效能低落。
-
-其他相關區段：
-
-INSERT INTO WAREHOUSE...dbo.PB_CUSTOMER_FACT (第 251 行)
-INSERT INTO dbo.PB_CustProdAndServicesUsed (第 260 行)
-INSERT INTO dbo.PB_CustPurposeOfAcc (第 276 行)
-INSERT INTO SOURCEDB...dbo.CIF_CVT_Source (第 292 行)
-2. ACCT 模組中
-主要目標： dbo.ACCT_XREF_DIM
-相關程式碼 (第 400 - 481 行):
-影響： 與 CIF 模組類似，如果 dbo.ACCT_XREF_DIM 有索引，大量的 INSERT 會很慢。
-3. TRXN 模組中 (這是最典型的例子)
-主要目標： 所有 dbo.WIRE_MTHLY_FACT, dbo.TTL_MTHLY_FACT, dbo.WIRE_MTHLY_ACCT_SMRY 等 FACT 和 SMRY 資料表。
-相關程式碼 (第 630 - 1980 行): 您的 TRXN 模組裡充滿了大量的 INSERT INTO ... SELECT ... 語句，例如：
-影響： 這是最需要套用廠商建議的地方。您有數十個 INSERT 語句要寫入不同的目標表。如果在執行這些 INSERT 之前不先移除目標表的索引，整個過程會非常非常慢。
-總結來說：
-
-廠商說的 "bulk insert" 指的就是您腳本中這些將大量資料從來源表搬移到目標表的 INSERT 或 MERGE 操作。他的建議就是針對這些操作的目標資料表（BSA_SUB_CUST_FACT, ACCT_XREF_DIM, 以及所有 TRXN 的 FACT 和 SMRY 表）進行「先刪除索引 -> 寫入資料 -> 重建索引」的優化。
-
-
-
-
-
-
-
-好的，我完全理解你的困惑了。這是一個非常經典的資料庫效能問題，你和廠商的溝通只差最後一步就能對上。
-
-你可以這樣回覆廠商，這能表明你理解了他的專業建議，並能推動問題的解決：
-
-給廠商的回覆範本
-謝謝你的說明，我理解了。
-
-你的意思是，為了最大化大量資料寫入（Bulk Insert）的效能，我們應該遵循以下步驟：
-
-事前準備： 在執行 INSERT 之前，先 DROP 目標資料表（例如 BSA_SUB_CUST_FACT 和 TRXN 模組裡的所有 FACT 表）上的所有索引。
-執行寫入： 執行我們的 Stored Procedure，將 Customer_Migrate_buffer 或 LoadTrxn_Migrate_buffer 的資料 INSERT 到沒有索引的目標資料表中。
-事後重建： 等所有資料都寫入完成後，再用 CREATE INDEX 把剛剛刪除的索引全部重新建立起來。
-我目前的腳本裡，CREATE INDEX 是針對來源資料 (Customer_Migrate_buffer)，目的是為了加速 JOIN 和 WHERE 的查詢速度。
-
-我想我們達成共識了。接下來，我會調整我的腳本，在寫入目標資料表之前，先移除它們的索引，等寫入完成後再重建。
-
-再次感謝你的建議。
-
-為什麼要這樣回覆？
-表達理解與尊重： 這個回覆清楚地表明你聽懂了廠商的專業建議，並不是質疑他，而是想確認最佳實踐。
-釐清關鍵點：
-你的作法： 你在來源表 (Source Table) 上建立索引，是為了加速讀取 (SELECT)。這是正確且必要的。
-廠商的建議： 他建議在目標表 (Target Table) 上不要有索引，是為了加速寫入 (INSERT)。這也是完全正確的。
-展示問題的核心： 你們討論的是兩件不同的事，但目標一致，都是為了提升整體效能。你的回覆把這兩件事都點出來了，溝通的誤解就解開了。
-簡單比喻：
-
-有索引時寫入： 就像你拿到一本有目錄的書，每新增一頁內容，你都必須同時去更新書末的目錄，告訴大家新內容在哪一頁。如果一次新增一萬頁，你就要更新一萬次目錄，非常慢。
-無索引時寫入： 你先把書末的目錄撕掉。然後一口氣把一萬頁新內容全部加進書裡，這個過程很快。最後，你再根據這本完整的書，重新製作一份全新的目錄。這個效率遠高於前者。
-你的 Stored Procedure 裡，Customer_Migrate_buffer 就是你要從中查找資料的「來源書」，所以需要目錄（索引）來加快查找。而 BSA_SUB_CUST_FACT 則是你要寫入新內容的「目標書」，按照廠商的建議，應該在寫入前先把目錄（索引）拿掉。
+```
+請問您接下來是需要把這些表格透過 AML_INFO_SEQ (洗錢防制序號) 串接起來產生一份綜合報表，還是需要幫您針對截圖中的特定功能寫出對應的關聯查詢呢？
