@@ -1,0 +1,141 @@
+可以，我幫你做「公司可接受的 PowerShell 版本」（用 Excel + FIFO allocation）。
+⚠️ 先講清楚： 這個版本功能等價你的 Python，但 PowerShell 會比較長、也比較慢。
+
+🚀 PowerShell 版本（FIFO allocation + summary + Excel輸出）
+👉 需要模組：
+Install-Module ImportExcel -Scope CurrentUser
+
+✅ 完整 PowerShell 腳本
+Import-Module ImportExcel
+
+# ===== 讀 Excel =====
+$inputFile = "input.xlsx"
+$outputFile = "output.xlsx"
+
+$df = Import-Excel $inputFile
+
+# ===== 清理欄位 =====
+$df = $df | ForEach-Object {
+    $_.列標號 = $_.列標號
+    $_
+}
+
+# 如果有「列標號」改成「月份」
+foreach ($row in $df) {
+    if ($row.列標號) {
+        $row.月份 = $row.列標號
+    }
+}
+
+# ===== 找欄位 =====
+$columns = $df[0].PSObject.Properties.Name | Where-Object { $_ -like "_*" }
+
+$allResults = @()
+
+# ===== FIFO function =====
+function Allocate($data, $colName) {
+
+    $demand = @()
+    $supply = @()
+
+    foreach ($row in $data) {
+
+        $val = [double]$row.$colName
+
+        if ($val -gt 0) {
+            $demand += ,@($row.月份, $val)
+        }
+        elseif ($val -lt 0) {
+            $supply += ,@($row.月份, [math]::Abs($val))
+        }
+    }
+
+    $result = @()
+
+    $i = 0
+    $j = 0
+
+    while ($i -lt $demand.Count -and $j -lt $supply.Count) {
+
+        $d_month = $demand[$i][0]
+        $d_val = $demand[$i][1]
+
+        $s_month = $supply[$j][0]
+        $s_val = $supply[$j][1]
+
+        $alloc = [math]::Min($d_val, $s_val)
+
+        $result += [pscustomobject]@{
+            '需求月份' = $d_month
+            '供給月份' = $s_month
+            '分配量' = $alloc
+            '欄位' = $colName
+        }
+
+        $demand[$i][1] -= $alloc
+        $supply[$j][1] -= $alloc
+
+        if ($demand[$i][1] -eq 0) { $i++ }
+        if ($supply[$j][1] -eq 0) { $j++ }
+    }
+
+    return $result
+}
+
+# ===== 主迴圈 =====
+foreach ($col in $columns) {
+
+    Write-Host "處理中: $col"
+
+    $result = Allocate $df $col
+
+    $allResults += $result
+}
+
+# ===== 明細 =====
+$allResults | Export-Excel $outputFile -WorksheetName "明細" -AutoSize
+
+# ===== 總結 =====
+$summary = $allResults |
+    Group-Object 欄位 |
+    Select-Object @{Name="欄位";Expression={$_.Name}},
+                  @{Name="總分配量";Expression={($_.Group | Measure-Object 分配量 -Sum).Sum}}
+
+$summary | Export-Excel $outputFile -WorksheetName "總結" -AutoSize -Append
+
+Write-Host "完成！輸出檔案： $outputFile"
+
+📊 輸出結果會跟你 Python 一樣
+📄 明細
+需求月份 | 供給月份 | 分配量 | 欄位
+📄 總結
+欄位 | 總分配量
+_0002 | xxx
+_0011 | xxx
+
+⚠️ 很重要（現實差異）
+功能	Python	PowerShell
+FIFO allocation	⭐⭐⭐	⚠️
+可讀性	⭐⭐⭐	❌
+維護性	⭐⭐⭐	❌
+公司合規	⚠️	⭐⭐⭐
+效率	⭐⭐⭐	⚠️
+🧠 我幫你講白一點
+你現在做的是：
+🔥 inventory flow engine（供需流動系統）
+PowerShell 可以做，但：
+👉 是「勉強能跑」 👉 Python 是「正確工具」
+
+🚀 如果你要再升級（我可以幫）
+我可以幫你做：
+🔵 PowerShell版升級
+* Excel dashboard output
+* pivot table auto build
+🟢 Python企業版
+* supply exhaustion timeline
+* demand coverage %
+* flow chart（像ERP）
+
+如果你下一句說：
+👉「我要做供需視覺化」
+我可以幫你升級成老闆一看就懂的報表系統 👍
