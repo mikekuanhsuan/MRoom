@@ -1,0 +1,15 @@
+-- 前面的 #Raw, #Base, #Demand, #Supply 以及遞迴 CTE (RecursiveAllocation) 都不變
+
+SELECT 
+    需求月份,
+    供給月份,
+    SUM(分配量) AS 總分配量
+FROM RecursiveAllocation
+WHERE 分配量 > 0 
+GROUP BY 
+    需求月份,
+    供給月份
+ORDER BY 
+    需求月份,
+    供給月份
+OPTION (MAXRECURSION 0);
