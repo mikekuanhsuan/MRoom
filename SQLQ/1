@@ -1,16 +1,6 @@
-目前工作內容
-提單 電腦作業一般業務檔案資料更改申請單IT05202604270041
-
-
-SQL Server資料庫ID/權限申請單 IT10202604270042
-Archive備份功能
-
-準備程式使用變數
-
-提單 作業申請單 IT13202604280072 ，等禮拜日OP執行
-
-到系統支援一部系統管理一組，確認主機
-AMLWS1 D:\PATRIOT_OFFICER_ETL_FILES
-HOLDING-FTPS D:\FTPS\AML
-EMZFTP D:\DATA\AML
-確認資料是否還有再拋檔案
+* 申請單處理：IT05202604270041、IT10202604270042
+* 作業申請：IT13202604280072（週日 OP 執行）
+* Archive 備份功能確認
+* 程式變數準備
+* 主機檢核（AMLWS1 / HOLDING-FTPS / EMZFTP）
+    → 確認是否仍有檔案拋轉
