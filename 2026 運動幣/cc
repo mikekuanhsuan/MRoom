@@ -1,1 +1,30 @@
-=INDEX($N$1:$T$1, MATCH(TRUE, U2<=$AF2:$AL2, 0))
+
+員工代號	1141923
+提案序號	
+2604291052
+提案內容	因應香港?部稽核之建議，優化香港分行每月HKAML組(FAM)下載與貿易金融相關(Trade Finance)的紅旗月報，以利AML管治及匯報。其中要求之資訊包括觸發紅旗及其關聯細節等相關資訊。 （主要兩大流程: 請HOIT AML提取所需香港分行(Trade Finance)貿易金融資訊; 也請WBS將相關資料下檔至HKODS，方便HOIT AML提取資料，整合報表。） 經與HOIT初步討論，因所需紅旗及其關聯細節等資訊只在WBS顯示而非AML PO系統，因而已聯係HOIT AML提取所需香港分行貿易金融資訊產出(月報)報表,以幫助HKAML組能更有效地整理資訊及數據。 也因而參考 HK OP WBS所提供之截圖（之前電郵提供HOIT截圖），主要是Trade Finance (TF) transaction若有“紅旗”/Red flags, 希望能把WBS這一頁一些相關聯及主要的資訊（比如顯示欄位：AML Type, Red Flag, Red Flag Reason and Content, Remarks, Goods Code, Merchandise, Vessel Name, flag of vessel, AML_Info_Seq等及客戶CIF，Trade date, Function Code and Name, Transaction amount等）都extract進這一份月報，幫助AML組能更有效地整理資訊及數據。 所需資訊請抓當月的紅旗交易。 下檔之母體條件：可在FAM下載； 出表頻率: 每個月第一天出表 (report to be generated beginning of each month for reporting on data as at end of previous month)。 可跟原有的（每個月）FAM月報一起產出。 例如：抓當月交易起日為20251101~20251130的060010交易其中紅旗交易欄位=Y的客戶清單，提供以上所提之欄位資訊。 另外，由於貿易金融紅旗等相關交易其中包括貿易金融貸款 (Loan)，但現況是目前放款主檔資料僅存在於「WBS主機」- LON_INFO欄位AML_INFO_SEQ而未下檔至HKODS, HOIT AML提取不到貿易金融貸款資料，所以提交提案單及規格書請WBS將相關資料下檔至HKODS，方便HOIT AML提取資料，整合報表。
+
+工時項目說明
+工時項目	工時項目說明	預估時數
+PL	Project Planning & Management	
+0
+SA	System Analysis	
+0
+PR	Programing	
+0
+ST	System Test & QA & Golive	
+0
+MA	Maintenance	
+0
+MG	Management	
+0
+TR	Training	
+0
+GA	General Affairs	
+0
+EV	Evaluate & Research	
+0
+
+
+
+幫我預估一下
