@@ -1,0 +1,86 @@
+1.	需求概述與目的
+因應香港内部稽核之建議，優化香港分行每月HKAML組(FAM)下載與貿易金融相關(Trade Finance)的紅旗月報，以利AML管治及匯報。其中要求之資訊包括觸發紅旗及其關聯細節等相關資訊。
+
+經與HOIT初步討論，因所需紅旗及其關聯細節等資訊只在WBS顯示而非AML PO系統，因而已聯係HOIT AML提取所需香港分行貿易金融資訊產出(月報)報表,以幫助HKAML組能更有效地整理資訊及數據。
+
+也因而參考 HK OP WBS所提供之截圖（之前電郵提供HOIT截圖），主要是Trade Finance (TF) transaction若有“紅旗”/Red flags, 希望能把WBS這一頁一些相關聯及主要的資訊（比如顯示欄位：AML Type, Red Flag, Red Flag Reason and Content, Remarks, Goods Code, Merchandise, Vessel Name, flag of vessel, AML_Info_Seq等及客戶CIF，Trade date, Function Code and Name, Transaction amount等）都extract進這一份月報，幫助AML組能更有效地整理資訊及數據。 
+
+所需資訊請抓當月的紅旗交易。
+下檔之母體條件：可在FAM下載；
+出表頻率: 每個月第一天出表 (report to be generated beginning of each month for reporting on data as at end of previous month)。 可跟原有的（每個月）FAM月報一起產出。 
+
+例如：抓當月交易起日為20251101~20251130的060010交易其中紅旗交易欄位=Y的客戶清單，提供以上所提之欄位資訊。 
+
+另外，由於貿易金融紅旗等相關交易其中包括貿易金融貸款 (Loan)，但現況是目前放款主檔資料僅存在於「WBS主機」- LON_INFO欄位AML_INFO_SEQ而未下檔至HKODS, HOIT AML提取不到貿易金融貸款資料，所以提交提案單及規格書請WBS將相關資料下檔至HKODS，方便HOIT AML提取資料，整合報表。
+
+
+
+4.	業務流程/作業流程 (以流程圖示或文字步驟描述) (  NA )
+說明與本提案相關的業務流程或作業流程, 作為系統分析及設計參考. 
+流程圖順序以「由左至右」、「由上而下」、「右下左上」方式表示
+因所需紅旗及其關聯細節等資訊只在WBS顯示而非AML PO系統，因而聯係HOIT AML提取所需香港分行(Trade Finance)貿易金融資訊(經FAM)產出月報報表,以幫助HKAML組能更有效地整理資訊及數據。
+
+由於貿易金融紅旗等相關交易包括貿易金融貸款 (Loan)，但現況是目前放款主檔資料僅存在於「WBS主機」- LON_INFO欄位AML_INFO_SEQ而未下檔至ODS, HOIT AML提取不到貿易金融貸款資料，所以提交提案單及規格書請WBS將相關資料下檔至ODS，方便HOIT AML提取資料，整合報表。
+
+以上為主要兩大流程。
+
+以上旨在優化香港分行每月HKAML組(FAM)下載與貿易金融相關(Trade Finance)的紅旗月報。
+
+
+5.	需求功能說明
+5.1 需求清單: 如有多項功能需求時填寫：與貿易金融相關(Trade Finance)(TF) transaction若有“紅旗”/Red flags, 希望能把WBS這一頁一些相關聯及主要的資訊都extract進這一份月報。
+由於貿易金融紅旗等相關交易包括貿易金融貸款 (Loan)，但目前 Trade Finance 紅旗交易中，涉及貿易金融貸款 (Loan) 之交易，其 AML_INFO_SEQ 僅存在於 HKWBS (LON_INFO)，未下送至 HKODS，導致 OBODS 產製 AML 報表時無法取得該欄位資料，影響報表完整性。
+本次改善目的
+補齊 AML_INFO_SEQ 於 HKWBS → HKODS → OBODS 之資料流，並於 AML 月報中新增該欄位呈現，以利 AML 組後續資料比對與整合分析。
+
+5.2	入口網站地圖/功能擺放路徑(  NA )
+(如：http://dssweb決策支援系統
+http://intranet --->應用系統  
+http://sfa 銷售管理系統
+http://Discovery-->分析系統與報表
+
+5.3	需求功能之上中下游相關系統 (偕同IT填寫) (  NA )
+	因應該需求可能需要配合驗測之上中下游系統
+有關放款主檔資料上中下游：
+上游系統：HKWBS
+中游系統：HKODS
+下游系統：OBODS
+
+	上述上中下游系統影響評估說明
+本需求涉及跨系統資料串接調整：
+上游系統：HKWBS 
+	需新增並下送 AML_INFO_SEQ 欄位資料至 HKODS。 
+
+中游系統：HKODS
+	新增 AML_INFO_SEQ 欄位；
+	並提供下遊OBODS查詢使用。
+
+下游系統：OBODS
+	自 HKODS 取得AML_INFO_SEQ 資料；
+	於既有AML月報新增欄位呈現；
+	既有報表邏輯維持不變。
+
+屬跨系統欄位新增與報表調整需求。
+
+	案例說明
+當 HKWBS 產生資料時，同步傳送 AML_INFO_SEQ 至 HKODS；OBODS 產製 AML 報表時，向 HKODS 取得該欄位資料並呈現於報表中。  
+
+5.4	需求功能(  NA )
+5.4.1	   需求功能-1
+	業務規則與限制： 
+•	不變動既有紅旗判斷邏輯；
+•	不新增篩選條件；
+•	僅新增欄位呈現。
+
+	處理說明: 
+•	針對當月 Trade Finance 紅旗交易資料；
+•	新增 AML_INFO_SEQ 欄位於報表中顯示；
+•	出表頻率維持每月第一天產出前月底資料，在FAM下載。
+
+	案例說明 
+案例見以上説明。
+
+5.4.2	需求功能-2
+	業務規則與限制
+	處理說明: 如資料來源、運算公式(若有牽涉到匯率，需詳細說明匯率幣別、匯率類別、匯率基準日、以及計算前先執行匯率換算或匯率換算後在進行計算等) 、記帳方式、編碼原則……
+	案例說明 
