@@ -1,0 +1,125 @@
+你這份需求其實很清楚了，整合測試計劃只要抓住「跨系統資料流 + 欄位新增 + 報表驗證」三件事即可。
+你的案例跟範例最大的差異是：
+
+* 你的是 HKWBS → HKODS → OBODS → AML/FAM月報
+* 核心是 AML_INFO_SEQ 欄位新增與紅旗交易報表完整性
+* 不變更既有 AML 紅旗邏輯，只驗證「資料有沒有正確串接與呈現」
+
+所以測試計劃要往「資料流驗證」方向寫，而不是功能操作型測試。
+
+你可以直接改成下面這版 👇
+
+⸻
+
+整合測試計劃
+
+1. 需求概述
+
+因應香港內部稽核對 AML 管治之要求，需優化香港分行 HKAML 組每月 Trade Finance 紅旗交易月報。
+
+本次需求主要針對 Trade Finance 紅旗交易資料新增相關欄位資訊呈現，並補齊貿易金融貸款(Loan)交易之 AML_INFO_SEQ 資料流。
+
+目前 Loan 類交易之 AML_INFO_SEQ 僅存在於 HKWBS(LON_INFO)，未下送至 HKODS，導致 OBODS 產製 AML 月報時無法取得完整資料。
+
+本次整合測試將驗證：
+
+* HKWBS 是否正確下送 AML_INFO_SEQ 至 HKODS
+* HKODS 是否正確提供資料予 OBODS
+* OBODS 是否正確產製 AML 月報
+* FAM 月報是否正確呈現 Trade Finance 紅旗交易相關欄位資訊
+
+⸻
+
+2. 測試項目概述
+
+依據需求規格書內容進行整合測試，確認跨系統資料傳遞與報表產製正確性。
+
+測試項目如下：
+
+* HKWBS Loan 資料 AML_INFO_SEQ 欄位下送檢核
+* HKODS AML_INFO_SEQ 欄位接收與寫入驗證
+* OBODS 取得 AML_INFO_SEQ 資料完整性驗證
+* Trade Finance 紅旗交易資料擷取驗證
+* AML 月報新增欄位顯示驗證
+* FAM 月報下載內容完整性驗證
+* 月報出表日期與資料區間驗證
+* 既有紅旗判斷邏輯不受影響驗證
+
+⸻
+
+3. 測試範圍
+
+本次測試範圍涵蓋以下系統資料流：
+
+HKWBS → HKODS → OBODS → AML/FAM 月報
+
+測試流程如下：
+
+1. 於 HKWBS 建立包含 Trade Finance 紅旗之交易資料
+2. 驗證 HKWBS 是否成功下送 AML_INFO_SEQ 至 HKODS
+3. 驗證 HKODS 是否正確保存 AML_INFO_SEQ 資料
+4. 驗證 OBODS 是否成功取得 AML_INFO_SEQ
+5. 驗證 AML/FAM 月報是否正確產製紅旗交易資料
+6. 驗證報表欄位顯示內容是否完整
+
+驗證欄位包含：
+
+* AML Type
+* Red Flag
+* Red Flag Reason and Content
+* Remarks
+* Goods Code
+* Merchandise
+* Vessel Name
+* Flag of Vessel
+* AML_INFO_SEQ
+* CIF
+* Trade Date
+* Function Code and Name
+* Transaction Amount
+
+⸻
+
+4. 測試時程規劃
+
+測試流程	預計開始時間	預計結束時間
+測試案例撰寫與討論	D	D+3
+測試環境與資料建置	D+4	D+6
+執行整合測試	D+7	D+10
+問題修正與重新驗證	D+10	D+13
+測試報告彙整	D+13	D+15
+
+⸻
+
+5. 測試資料準備方法
+
+測試資料來源：
+
+於 HKWBS 建立 Trade Finance 紅旗交易測試資料，包含：
+
+* 一般 Trade Finance 紅旗交易
+* Loan 類 Trade Finance 紅旗交易
+* 含 AML_INFO_SEQ 之測試資料
+
+測試資料條件：
+
+* Trade Date 落於測試月份區間
+* Red Flag = Y
+* Function Code = 060010
+* 包含完整 Trade Finance 相關欄位資訊
+
+驗證方式：
+
+* 比對 HKWBS、HKODS、OBODS 各系統資料一致性
+* 比對 AML/FAM 月報欄位內容正確性
+* 確認新增欄位 AML_INFO_SEQ 顯示正常
+* 確認既有 AML 報表邏輯不受影響
+
+⸻
+
+你這版已經接近正式 IT 文件語氣了 ✨
+而且有一個重點你有補得很好：
+
+「不變更既有紅旗邏輯，只新增欄位與資料流」
+
+這句在測試文件很重要，因為 IT 最怕 scope 膨脹像資料管線突然長出章魚腳 🐙。
