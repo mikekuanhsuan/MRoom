@@ -1,42 +1,165 @@
-AML_SPEC_lowrisklistgroups_20260325.csv	25	7ede4892df99e22f15940affeb0c0162
-AML_SPEC_OFAC_SPEC_20260325.csv	1884	5314f2d4044a23822e67de089d7906eb
-BRANCH_SK.sql	328	84e3775963e9e6150404f8ba827694e6
-dbo.BatchControl.Table.sql	3	8e6b739874051757ac686294d1790c3e
-dbo.DOC_CUST_LIST.Table.sql	2	351cc0ce84be76ddf4733487a1c2c4e9
-dbo.SAR_Acct_Info.Table.sql	9457	725c26208ea51b065ba4bb8ffcf1a7a3
-dbo.SAR_Case_Main.Table.sql	3407	a13971d4739a36a3cbe29cab82de2711
-dbo.SAR_Case_Trxn_Branch.Table.sql	4555	c9cf211a1b1b3bef79191007bc61e5ba
-dbo.SAR_Case_Trxn_Date_Range.Table.sql	3406	9559cd15382c98319240ab5a88764f49
-dbo.SAR_Conductor_Info.Table.sql	198	eb9e9f70d5a8a86fe0fca9390586be3d
-dbo.SAR_Matched_Scenarios.Table.sql	22420	ded2859523a6ef09c0e4afe9d8b585fe
-dbo.SAR_Suspect_Info.Table.sql	3980	741fdb2985272836c48ed9798c354fca
-dbo.SAR_Trxn_Detail_T1200017.Table.sql	2	351cc0ce84be76ddf4733487a1c2c4e9
-dbo.SAR_Trxn_Detail_T1200162.Table.sql	2	351cc0ce84be76ddf4733487a1c2c4e9
-dbo.SAR_Trxn_Summary.Table.sql	6006	a56eb3f50e38b2d6e9f6722e1fec9493
-dbo.SK_SAR_SuspiciousActivityCharacteristicsDim_TW_20260415.Table.sql	938	d13e29ed747d4bd2fbb48d8dfe0a8ff3
-dbo.SK_SAR_SuspiciousActivityCharacteristicsDim_TW_20260415.Table_fix.sql	939	d2d5996905f6ee8f92a45ee2da8898ba
+# ============================================
+# Input Path（固定寫死）
+# ============================================
+$folderPath = "D:\AML_Source\Source\1141923\2026\test"
 
+# baseline file
+$baselineFile = Join-Path $folderPath "AML_CHECK_SUM.csv"
 
-上面是我csv 複製貼上的
-為什麼failed  要跟我說阿 明明就一樣
+# ============================================
+# Output / Log（執行目錄）
+# ============================================
+$basePath = Get-Location
 
-[2026-05-20 17:04:21] ===== JOB START =====
-[2026-05-20 17:04:21] MISSING IN BASELINE: AML_SPEC_lowrisklistgroups_20260325.csv;25;7ede4892df99e22f15940affeb0c0162
-[2026-05-20 17:04:21] MISSING IN BASELINE: AML_SPEC_OFAC_SPEC_20260325.csv;1884;5314f2d4044a23822e67de089d7906eb
-[2026-05-20 17:04:21] MISSING IN BASELINE: BRANCH_SK.sql;328;84e3775963e9e6150404f8ba827694e6
-[2026-05-20 17:04:21] MISSING IN BASELINE: dbo.BatchControl.Table.sql;3;8e6b739874051757ac686294d1790c3e
-[2026-05-20 17:04:21] MISSING IN BASELINE: dbo.DOC_CUST_LIST.Table.sql;2;351cc0ce84be76ddf4733487a1c2c4e9
-[2026-05-20 17:04:21] MISSING IN BASELINE: dbo.SAR_Acct_Info.Table.sql;9457;725c26208ea51b065ba4bb8ffcf1a7a3
-[2026-05-20 17:04:21] MISSING IN BASELINE: dbo.SAR_Case_Main.Table.sql;3407;a13971d4739a36a3cbe29cab82de2711
-[2026-05-20 17:04:21] MISSING IN BASELINE: dbo.SAR_Case_Trxn_Branch.Table.sql;4555;c9cf211a1b1b3bef79191007bc61e5ba
-[2026-05-20 17:04:21] MISSING IN BASELINE: dbo.SAR_Case_Trxn_Date_Range.Table.sql;3406;9559cd15382c98319240ab5a88764f49
-[2026-05-20 17:04:21] MISSING IN BASELINE: dbo.SAR_Conductor_Info.Table.sql;198;eb9e9f70d5a8a86fe0fca9390586be3d
-[2026-05-20 17:04:22] MISSING IN BASELINE: dbo.SAR_Matched_Scenarios.Table.sql;22420;ded2859523a6ef09c0e4afe9d8b585fe
-[2026-05-20 17:04:22] MISSING IN BASELINE: dbo.SAR_Suspect_Info.Table.sql;3980;741fdb2985272836c48ed9798c354fca
-[2026-05-20 17:04:22] MISSING IN BASELINE: dbo.SAR_Trxn_Detail_T1200017.Table.sql;2;351cc0ce84be76ddf4733487a1c2c4e9
-[2026-05-20 17:04:22] MISSING IN BASELINE: dbo.SAR_Trxn_Detail_T1200162.Table.sql;2;351cc0ce84be76ddf4733487a1c2c4e9
-[2026-05-20 17:04:22] MISSING IN BASELINE: dbo.SAR_Trxn_Summary.Table.sql;6006;a56eb3f50e38b2d6e9f6722e1fec9493
-[2026-05-20 17:04:22] MISSING IN BASELINE: dbo.SK_SAR_SuspiciousActivityCharacteristicsDim_TW_20260415.Table.sql;938;d13e29ed747d4bd2fbb48d8dfe0a8ff3
-[2026-05-20 17:04:22] MISSING IN BASELINE: dbo.SK_SAR_SuspiciousActivityCharacteristicsDim_TW_20260415.Table_fix.sql;939;d2d5996905f6ee8f92a45ee2da8898ba
-[2026-05-20 17:04:22] ===== JOB END =====
-[2026-05-20 17:04:22] RETURN CODE: 1 (FAILED)
+$outputFile = Join-Path $basePath "result.txt"
+$logFile    = Join-Path $basePath "SKcheck.log"
+
+# ============================================
+# 先刪除舊檔
+# ============================================
+if (Test-Path $outputFile) {
+    Remove-Item $outputFile -Force
+}
+
+if (Test-Path $logFile) {
+    Remove-Item $logFile -Force
+}
+
+# ============================================
+# Log function
+# ============================================
+function Write-Log {
+    param([string]$msg)
+
+    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $logFile -Value "[$time] $msg"
+}
+
+# ============================================
+# Start
+# ============================================
+Write-Log "===== JOB START ====="
+Write-Log "Input Path: $folderPath"
+Write-Log "Output File: $outputFile"
+
+# ============================================
+# 檢查資料夾
+# ============================================
+if (!(Test-Path $folderPath)) {
+    Write-Log "ERROR: Input folder not found"
+    Write-Host "INPUT PATH NOT FOUND"
+    exit 1
+}
+
+if (!(Test-Path $baselineFile)) {
+    Write-Log "ERROR: AML_CHECK_SUM.csv not found"
+    Write-Host "BASELINE NOT FOUND"
+    exit 1
+}
+
+# ============================================
+# 讀 baseline
+# ============================================
+$baseline = @{}
+
+Get-Content $baselineFile | ForEach-Object {
+
+    if ($_ -match ";") {
+
+        $c = $_ -split ";"
+
+        if ($c.Count -ge 3) {
+
+            $key = $c[0].Trim().ToLower()
+
+            $baseline[$key] = "$($c[1].Trim());$($c[2].Trim())"
+        }
+    }
+}
+
+# ============================================
+# 取得檔案（CSV + SQL，不分大小寫）
+# ============================================
+$files = Get-ChildItem -Path $folderPath -Include *.csv,*.sql -File -Recurse |
+         Where-Object { $_.Name -ne "AML_CHECK_SUM.csv" } |
+         Sort-Object Name
+
+if ($files.Count -eq 0) {
+    Write-Log "ERROR: No CSV/SQL found"
+    exit 1
+}
+
+# ============================================
+# 處理
+# ============================================
+$resultList = @()
+$hasError = $false
+
+foreach ($file in $files) {
+
+    try {
+
+        # line count
+        $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines
+        if ($lineCount -lt 0) { $lineCount = 0 }
+
+        # MD5
+        $md5Hash = (Get-FileHash $file.FullName -Algorithm MD5).Hash.ToLower()
+
+        # normalize key（避免大小寫問題）
+        $key = $file.Name.Trim().ToLower()
+
+        $result = "$($file.Name);$lineCount;$md5Hash"
+
+        $resultList += $result
+
+        # ====================================
+        # 比對 baseline
+        # ====================================
+        if ($baseline.ContainsKey($key)) {
+
+            $expected = $baseline[$key]
+
+            if ($expected -ne "$lineCount;$md5Hash") {
+
+                Write-Log "MISMATCH: $result | EXPECTED: $expected"
+                $hasError = $true
+            }
+            else {
+                Write-Log "MATCH: $result"
+            }
+
+        } else {
+
+            Write-Log "MISSING IN BASELINE: $result"
+            $hasError = $true
+        }
+
+    }
+    catch {
+
+        Write-Log "FAIL: $($file.FullName) | $($_.Exception.Message)"
+        $hasError = $true
+    }
+}
+
+# ============================================
+# 輸出 result（一次寫入）
+# ============================================
+$resultList | Out-File -FilePath $outputFile -Encoding utf8
+
+# ============================================
+# END
+# ============================================
+Write-Log "===== JOB END ====="
+
+if ($hasError) {
+    Write-Log "RETURN CODE: 1 (FAILED)"
+    Write-Host "FAILED"
+    exit 1
+}
+else {
+    Write-Log "RETURN CODE: 0 (SUCCESS)"
+    Write-Host "SUCCESS"
+    exit 0
+}
