@@ -18,102 +18,109 @@ Get-Content $configPath | ForEach-Object {
 }
 
 # ============================================
-# 取得參數
+# 參數
 # ============================================
-$folderPath   = $config["INPUT_PATH"]
-$outputFolder = $config["OUTPUT_PATH"]
+$folderPath = $config["INPUT_PATH"]
 
 if ([string]::IsNullOrWhiteSpace($folderPath)) {
     Write-Host "INPUT_PATH 未設定"
     exit 1
 }
 
-if ([string]::IsNullOrWhiteSpace($outputFolder)) {
-    Write-Host "OUTPUT_PATH 未設定"
-    exit 1
+# ============================================
+# 執行目錄（output/log 都在這）
+# ============================================
+$basePath = Get-Location
+
+$dateString = Get-Date -Format "yyyyMMdd_HHmmss"
+
+$outputFile = Join-Path $basePath "result_$dateString.txt"
+$logFile    = Join-Path $basePath "SKcheck.log"
+
+# ============================================
+# 清除舊 log
+# ============================================
+if (Test-Path $logFile) {
+    Remove-Item $logFile -Force
 }
 
 # ============================================
-# 檔名（避免覆蓋）
+# Log function
 # ============================================
-$dateString = Get-Date -Format "yyyyMMdd_HHmmss"
-$outputFile = Join-Path $outputFolder "result_$dateString.txt"
+function Write-Log {
+    param([string]$msg)
+
+    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $logFile -Value "[$time] $msg"
+}
 
 # ============================================
-# 檢查路徑
+# Start log
+# ============================================
+Write-Log "===== JOB START ====="
+Write-Log "Input Path: $folderPath"
+Write-Log "Output File: $outputFile"
+
+# ============================================
+# 檢查資料夾
 # ============================================
 if (!(Test-Path $folderPath)) {
-    Write-Host "找不到資料夾：$folderPath"
+    Write-Log "ERROR: 找不到資料夾 $folderPath"
     exit 1
 }
 
-if (!(Test-Path $outputFolder)) {
-    New-Item -ItemType Directory -Path $outputFolder | Out-Null
-}
-
 # ============================================
-# 取得檔案（CSV + SQL）
+# 取得檔案
 # ============================================
 $files = Get-ChildItem -Path $folderPath -Include *.csv,*.sql -Recurse -File |
          Sort-Object Name
 
 if ($files.Count -eq 0) {
-    Write-Host "找不到 CSV / SQL 檔案"
+    Write-Log "ERROR: 找不到 CSV / SQL"
     exit 1
 }
 
 # ============================================
-# 暫存結果
+# 處理結果
 # ============================================
 $resultList = @()
-
 $hasError = $false
 
-# ============================================
-# 處理檔案
-# ============================================
 foreach ($file in $files) {
 
     try {
 
-        # 筆數（含 header / SQL 就是行數）
         $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines
 
-        if ($lineCount -lt 0) {
-            $lineCount = 0
-        }
+        if ($lineCount -lt 0) { $lineCount = 0 }
 
-        # MD5
         $md5 = Get-FileHash $file.FullName -Algorithm MD5
         $md5Hash = $md5.Hash.ToLower()
 
-        # 組結果
         $result = "$($file.Name);$lineCount;$md5Hash"
-
         $resultList += $result
 
-        Write-Host $result
+        Write-Log "OK: $result"
     }
     catch {
-
-        Write-Host "處理失敗：$($file.FullName)"
-        Write-Host $_.Exception.Message
-
+        Write-Log "FAIL: $($file.FullName) | $($_.Exception.Message)"
         $hasError = $true
     }
 }
 
 # ============================================
-# 輸出檔案（一次寫入）
+# 輸出 result
 # ============================================
 $resultList | Out-File -FilePath $outputFile -Encoding utf8
 
 # ============================================
-# 結果
+# END log
 # ============================================
-Write-Host ""
+Write-Log "===== JOB END ====="
+
 Write-Host "完成"
-Write-Host "輸出檔案：$outputFile"
+Write-Host "Result: $outputFile"
+Write-Host "Log: $logFile"
 
 # ============================================
 # Control-M Return Code
@@ -123,13 +130,3 @@ if ($hasError) {
 } else {
     exit 0
 }
-
-
-
-
-
-我想要多一個產出log 紀錄每次執行的執行狀況時間阿等等，然後每次執行的時候先刪除這個Log檔案
-可以不要指定output路徑? 直接是再執行的位置底下產出結果
-
-
-
