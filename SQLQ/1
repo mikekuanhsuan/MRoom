@@ -1,26 +1,24 @@
 # ============================================
-# 讀取 Config
+# Config
 # ============================================
-$configPath = ".\SKcheck_config.txt"
+$configPath = ".\SKcheck_config.ini"
 
 if (!(Test-Path $configPath)) {
-    Write-Host "找不到 SKcheck_config.txt"
+    Write-Host "找不到 config 檔"
     exit 1
 }
 
 $config = @{}
 
 Get-Content $configPath | ForEach-Object {
-
     if ($_ -match "=") {
-
         $key, $value = $_ -split "=", 2
         $config[$key.Trim()] = $value.Trim()
     }
 }
 
 # ============================================
-# 取得設定
+# 取得參數
 # ============================================
 $folderPath   = $config["INPUT_PATH"]
 $outputFolder = $config["OUTPUT_PATH"]
@@ -36,10 +34,9 @@ if ([string]::IsNullOrWhiteSpace($outputFolder)) {
 }
 
 # ============================================
-# 產生輸出檔名
+# 檔名（避免覆蓋）
 # ============================================
 $dateString = Get-Date -Format "yyyyMMdd_HHmmss"
-
 $outputFile = Join-Path $outputFolder "result_$dateString.txt"
 
 # ============================================
@@ -55,12 +52,13 @@ if (!(Test-Path $outputFolder)) {
 }
 
 # ============================================
-# 取得所有 CSV
+# 取得檔案（CSV + SQL）
 # ============================================
-$files = Get-ChildItem -Path $folderPath -Filter *.csv -Recurse | Sort-Object Name
+$files = Get-ChildItem -Path $folderPath -Include *.csv,*.sql -Recurse -File |
+         Sort-Object Name
 
 if ($files.Count -eq 0) {
-    Write-Host "找不到任何 CSV 檔案"
+    Write-Host "找不到 CSV / SQL 檔案"
     exit 1
 }
 
@@ -69,6 +67,8 @@ if ($files.Count -eq 0) {
 # ============================================
 $resultList = @()
 
+$hasError = $false
+
 # ============================================
 # 處理檔案
 # ============================================
@@ -76,21 +76,20 @@ foreach ($file in $files) {
 
     try {
 
-        # 計算筆數（包含 Header）
+        # 筆數（含 header / SQL 就是行數）
         $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines
 
         if ($lineCount -lt 0) {
             $lineCount = 0
         }
 
-        # 計算 MD5
+        # MD5
         $md5 = Get-FileHash $file.FullName -Algorithm MD5
         $md5Hash = $md5.Hash.ToLower()
 
         # 組結果
         $result = "$($file.Name);$lineCount;$md5Hash"
 
-        # 存入陣列
         $resultList += $result
 
         Write-Host $result
@@ -100,21 +99,27 @@ foreach ($file in $files) {
         Write-Host "處理失敗：$($file.FullName)"
         Write-Host $_.Exception.Message
 
-        exit 1
+        $hasError = $true
     }
 }
 
 # ============================================
-# 一次性輸出 TXT
+# 輸出檔案（一次寫入）
 # ============================================
 $resultList | Out-File -FilePath $outputFile -Encoding utf8
 
 # ============================================
-# 完成
+# 結果
 # ============================================
 Write-Host ""
 Write-Host "完成"
 Write-Host "輸出檔案：$outputFile"
 
-# 成功 Return Code
-exit 0
+# ============================================
+# Control-M Return Code
+# ============================================
+if ($hasError) {
+    exit 1
+} else {
+    exit 0
+}
