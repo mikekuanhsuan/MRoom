@@ -1,19 +1,160 @@
-我要寫一隻powershell
+# ===== 讀取 Config =====
+$configPath = ".\config.txt"
+
+$config = @{}
+
+Get-Content $configPath | ForEach-Object {
+
+    # 跳過空白行
+    if ($_ -match "=") {
+
+        $key, $value = $_ -split "=", 2
+        $config[$key.Trim()] = $value.Trim()
+    }
+}
+
+# ===== 取得設定 =====
+$folderPath = $config["INPUT_PATH"]
+$outputFile = $config["OUTPUT_FILE"]
+
+# ===== 檢查路徑 =====
+if (!(Test-Path $folderPath)) {
+    Write-Host "找不到資料夾：$folderPath"
+    exit
+}
+
+# ===== 清除舊檔 =====
+if (Test-Path $outputFile) {
+    Remove-Item $outputFile
+}
+
+# ===== 取得 CSV =====
+$files = Get-ChildItem -Path $folderPath -Filter *.csv | Sort-Object Name
+
+foreach ($file in $files) {
+
+    # ===== 計算筆數 (不含 header) =====
+    $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines - 1
+
+    # 避免負數
+    if ($lineCount -lt 0) {
+        $lineCount = 0
+    }
+
+    # ===== 計算 MD5 =====
+    $md5 = Get-FileHash $file.FullName -Algorithm MD5
+    $md5Hash = $md5.Hash.ToLower()
+
+    # ===== 組結果 =====
+    $result = "$($file.Name);$lineCount;$md5Hash"
+
+    # ===== 寫入 =====
+    Add-Content -Path $outputFile -Value $result
+
+    Write-Host $result
+}
+
+Write-Host ""
+Write-Host "完成"
+Write-Host "輸出檔案：$outputFile"
 
 
-要能去讀取某個資料夾底下的檔案
-可能是.csv 
-然後我要知道他的筆數根md5
-
-然後產出下面這樣的格式txt
-
-AML_Acct.csv;1815079;cef64c9fabbadd5d7ad26ca1fbe165fd
-AML_CUST.csv;6153703;a09942cb17db3012c960d1095ae27848
-AML_LoadTrxn.csv;102078937;9acb5a91be81162fc5211f970b28250c
-AML_NameProperty_Cust.csv;6153703;fb172c5dbc0bac12011fc2edf51aa820
-AML_NameProperty_RP.csv;733119;a4f4b5a202cc5611dd350448183cc21c
-AML_SPEC_lowrisklistgroups.csv;24;7ede4892df99e22f15940affeb0c0162
-AML_SPEC_OFAC_SPEC.csv;1883;5314f2d4044a23822e67de089d7906eb
 
 
-給我code
+INPUT_PATH=C:\AML\CSV
+OUTPUT_FILE=C:\AML\result.txt
+
+
+
+
+
+可以，這樣會比較乾淨，而且之後改路徑不用動主程式 ✨
+
+你可以拆成：
+
+* config.txt
+* check_csv.ps1
+
+⸻
+
+config.txt
+
+INPUT_PATH=C:\AML\CSV
+OUTPUT_FILE=C:\AML\result.txt
+
+⸻
+
+check_csv.ps1
+
+# ===== 讀取 Config =====
+$configPath = ".\config.txt"
+$config = @{}
+Get-Content $configPath | ForEach-Object {
+    # 跳過空白行
+    if ($_ -match "=") {
+        $key, $value = $_ -split "=", 2
+        $config[$key.Trim()] = $value.Trim()
+    }
+}
+# ===== 取得設定 =====
+$folderPath = $config["INPUT_PATH"]
+$outputFile = $config["OUTPUT_FILE"]
+# ===== 檢查路徑 =====
+if (!(Test-Path $folderPath)) {
+    Write-Host "找不到資料夾：$folderPath"
+    exit
+}
+# ===== 清除舊檔 =====
+if (Test-Path $outputFile) {
+    Remove-Item $outputFile
+}
+# ===== 取得 CSV =====
+$files = Get-ChildItem -Path $folderPath -Filter *.csv | Sort-Object Name
+foreach ($file in $files) {
+    # ===== 計算筆數 (不含 header) =====
+    $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines - 1
+    # 避免負數
+    if ($lineCount -lt 0) {
+        $lineCount = 0
+    }
+    # ===== 計算 MD5 =====
+    $md5 = Get-FileHash $file.FullName -Algorithm MD5
+    $md5Hash = $md5.Hash.ToLower()
+    # ===== 組結果 =====
+    $result = "$($file.Name);$lineCount;$md5Hash"
+    # ===== 寫入 =====
+    Add-Content -Path $outputFile -Value $result
+    Write-Host $result
+}
+Write-Host ""
+Write-Host "完成"
+Write-Host "輸出檔案：$outputFile"
+
+⸻
+
+資料夾看起來會像這樣 🌲
+
+C:\AML\
+│
+├─ config.txt
+├─ check_csv.ps1
+├─ CSV\
+│   ├─ AML_Acct.csv
+│   ├─ AML_CUST.csv
+│   └─ ...
+└─ result.txt
+
+執行：
+
+.\check_csv.ps1
+
+如果你願意，我還可以幫你升級成：
+
+* .ini 格式
+* JSON config
+* log 機制
+* 錯誤檔案輸出
+* 超大檔 streaming 計算版本
+* 多執行緒版本
+* 自動寄 mail 版本 📬
+* WinSCP/SFTP 上傳版 🚀
