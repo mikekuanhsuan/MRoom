@@ -1,1 +1,256 @@
-https://tech.udn.com/tech/story/123154/9489790
+Option Explicit
+
+' 主程序：執行此巨集以產生所有 SQL
+Public Sub GenerateCombinedSQL()
+    ' --- 設定區 ---
+    Const RISK_LEVEL As String = "M" ' 風險等級: "L" (低), "M" (中), "H" (高)
+    
+    ' --- 工作表名稱設定 ---
+    Const RISK_DATA_SHEET As String = "中風險"
+    Const BRANCH_LIST_SHEET As String = "列標籤"
+    Const NEXT_CHECK_DATE_SHEET As String = "下次審查日" ' 下次審查日對照表的分頁名稱
+    Const OUTPUT_SHEET As String = "SQL_Output"
+    
+    Dim wb As Workbook
+    Set wb = ThisWorkbook
+    
+    Dim wsRisk As Worksheet, wsBranch As Worksheet, wsNextCheck As Worksheet, wsOutput As Worksheet
+    
+    ' 檢查工作表是否存在
+    On Error Resume Next
+    Set wsRisk = wb.Sheets(RISK_DATA_SHEET)
+    If wsRisk Is Nothing Then
+        MsgBox "找不到名為 '" & RISK_DATA_SHEET & "' 的工作表。", vbCritical, "錯誤": Exit Sub
+    End If
+    
+    Set wsBranch = wb.Sheets(BRANCH_LIST_SHEET)
+    If wsBranch Is Nothing Then
+        MsgBox "找不到名為 '" & BRANCH_LIST_SHEET & "' 的工作表。", vbCritical, "錯誤": Exit Sub
+    End If
+    
+    Set wsNextCheck = wb.Sheets(NEXT_CHECK_DATE_SHEET)
+    If wsNextCheck Is Nothing Then
+        MsgBox "找不到名為 '" & NEXT_CHECK_DATE_SHEET & "' 的工作表。", vbCritical, "錯誤": Exit Sub
+    End If
+    On Error GoTo 0
+
+    ' --- 步驟 0: 讀取 "下次審查日" 對照表 ---
+    Dim nextCheckMap As Object
+    Set nextCheckMap = CreateObject("Scripting.Dictionary")
+    
+    Dim lastMapRow As Long
+    lastMapRow = wsNextCheck.Cells(wsNextCheck.Rows.Count, "A").End(xlUp).Row
+    Dim i As Long
+    For i = 1 To lastMapRow
+        Dim key As String, val As String
+        val = GetNumericPart(CStr(wsNextCheck.Cells(i, 1).Value)) ' A欄: 下次審查日
+        key = GetNumericPart(CStr(wsNextCheck.Cells(i, 2).Value)) ' B欄: 需求月份
+        If key <> "" And val <> "" Then
+            nextCheckMap(key) = val
+        End If
+    Next i
+    
+    If nextCheckMap.Count = 0 Then
+        MsgBox "在 '" & NEXT_CHECK_DATE_SHEET & "' 工作表中找不到任何有效的日期對照資料。", vbExclamation, "提示": Exit Sub
+    End If
+
+    ' --- 步驟 1: 產生 IN 子句 ---
+    Dim branchInClause As String
+    branchInClause = GetBranchInClause(wsBranch)
+    If branchInClause = "" Then
+        MsgBox "在 '" & BRANCH_LIST_SHEET & "' 工作表中找不到任何分行資料。", vbExclamation, "提示": Exit Sub
+    End If
+
+    ' --- 步驟 2 & 3: 讀取風險資料、分組並產生完整 SQL ---
+    Dim finalSql String
+    finalSql = GenerateSqlFromRiskData(wsRisk, branchInClause, RISK_LEVEL, nextCheckMap)
+    
+    If finalSql = "" Then
+        MsgBox "在 '" & RISK_DATA_SHEET & "' 工作表中找不到可處理的資料，或處理過程中發生錯誤。", vbExclamation, "提示": Exit Sub
+    End If
+    
+    ' --- 步驟 4: 輸出結果到新的工作表 ---
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    On Error Resume Next
+    wb.Sheets(OUTPUT_SHEET).Delete
+    On Error GoTo 0
+    Application.DisplayAlerts = True
+    
+    Set wsOutput = wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+    wsOutput.Name = OUTPUT_SHEET
+    wsOutput.Cells(1, 1).Value = "產生的 SQL 腳本"
+    
+    Dim lines() As String
+    lines = Split(finalSql, vbCrLf)
+    
+    For i = 0 To UBound(lines)
+        wsOutput.Cells(i + 2, 1).Value = lines(i)
+    Next i
+    
+    wsOutput.Columns("A").Font.Name = "Consolas"
+    wsOutput.Columns("A").EntireColumn.AutoFit
+    Application.ScreenUpdating = True
+    
+    MsgBox "SQL 產生完成！結果已輸出到 '" & OUTPUT_SHEET & "' 工作表中。", vbInformation, "完成"
+End Sub
+
+' 函數：從 "列標籤" 工作表產生 SQL IN 子句
+Private Function GetBranchInClause(ws As Worksheet) As String
+    Dim lastRow As Long, dataRange As Range, cell As Range, result As String, counter As Integer
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    If lastRow < 1 Then Exit Function
+    Set dataRange = ws.Range("A1:A" & lastRow)
+    
+    For Each cell In dataRange.Cells
+        If Trim(cell.Value) <> "" Then
+            result = result & "'" & Replace(Trim(cell.Value), "_", "", 1, 1) & "', "
+            counter = counter + 1
+            If counter Mod 10 = 0 Then result = result & vbCrLf
+        End If
+    Next cell
+    
+    If Len(result) > 2 Then GetBranchInClause = Left(result, Len(result) - 2)
+End Function
+
+' 函數：從 "中風險" 工作表產生完整的 SQL 腳本 (安全換行與精確累加版)
+Private Function GenerateSqlFromRiskData(ws As Worksheet, branchInClause As String, riskLevel As String, ByVal nextCheckMap As Object) As String
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    If lastRow <= 1 Then Exit Function
+    
+    Dim dataRange As Range
+    Set dataRange = ws.Range("A2:D" & lastRow) ' 讀取 A 到 D 欄
+    
+    Dim groups As Object
+    Set groups = CreateObject("Scripting.Dictionary")
+    
+    Dim r As Long
+    For r = 1 To dataRange.Rows.Count
+        Dim supplyMonth As String, demandMonth As String, branchLabel As String
+        Dim allocation As Double
+        
+        demandMonth = GetNumericPart(CStr(dataRange.Cells(r, 1).Value))
+        supplyMonth = GetNumericPart(CStr(dataRange.Cells(r, 2).Value))
+        branchLabel = Replace(Trim(CStr(dataRange.Cells(r, 4).Value)), "_", "", 1, 1)
+        
+        If IsNumeric(dataRange.Cells(r, 3).Value) Then
+            allocation = CDbl(dataRange.Cells(r, 3).Value)
+        Else
+            allocation = 0
+        End If
+        
+        ' 確保資料有效才進行分組
+        If supplyMonth <> "" And demandMonth <> "" And branchLabel <> "" Then
+            ' 組合鍵值，例如 "202706_202607"
+            Dim groupKey As String
+            groupKey = supplyMonth & "_" & demandMonth
+            
+            If Not groups.Exists(groupKey) Then
+                Set groups(groupKey) = CreateObject("Scripting.Dictionary")
+            End If
+            
+            ' 如果同一個 供給_需求 月份群組內，該分行重複出現，則進行數據累加 (確保 CNT 數量正確)
+            If groups(groupKey).Exists(branchLabel) Then
+                groups(groupKey)(branchLabel) = groups(groupKey)(branchLabel) + allocation
+            Else
+                groups(groupKey)(branchLabel) = allocation
+            End If
+        End If
+    Next r
+    
+    ' --- 組合 SQL 字串 ---
+    Dim finalSqlBuilder As String, groupKeyVariant As Variant, branchLabelVariant As Variant
+    
+    Dim riskDesc As String
+    Select Case riskLevel
+        Case "H": riskDesc = "高風險"
+        Case "M": riskDesc = "中風險"
+        Case "L": riskDesc = "低風險"
+        Case Else: riskDesc = "未知風險"
+    End Select
+    
+    For Each groupKeyVariant In groups.Keys
+        Dim parts() As String
+        parts = Split(groupKeyVariant, "_")
+        Dim supply As String, demand As String, nextCheck As String
+        supply = parts(0)
+        demand = parts(1)
+        
+        ' 用 demand 去對照表中查找 nextCheck
+        If nextCheckMap.Exists(demand) Then
+            nextCheck = nextCheckMap(demand)
+        Else
+            nextCheck = "YYYYMMDD_NotFound"
+        End If
+        
+        ' 使用 ArrayList 來安全搜集 WHERE 條件，完全避免字串裁切損毀的問題
+        Dim condList As Object
+        Set condList = CreateObject("System.Collections.ArrayList")
+        
+        Dim branchConditions As Object
+        Set branchConditions = groups(groupKeyVariant)
+        
+        For Each branchLabelVariant In branchConditions.Keys
+            condList.Add "BRNCH_NBR = '" & branchLabelVariant & "' AND CNT <= " & branchConditions(branchLabelVariant)
+        Next branchLabelVariant
+        
+        ' 使用 " OR" 搭配換行符串接陣列項目
+        Dim whereConditions As String
+        whereConditions = Join(condList.ToArray(), " OR" & vbCrLf)
+        
+        Dim sqlTemplate As String
+        sqlTemplate = "-- =============================================" & vbCrLf
+        sqlTemplate = sqlTemplate & "-- 集中處理 - " & riskDesc & "客戶 (" & supply & " 供給 → " & demand & " 需求)" & vbCrLf
+        sqlTemplate = sqlTemplate & "-- =============================================" & vbCrLf
+        sqlTemplate = sqlTemplate & "INSERT INTO @CustData" & vbCrLf
+        sqlTemplate = sqlTemplate & "SELECT CustomerNo, '" & nextCheck & "'" & vbCrLf
+        sqlTemplate = sqlTemplate & "FROM (" & vbCrLf
+        sqlTemplate = sqlTemplate & "    SELECT " & vbCrLf
+        sqlTemplate = sqlTemplate & "        A.CustomerNo," & vbCrLf
+        sqlTemplate = sqlTemplate & "        D.BRNCH_NBR," & vbCrLf
+        sqlTemplate = sqlTemplate & "        DENSE_RANK() OVER (PARTITION BY D.BRNCH_NBR ORDER BY A.CIF_KEY) AS CNT" & vbCrLf
+        sqlTemplate = sqlTemplate & "    FROM (" & vbCrLf
+        sqlTemplate = sqlTemplate & "        SELECT CIF_KEY, CustomerNo " & vbCrLf
+        sqlTemplate = sqlTemplate & "        FROM BSADBTW..BSA_SUB_CUST_FACT WITH (NOLOCK)" & vbCrLf
+        sqlTemplate = sqlTemplate & "        WHERE HIGHRISK = '" & riskLevel & "'" & vbCrLf
+        sqlTemplate = sqlTemplate & "    ) A" & vbCrLf
+        sqlTemplate = sqlTemplate & "" & vbCrLf
+        sqlTemplate = sqlTemplate & "    INNER JOIN BSADBTW..PB_CUSTOMER_FACT D WITH (NOLOCK)" & vbCrLf
+        sqlTemplate = sqlTemplate & "        ON A.CIF_KEY = D.CIF_KEY " & vbCrLf
+        sqlTemplate = sqlTemplate & "    AND D.BRNCH_NBR IN (" & branchInClause & ")" & vbCrLf
+        sqlTemplate = sqlTemplate & "    AND D.RecordStatus = 'O'" & vbCrLf
+        sqlTemplate = sqlTemplate & "    AND D.Customer_Segment <> 'NCR'" & vbCrLf
+        sqlTemplate = sqlTemplate & "" & vbCrLf
+        sqlTemplate = sqlTemplate & "    INNER JOIN BSADBTW..EDD_ReviewSchedule B WITH (NOLOCK)" & vbCrLf
+        sqlTemplate = sqlTemplate & "        ON A.CIF_KEY = B.CIFKey " & vbCrLf
+        sqlTemplate = sqlTemplate & "    AND B.Status = 'P'" & vbCrLf
+        sqlTemplate = sqlTemplate & "    AND B.ReviewDt >= '" & supply & "01 00:00:00.000'" & vbCrLf
+        sqlTemplate = sqlTemplate & "    AND B.ReviewDt <= '" & supply & Day(DateSerial(Left(supply, 4), Right(supply, 2) + 1, 0)) & " 23:59:59.999'" & vbCrLf
+        sqlTemplate = sqlTemplate & "" & vbCrLf
+        sqlTemplate = sqlTemplate & "    LEFT JOIN (" & vbCrLf
+        sqlTemplate = sqlTemplate & "        SELECT CIF_KEY " & vbCrLf
+        sqlTemplate = sqlTemplate & "        FROM BSADBTW..HRS_CUST_RISK_MGMT WITH (NOLOCK)" & vbCrLf
+        sqlTemplate = sqlTemplate & "        WHERE STATUS <> '3'" & vbCrLf
+        sqlTemplate = sqlTemplate & "    ) C ON A.CIF_KEY = C.CIF_KEY" & vbCrLf
+        sqlTemplate = sqlTemplate & "" & vbCrLf
+        sqlTemplate = sqlTemplate & "    WHERE C.CIF_KEY IS NULL" & vbCrLf
+        sqlTemplate = sqlTemplate & ") T" & vbCrLf
+        sqlTemplate = sqlTemplate & "" & vbCrLf
+        sqlTemplate = sqlTemplate & "WHERE " & vbCrLf
+        sqlTemplate = sqlTemplate & whereConditions & vbCrLf
+            
+        finalSqlBuilder = finalSqlBuilder & sqlTemplate & vbCrLf
+    Next groupKeyVariant
+    
+    GenerateSqlFromRiskData = finalSqlBuilder
+End Function
+
+' 輔助函數：從字串中提取數字部分
+Private Function GetNumericPart(text As String) As String
+    Dim regEx As Object
+    Set regEx = CreateObject("VBScript.RegExp")
+    regEx.Pattern = "\d+"
+    regEx.Global = False
+    If regEx.Test(text) Then GetNumericPart = regEx.Execute(text)(0) Else GetNumericPart = ""
+End Function
