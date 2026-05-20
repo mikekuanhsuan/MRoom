@@ -1,10 +1,10 @@
 # ============================================
 # 讀取 Config
 # ============================================
-$configPath = ".\config.txt"
+$configPath = ".\SKcheck_config.txt"
 # 檢查 config 是否存在
 if (!(Test-Path $configPath)) {
-    Write-Host "找不到 config.txt"
+    Write-Host "找不到 SKcheck_config.txt"
     exit
 }
 $config = @{}
@@ -96,22 +96,12 @@ Write-Host ""
 Write-Host "完成"
 Write-Host "輸出檔案：$outputFile"
 
-config.txt：
 
-INPUT_PATH=D:\AML_Source\Source\1141923\2026\test
-OUTPUT_PATH=D:\AML_Source\Source\1141923\2026\test
 
-執行：
 
-.\check_csv.ps1
 
-輸出：
 
-AML_Acct.csv;1815079;cef64c9fabbadd5d7ad26ca1fbe165fd
-AML_CUST.csv;6153703;a09942cb17db3012c960d1095ae27848
+我可不可以讓他整個跑完才出結果的txt 因為 我可能有10個csv 我只想把他寫在同一個txt
 
-最後會自動產生：
-
-result_20260520_153501.txt
-
-像一台凌晨自動巡邏的 AML 小機器人 🤖📦
+然後我整隻執行完想要return 1  
+因為我之後可能會用control M 執行
