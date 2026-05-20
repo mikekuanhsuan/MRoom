@@ -1,5 +1,103 @@
+# ===== 讀取 Config =====
+$configPath = ".\config.txt"
+
+$config = @{}
+
+Get-Content $configPath | ForEach-Object {
+
+    # 跳過空白行
+    if ($_ -match "=") {
+
+        $key, $value = $_ -split "=", 2
+        $config[$key.Trim()] = $value.Trim()
+    }
+}
+
+# ===== 取得設定 =====
+$folderPath = $config["INPUT_PATH"]
 $outputFolder = $config["OUTPUT_PATH"]
 
 $dateString = Get-Date -Format "yyyyMMdd"
 
 $outputFile = Join-Path $outputFolder "result_$dateString.txt"
+
+# ===== 檢查路徑 =====
+if (!(Test-Path $folderPath)) {
+    Write-Host "找不到資料夾：$folderPath"
+    exit
+}
+
+# ===== 清除舊檔 =====
+if (Test-Path $outputFile) {
+    Remove-Item $outputFile
+}
+
+# ===== 取得 CSV =====
+$files = Get-ChildItem -Path $folderPath -Filter *.csv | Sort-Object Name
+
+foreach ($file in $files) {
+
+    # ===== 計算筆數 (不含 header) =====
+    $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines
+
+    # 避免負數
+    if ($lineCount -lt 0) {
+        $lineCount = 0
+    }
+
+    # ===== 計算 MD5 =====
+    $md5 = Get-FileHash $file.FullName -Algorithm MD5
+    $md5Hash = $md5.Hash.ToLower()
+
+    # ===== 組結果 =====
+    $result = "$($file.Name);$lineCount;$md5Hash"
+
+    # ===== 寫入 =====
+    Add-Content -Path $outputFile -Value $result
+
+    Write-Host $result
+}
+
+Write-Host ""
+Write-Host "完成"
+Write-Host "輸出檔案：$outputFile"
+
+
+  有問題
+
+  輸出檔案：
+PS D:\AML_Source\Source\1141923\2026\test> .\check_csv.ps1
+Join-Path : 無法將引數繫結到 'Path' 參數，因為它是 Null。
+位於 D:\AML_Source\Source\1141923\2026\test\check_csv.ps1:22 字元:25
++ $outputFile = Join-Path $outputFolder "result_$dateString.txt"
++                         ~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidData: (:) [Join-Path]，ParameterBindingValidationException
+    + FullyQualifiedErrorId : ParameterArgumentValidationErrorNullNotAllowed,Microsoft.PowerShell.Commands.JoinPathCom
+   mand
+
+Test-Path : 無法將引數繫結到 'Path' 參數，因為它是 Null。
+位於 D:\AML_Source\Source\1141923\2026\test\check_csv.ps1:31 字元:15
++ if (Test-Path $outputFile) {
++               ~~~~~~~~~~~
+    + CategoryInfo          : InvalidData: (:) [Test-Path]，ParameterBindingValidationException
+    + FullyQualifiedErrorId : ParameterArgumentValidationErrorNullNotAllowed,Microsoft.PowerShell.Commands.TestPathCom
+   mand
+
+Add-Content : 無法將引數繫結到 'Path' 參數，因為它是 Null。
+位於 D:\AML_Source\Source\1141923\2026\test\check_csv.ps1:56 字元:23
++     Add-Content -Path $outputFile -Value $result
++                       ~~~~~~~~~~~
+    + CategoryInfo          : InvalidData: (:) [Add-Content]，ParameterBindingValidationException
+    + FullyQualifiedErrorId : ParameterArgumentValidationErrorNullNotAllowed,Microsoft.PowerShell.Commands.AddContentC
+   ommand
+
+AML_SPEC_OFAC_SPEC_20260325.csv;1884;5314f2d4044a23822e67de089d7906eb
+
+完成
+輸出檔案：
+PS D:\AML_Source\Source\1141923\2026\test>
+
+
+我的config
+INPUT_PATH=D:\AML_Source\Source\1141923\2026\test
+OUTPUT_FILE=D:\AML_Source\Source\1141923\2026\test
