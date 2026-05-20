@@ -1,9 +1,10 @@
 SELECT 
     v.name AS view_name,
-    o2.name AS base_table
+    o.name AS table_name
 FROM sys.views v
 JOIN sys.sql_expression_dependencies d
     ON v.object_id = d.referencing_id
-JOIN sys.objects o2
-    ON d.referenced_id = o2.object_id
-WHERE v.name = '你的View名稱';
+JOIN sys.objects o
+    ON d.referenced_id = o.object_id
+WHERE v.name = '你的View名稱'
+ORDER BY table_name;
