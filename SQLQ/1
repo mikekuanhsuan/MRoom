@@ -1,122 +1,117 @@
--- 如果臨時表已存在，則先刪除
-IF OBJECT_ID('tempdb..#Raw') IS NOT NULL DROP TABLE #Raw;
-IF OBJECT_ID('tempdb..#Base') IS NOT NULL DROP TABLE #Base;
+# ============================================
+# 讀取 Config
+# ============================================
+$configPath = ".\config.txt"
+# 檢查 config 是否存在
+if (!(Test-Path $configPath)) {
+    Write-Host "找不到 config.txt"
+    exit
+}
+$config = @{}
+Get-Content $configPath | ForEach-Object {
+    # 跳過空白行
+    if ($_ -match "=") {
+        $key, $value = $_ -split "=", 2
+        $config[$key.Trim()] = $value.Trim()
+    }
+}
+# ============================================
+# 取得設定
+# ============================================
+$folderPath  = $config["INPUT_PATH"]
+$outputFolder = $config["OUTPUT_PATH"]
+# 檢查設定
+if ([string]::IsNullOrWhiteSpace($folderPath)) {
+    Write-Host "INPUT_PATH 未設定"
+    exit
+}
+if ([string]::IsNullOrWhiteSpace($outputFolder)) {
+    Write-Host "OUTPUT_PATH 未設定"
+    exit
+}
+# ============================================
+# 產生輸出檔名
+# ============================================
+$dateString = Get-Date -Format "yyyyMMdd_HHmmss"
+$outputFile = Join-Path $outputFolder "result_$dateString.txt"
+# ============================================
+# 檢查來源路徑
+# ============================================
+if (!(Test-Path $folderPath)) {
+    Write-Host "找不到資料夾：$folderPath"
+    exit
+}
+# ============================================
+# 建立輸出資料夾
+# ============================================
+if (!(Test-Path $outputFolder)) {
+    New-Item -ItemType Directory -Path $outputFolder | Out-Null
+}
+# ============================================
+# 取得所有 CSV（包含子資料夾）
+# ============================================
+$files = Get-ChildItem -Path $folderPath -Filter *.csv -Recurse | Sort-Object Name
+# 沒有檔案
+if ($files.Count -eq 0) {
+    Write-Host "找不到任何 CSV 檔案"
+    exit
+}
+# ============================================
+# 處理檔案
+# ============================================
+foreach ($file in $files) {
+    try {
+        # ====================================
+        # 計算筆數（包含 Header）
+        # ====================================
+        $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines
+        if ($lineCount -lt 0) {
+            $lineCount = 0
+        }
+        # ====================================
+        # 計算 MD5
+        # ====================================
+        $md5 = Get-FileHash $file.FullName -Algorithm MD5
+        $md5Hash = $md5.Hash.ToLower()
+        # ====================================
+        # 組結果
+        # ====================================
+        $result = "$($file.Name);$lineCount;$md5Hash"
+        # ====================================
+        # 寫入 TXT
+        # ====================================
+        Add-Content -Path $outputFile -Value $result -Encoding UTF8
+        # 顯示結果
+        Write-Host $result
+    }
+    catch {
+        Write-Host "處理失敗：$($file.FullName)"
+        Write-Host $_.Exception.Message
+    }
+}
+# ============================================
+# 完成
+# ============================================
+Write-Host ""
+Write-Host "完成"
+Write-Host "輸出檔案：$outputFile"
 
--- 1. 建立 Raw
-CREATE TABLE #Raw (
-    月份 VARCHAR(20),
-    _0001 FLOAT,
-    _0002 FLOAT
-);
+config.txt：
 
--- ⚠️ 這裡我先簡化欄位示範（你實際可放全部欄位）
--- 只要 UNPIVOT 那段對應即可
+INPUT_PATH=D:\AML_Source\Source\1141923\2026\test
+OUTPUT_PATH=D:\AML_Source\Source\1141923\2026\test
 
-INSERT INTO #Raw VALUES
-('202607(新增)', 88, 30),
-('202608(新增)', 158, 53),
-('202609(新增)', 116, 50),
-('202610(新增)', 112, 30),
-('202611(新增)', 133, 78),
-('202612(新增)', 114, 55),
-('202701(新增)', 124, 69),
-('202702(新增)', 86, 69),
-('202703(新增)', 71, 66),
-('202704(新增)', 70, 64),
-('202705(新增)', 63, 55),
+執行：
 
-('202706(新增)', -92, -61),
-('202707(新增)', -661, -558),
-('202708(新增)', -191, 0),
-('202709(新增)', -112, 0),
-('202710(新增)', -79, 0);
+.\check_csv.ps1
 
----------------------------------------------------
--- 2. UNPIVOT
----------------------------------------------------
-SELECT
-    月份,
-    col,
-    CAST(val AS DECIMAL(18,4)) AS val
-INTO #Base
-FROM #Raw
-UNPIVOT (
-    val FOR col IN (_0001, _0002)
-) u;
+輸出：
 
----------------------------------------------------
--- 3. 分需求 / 供給 + 排序
----------------------------------------------------
-WITH CTE AS (
-    SELECT *,
-        ROW_NUMBER() OVER (PARTITION BY col ORDER BY 月份) AS rn
-    FROM #Base
-),
+AML_Acct.csv;1815079;cef64c9fabbadd5d7ad26ca1fbe165fd
+AML_CUST.csv;6153703;a09942cb17db3012c960d1095ae27848
 
-Demand AS (
-    SELECT 
-        col,
-        月份 AS DemandMonth,
-        val AS DemandQty,
-        rn,
-        SUM(val) OVER (PARTITION BY col ORDER BY rn) AS CumDemand
-    FROM CTE
-    WHERE val > 0
-),
+最後會自動產生：
 
-Supply AS (
-    SELECT 
-        col,
-        月份 AS SupplyMonth,
-        ABS(val) AS SupplyQty,
-        rn,
-        SUM(ABS(val)) OVER (PARTITION BY col ORDER BY rn) AS CumSupply
-    FROM CTE
-    WHERE val < 0
-),
+result_20260520_153501.txt
 
----------------------------------------------------
--- 4. 區間交集（核心）
----------------------------------------------------
-MatchTable AS (
-    SELECT 
-        d.col,
-        d.DemandMonth,
-        s.SupplyMonth,
-
-        CASE 
-            WHEN 
-                (CASE WHEN d.CumDemand < s.CumSupply THEN d.CumDemand ELSE s.CumSupply END)
-                -
-                (CASE 
-                    WHEN (d.CumDemand - d.DemandQty) > (s.CumSupply - s.SupplyQty) 
-                    THEN (d.CumDemand - d.DemandQty)
-                    ELSE (s.CumSupply - s.SupplyQty)
-                 END) > 0
-            THEN 
-                (CASE WHEN d.CumDemand < s.CumSupply THEN d.CumDemand ELSE s.CumSupply END)
-                -
-                (CASE 
-                    WHEN (d.CumDemand - d.DemandQty) > (s.CumSupply - s.SupplyQty) 
-                    THEN (d.CumDemand - d.DemandQty)
-                    ELSE (s.CumSupply - s.SupplyQty)
-                 END)
-            ELSE 0
-        END AS AllocQty
-
-    FROM Demand d
-    JOIN Supply s
-        ON d.col = s.col
-)
-
----------------------------------------------------
--- 5. 最終結果
----------------------------------------------------
-SELECT 
-    DemandMonth AS 需求月份,
-    SupplyMonth AS 供給月份,
-    AllocQty AS 分配量,
-    col AS 列標籤
-FROM MatchTable
-WHERE AllocQty > 0
-ORDER BY col, DemandMonth, SupplyMonth;
+像一台凌晨自動巡邏的 AML 小機器人 🤖📦
