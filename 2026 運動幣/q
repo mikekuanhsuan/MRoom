@@ -1,6 +1,19 @@
-  ' --- 步驟 2 & 3: 讀取風險資料、分組並產生完整 SQL ---
-    Dim finalSql String
-    finalSql = GenerateSqlFromRiskData(wsRisk, branchInClause, RISK_LEVEL, nextCheckMap)
-    
+我要寫一隻powershell
 
-這邊編譯發生錯誤
+
+要能去讀取某個資料夾底下的檔案
+可能是.csv 
+然後我要知道他的筆數根md5
+
+然後產出下面這樣的格式txt
+
+AML_Acct.csv;1815079;cef64c9fabbadd5d7ad26ca1fbe165fd
+AML_CUST.csv;6153703;a09942cb17db3012c960d1095ae27848
+AML_LoadTrxn.csv;102078937;9acb5a91be81162fc5211f970b28250c
+AML_NameProperty_Cust.csv;6153703;fb172c5dbc0bac12011fc2edf51aa820
+AML_NameProperty_RP.csv;733119;a4f4b5a202cc5611dd350448183cc21c
+AML_SPEC_lowrisklistgroups.csv;24;7ede4892df99e22f15940affeb0c0162
+AML_SPEC_OFAC_SPEC.csv;1883;5314f2d4044a23822e67de089d7906eb
+
+
+給我code
