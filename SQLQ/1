@@ -2,93 +2,113 @@
 # 讀取 Config
 # ============================================
 $configPath = ".\SKcheck_config.txt"
-# 檢查 config 是否存在
+
 if (!(Test-Path $configPath)) {
     Write-Host "找不到 SKcheck_config.txt"
-    exit
+    exit 1
 }
+
 $config = @{}
+
 Get-Content $configPath | ForEach-Object {
-    # 跳過空白行
+
     if ($_ -match "=") {
+
         $key, $value = $_ -split "=", 2
         $config[$key.Trim()] = $value.Trim()
     }
 }
+
 # ============================================
 # 取得設定
 # ============================================
-$folderPath  = $config["INPUT_PATH"]
+$folderPath   = $config["INPUT_PATH"]
 $outputFolder = $config["OUTPUT_PATH"]
-# 檢查設定
+
 if ([string]::IsNullOrWhiteSpace($folderPath)) {
     Write-Host "INPUT_PATH 未設定"
-    exit
+    exit 1
 }
+
 if ([string]::IsNullOrWhiteSpace($outputFolder)) {
     Write-Host "OUTPUT_PATH 未設定"
-    exit
+    exit 1
 }
+
 # ============================================
 # 產生輸出檔名
 # ============================================
 $dateString = Get-Date -Format "yyyyMMdd_HHmmss"
+
 $outputFile = Join-Path $outputFolder "result_$dateString.txt"
+
 # ============================================
-# 檢查來源路徑
+# 檢查路徑
 # ============================================
 if (!(Test-Path $folderPath)) {
     Write-Host "找不到資料夾：$folderPath"
-    exit
+    exit 1
 }
-# ============================================
-# 建立輸出資料夾
-# ============================================
+
 if (!(Test-Path $outputFolder)) {
     New-Item -ItemType Directory -Path $outputFolder | Out-Null
 }
+
 # ============================================
-# 取得所有 CSV（包含子資料夾）
+# 取得所有 CSV
 # ============================================
 $files = Get-ChildItem -Path $folderPath -Filter *.csv -Recurse | Sort-Object Name
-# 沒有檔案
+
 if ($files.Count -eq 0) {
     Write-Host "找不到任何 CSV 檔案"
-    exit
+    exit 1
 }
+
+# ============================================
+# 暫存結果
+# ============================================
+$resultList = @()
+
 # ============================================
 # 處理檔案
 # ============================================
 foreach ($file in $files) {
+
     try {
-        # ====================================
+
         # 計算筆數（包含 Header）
-        # ====================================
         $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines
+
         if ($lineCount -lt 0) {
             $lineCount = 0
         }
-        # ====================================
+
         # 計算 MD5
-        # ====================================
         $md5 = Get-FileHash $file.FullName -Algorithm MD5
         $md5Hash = $md5.Hash.ToLower()
-        # ====================================
+
         # 組結果
-        # ====================================
         $result = "$($file.Name);$lineCount;$md5Hash"
-        # ====================================
-        # 寫入 TXT
-        # ====================================
-        Add-Content -Path $outputFile -Value $result -Encoding UTF8
-        # 顯示結果
+
+        # 存入陣列
+        $resultList += $result
+
         Write-Host $result
     }
     catch {
+
         Write-Host "處理失敗：$($file.FullName)"
         Write-Host $_.Exception.Message
+
+        exit 1
     }
 }
+
+# ============================================
+# 一次性輸出 TXT
+# ============================================
+$resultList | Out-File -FilePath $outputFile -Encoding utf8
+
 # ============================================
 # 完成
 # ============================================
@@ -96,12 +116,5 @@ Write-Host ""
 Write-Host "完成"
 Write-Host "輸出檔案：$outputFile"
 
-
-
-
-
-
-我可不可以讓他整個跑完才出結果的txt 因為 我可能有10個csv 我只想把他寫在同一個txt
-
-然後我整隻執行完想要return 1  
-因為我之後可能會用control M 執行
+# 成功 Return Code
+exit 0
