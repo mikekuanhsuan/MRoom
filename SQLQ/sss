@@ -6,5 +6,5 @@ JOIN sys.sql_expression_dependencies d
     ON v.object_id = d.referencing_id
 JOIN sys.objects o
     ON d.referenced_id = o.object_id
-WHERE v.name = '你的View名稱'
-ORDER BY table_name;
+WHERE o.type = 'U'
+ORDER BY v.name, o.name;
