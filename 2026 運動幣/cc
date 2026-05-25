@@ -1,9 +1,11 @@
 SELECT DISTINCT
     b.CIF_KEY,
-    b.CustomerNo
+    m.CustomerNo
 FROM Cust_NP_Migrate_buffer b
+JOIN CIF_Migrate_Mapping_TEMP m
+    ON b.CIF_KEY = m.SOURCE_CIF_KEY
 JOIN BANCS_SK_CUST_INFO s
-    ON b.CustomerNo = s.SK_CUST_ID
+    ON m.CustomerNo = s.SK_CUST_ID
 WHERE b.IsBearerShares = '1'
   AND s.CUST_RE_NO_FLG = '1'
 
@@ -19,9 +21,3 @@ JOIN BANCS_SK_CUST_INFO s
     ON a.CustomerNo = s.SK_CUST_ID
 WHERE a.Cust_With_Bearer_Shares = 'Y'
   AND s.CUST_RE_NO_FLG = '1';
-
-
-
-Cust_NP_Migrate_buffer 他沒有CustomerNo
-
-他只能用cif_key
