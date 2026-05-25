@@ -19,3 +19,9 @@ JOIN BANCS_SK_CUST_INFO s
     ON a.CustomerNo = s.SK_CUST_ID
 WHERE a.Cust_With_Bearer_Shares = 'Y'
   AND s.CUST_RE_NO_FLG = '1';
+
+
+
+Cust_NP_Migrate_buffer 他沒有CustomerNo
+
+他只能用cif_key
