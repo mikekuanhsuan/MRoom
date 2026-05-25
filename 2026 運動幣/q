@@ -1,3 +1,8 @@
+PURE_1_TOTAL	BSA_MAPPING_TOTAL	PB_SUCCESS_TOTAL	CUST_NME_MISMATCH_TOTAL
+26371	3544	3544	3508
+
+最終長這樣 所以代表什麼
+
 /* =========================================================
    Step 1. 建立「純1客戶」母體
    ※ 這一步只是定義 migration 範圍
