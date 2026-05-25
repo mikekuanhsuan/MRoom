@@ -1,3 +1,116 @@
+----------------------- 純 FLAG=1 客戶總數
+
+;WITH Pure_Flag1 AS (
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    GROUP BY SK_CUST_ID
+    HAVING 
+        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
+        AND
+        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
+)
+SELECT COUNT(*) AS Pure_Flag1_Count
+FROM Pure_Flag1;
+
+----------------------------------------------------------名稱不同（應為 3508 筆）
+;WITH Pure_Flag1 AS (
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    GROUP BY SK_CUST_ID
+    HAVING 
+        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
+        AND
+        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
+)
+SELECT 
+    d.cif_key,
+    c.CustomerNo,
+    c.cust_nme AS buffer_cust_nme,
+    p.cust_nme AS pb_cust_nme
+FROM Pure_Flag1 b
+JOIN Customer_Migrate_buffer c 
+    ON c.CustomerNo = b.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d 
+    ON d.CustomerNo = c.CustomerNo
+JOIN PB_CUSTOMER_FACT p
+    ON d.cif_key = p.cif_key
+WHERE 
+    ISNULL(c.cust_nme,'#') <> ISNULL(p.cust_nme,'#');
+
+
+	----------------------------------------------------------  名稱相同（應為 36 筆）
+
+
+	;WITH Pure_Flag1 AS (
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    GROUP BY SK_CUST_ID
+    HAVING 
+        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
+        AND
+        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
+)
+SELECT 
+    d.cif_key,
+    c.CustomerNo,
+    c.cust_nme AS buffer_cust_nme,
+    p.cust_nme AS pb_cust_nme
+FROM Pure_Flag1 b
+JOIN Customer_Migrate_buffer c 
+    ON c.CustomerNo = b.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d 
+    ON d.CustomerNo = c.CustomerNo
+JOIN PB_CUSTOMER_FACT p
+    ON d.cif_key = p.cif_key
+WHERE 
+    ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
+
+
+
+
+
+		----------------------------------------------------------  
+
+;WITH Pure_Flag1 AS (
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    GROUP BY SK_CUST_ID
+    HAVING 
+        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
+        AND
+        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
+),
+Base_36 AS (
+    SELECT 
+        d.cif_key,
+        c.CustomerNo,
+        c.cust_nme AS buffer_cust_nme,
+        p.cust_nme AS pb_cust_nme,
+        c.OPEN_DTE AS buffer_open_dte,
+        p.OPEN_DTE AS pb_open_dte
+    FROM Pure_Flag1 b
+    JOIN Customer_Migrate_buffer c 
+        ON c.CustomerNo = b.SK_CUST_ID
+    JOIN BSA_SUB_CUST_FACT d 
+        ON d.CustomerNo = c.CustomerNo
+    JOIN PB_CUSTOMER_FACT p
+        ON d.cif_key = p.cif_key
+    WHERE 
+        ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
+)
+
+SELECT 
+    COUNT(*) AS Name_Same_Count,
+    SUM(CASE 
+        WHEN ISNULL(CAST(buffer_open_dte AS DATE),'19000101')
+           <> ISNULL(CAST(pb_open_dte AS DATE),'19000101')
+        THEN 1 ELSE 0 END) AS Open_DTE_Diff_Count
+FROM Base_36;
+
+
+----------------------------------------------------------
+
+
 ;WITH Pure_Flag1 AS (
     SELECT SK_CUST_ID
     FROM BANCS_SK_CUST_INFO
@@ -32,8 +145,8 @@ SELECT
     CASE 
         WHEN ISNULL(CAST(buffer_open_dte AS DATE), '19000101') 
           <> ISNULL(CAST(pb_open_dte AS DATE), '19000101') 
-        THEN '❌ 日期不同 (共11筆)' 
-        ELSE '✅ 日期相同 (共25筆)' 
+        THEN '日期不同 (共11筆)' 
+        ELSE '日期相同 (共25筆)' 
     END AS [比較結果],
     cif_key,
     CustomerNo,
@@ -42,15 +155,10 @@ SELECT
     buffer_open_dte,
     pb_open_dte
 FROM Base_36
--- 透過排序，讓你想看的 11 筆「日期不同」的資料直接排在最上面
-ORDER BY [比較結果] DESC, CustomerNo;
 
 
 
-
-我這些 日期相同的要再去跟 Cust_NP_Migrate_buffer 的HIGHRISK 欄位比較 是不是不同 因為他們都有 HIGHRISK 欄位
-應該要出現25筆不同才對  要怎麼寫
-SELECT HIGHRISK, * FROM Cust_NP_Migrate_buffer WHERE CIF_KEY ='463bcfcf-2beb-e511-80c8-0050568c710a'
+------
 
 
 ;WITH Pure_Flag1 AS (
@@ -69,8 +177,48 @@ Base_36 AS (
         c.cust_nme AS buffer_cust_nme,
         p.cust_nme AS pb_cust_nme,
         c.OPEN_DTE AS buffer_open_dte,
-        p.OPEN_DTE AS pb_open_dte,
-        p.HIGHRISK AS pb_highrisk -- 假設 PB 端的 HIGHRISK 欄位在此，若在其他表請自行更換別名
+        p.OPEN_DTE AS pb_open_dte
+    FROM Pure_Flag1 b
+    JOIN Customer_Migrate_buffer c 
+        ON c.CustomerNo = b.SK_CUST_ID
+    JOIN BSA_SUB_CUST_FACT d 
+        ON d.CustomerNo = c.CustomerNo
+    JOIN PB_CUSTOMER_FACT p
+        ON d.cif_key = p.cif_key
+    WHERE 
+        ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
+)
+SELECT 
+    cif_key,
+    CustomerNo,
+    buffer_cust_nme,
+    pb_cust_nme,
+    buffer_open_dte,
+    pb_open_dte
+FROM Base_36
+WHERE 
+    ISNULL(CAST(buffer_open_dte AS DATE), '19000101') 
+    <> 
+    ISNULL(CAST(pb_open_dte AS DATE), '19000101');
+
+----------------------------------
+;WITH Pure_Flag1 AS (
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    GROUP BY SK_CUST_ID
+    HAVING 
+        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
+        AND
+        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
+),
+Base_36 AS (
+    SELECT 
+        d.cif_key,
+        c.CustomerNo,
+        c.cust_nme AS buffer_cust_nme,
+        p.cust_nme AS pb_cust_nme,
+        c.OPEN_DTE AS buffer_open_dte,
+        p.OPEN_DTE AS pb_open_dte
     FROM Pure_Flag1 b
     JOIN Customer_Migrate_buffer c 
         ON c.CustomerNo = b.SK_CUST_ID
@@ -83,28 +231,62 @@ Base_36 AS (
 )
 
 SELECT 
-    CASE 
-        -- 條件 1：先找出姓名相同、且日期相同的 25 筆
-        WHEN ISNULL(CAST(main.buffer_open_dte AS DATE), '19000101') 
-           = ISNULL(CAST(main.pb_open_dte AS DATE), '19000101') 
-        THEN 
-            -- 條件 2：在這 25 筆當中，比對 HIGHRISK 是否不同
-            CASE 
-                WHEN ISNULL(main.pb_highrisk, '#') <> ISNULL(np.HIGHRISK, '#') 
-                THEN '⚠️ 日期相同，但 HIGHRISK 不同 (預期25筆)'
-                ELSE '✅ 日期相同，且 HIGHRISK 相同'
-            END
-        ELSE '❌ 日期本來就不同 (先前確認的11筆)' 
-    END AS [詳細比對結果],
-    main.cif_key,
-    main.CustomerNo,
-    main.buffer_cust_nme,
-    main.buffer_open_dte,
-    main.pb_open_dte,
-    main.pb_highrisk AS [PB端的HighRisk],
-    np.HIGHRISK AS [NP_Buffer端的HighRisk]
-FROM Base_36 main
--- Left Join 關聯到你提到的 Cust_NP_Migrate_buffer 
-LEFT JOIN Cust_NP_Migrate_buffer np 
-    ON main.cif_key = np.CIF_KEY
-ORDER BY [詳細比對結果] DESC, main.CustomerNo;
+    cif_key,
+    CustomerNo,
+    buffer_cust_nme,
+    pb_cust_nme,
+    buffer_open_dte,
+    pb_open_dte
+FROM Base_36
+WHERE 
+    ISNULL(CAST(buffer_open_dte AS DATE), '19000101') 
+    = ISNULL(CAST(pb_open_dte AS DATE), '19000101');
+
+
+
+
+SELECT * FROM CIF_Migrate_Mapping_TEMP WHERE NEW_CIF_KEY = '46DDAA21-F2A3-466B-8B07-E85B6ECCACCA'
+SELECT CustomerNo,*  FROM BSA_SUB_CUST_FACT WHERE CIF_KEY 
+in(
+'46DDAA21-F2A3-466B-8B07-E85B6ECCACCA',
+'AAD4DF02-7894-4B1C-94D6-75B4FB1F69D3',
+'BAD8B60B-5B89-4E3C-B644-1AD8E00F8EDF',
+'06BF069B-B242-483A-9D5B-2F1EC21D0CBE',
+'F892862B-446A-49C5-98DB-9A3907D3DEF1',
+'5B1EE552-701F-4728-9A6E-04A84D5ED184',
+'22507C12-0EDA-4DD7-98EC-60D3445FB305',
+'674BE9F9-A4B9-43F3-90C3-B20362879E83',
+'FDB54543-1AE7-4C5D-809C-82D741413241',
+'5C2C003F-9ACB-4A1E-B752-A263934982AC',
+'E31B656F-E1C1-4B7A-9120-B1902F74058E'
+)
+
+SELECt * FROM BSA_SUB_CUST_FACT  a
+join CIF_Migrate_Mapping_TEMP   b on a.cif_key = b.NEW_CIF_KEY
+join  Customer_Migrate_buffer  c on c.CustomerNo = a.CustomerNo
+ WHERE a.CIF_KEY in
+ (
+'46DDAA21-F2A3-466B-8B07-E85B6ECCACCA',
+'AAD4DF02-7894-4B1C-94D6-75B4FB1F69D3',
+'BAD8B60B-5B89-4E3C-B644-1AD8E00F8EDF',
+'06BF069B-B242-483A-9D5B-2F1EC21D0CBE',
+'F892862B-446A-49C5-98DB-9A3907D3DEF1',
+'5B1EE552-701F-4728-9A6E-04A84D5ED184',
+'22507C12-0EDA-4DD7-98EC-60D3445FB305',
+'674BE9F9-A4B9-43F3-90C3-B20362879E83',
+'FDB54543-1AE7-4C5D-809C-82D741413241',
+'5C2C003F-9ACB-4A1E-B752-A263934982AC',
+'E31B656F-E1C1-4B7A-9120-B1902F74058E'
+)
+
+
+
+
+
+    我後來發現只要比較Customer_Migrate_buffer 的CustomerNo 是不是跟BSA_SUB_CUST_FACT 的CustomerNo 不一樣就好
+
+
+整個要怎麼改比較好
+
+我發現我寫得太攏長了
+
