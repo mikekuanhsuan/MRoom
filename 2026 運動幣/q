@@ -1,65 +1,50 @@
-PURE_1_TOTAL	BSA_MAPPING_TOTAL	PB_SUCCESS_TOTAL	CUST_NME_MISMATCH_TOTAL
-26371	3544	3544	3508
-
-最終長這樣 所以代表什麼
-
 /* =========================================================
-   Step 1. 建立「純1客戶」母體
-   ※ 這一步只是定義 migration 範圍
+   驗證目的：
+   驗證此次 migration 僅寫入 Customer_Migrate_buffer 內的客戶，
+   不存在非 migration 名單客戶被異常寫入 PB_CUSTOMER_FACT。
+
+   驗證方式：
+   完全不使用 SK flag / BANCS_SK_CUST_INFO。
+   僅使用台新 migration 名單與 PB 結果進行 reconciliation。
    ========================================================= */
 
-IF OBJECT_ID('tempdb..#PURE_1_CUST') IS NOT NULL
-    DROP TABLE #PURE_1_CUST;
-
-SELECT DISTINCT SK_CUST_ID
-INTO #PURE_1_CUST
-FROM (
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG = '1'
-
-    EXCEPT
-
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG IN ('2', '3')
-) t;
-
 
 
 /* =========================================================
-   Step 2. 驗證母體總數
+   Step 1. Migration 母體總數
+   驗證：
+   Customer_Migrate_buffer 共有多少客戶
    ========================================================= */
 
 SELECT 
-    COUNT(*) AS PURE_1_TOTAL_CNT
-FROM #PURE_1_CUST;
+    COUNT(DISTINCT CustomerNo) AS MIGRATION_TOTAL_CNT
+FROM Customer_Migrate_buffer;
 
 
 
 /* =========================================================
-   Step 3. 驗證是否成功 mapping 至 BSA
+   Step 2. 成功 mapping 至 BSA 的客戶數
+   驗證：
+   migration 名單是否成功建立 cif_key mapping
    ========================================================= */
 
 SELECT 
     COUNT(DISTINCT c.CustomerNo) AS BSA_MAPPING_CNT
-FROM #PURE_1_CUST t
-JOIN Customer_Migrate_buffer c
-    ON c.CustomerNo = t.SK_CUST_ID
+FROM Customer_Migrate_buffer c
 JOIN BSA_SUB_CUST_FACT d
     ON d.CustomerNo = c.CustomerNo;
 
 
 
 /* =========================================================
-   Step 4. 找出沒有 mapping 到 BSA 的客戶
+   Step 3. 找出沒有 mapping 至 BSA 的客戶
+   驗證：
+   哪些 migration 客戶無法建立 cif_key
    ========================================================= */
 
 SELECT 
-    t.SK_CUST_ID AS CustomerNo
-FROM #PURE_1_CUST t
-LEFT JOIN Customer_Migrate_buffer c
-    ON c.CustomerNo = t.SK_CUST_ID
+    c.CustomerNo
+FROM Customer_Migrate_buffer c
 LEFT JOIN BSA_SUB_CUST_FACT d
     ON d.CustomerNo = c.CustomerNo
 WHERE d.CustomerNo IS NULL;
@@ -67,14 +52,14 @@ WHERE d.CustomerNo IS NULL;
 
 
 /* =========================================================
-   Step 5. 驗證是否成功進 PB
+   Step 4. 成功寫入 PB 的客戶數
+   驗證：
+   migration 名單中有多少客戶成功進入 PB_CUSTOMER_FACT
    ========================================================= */
 
 SELECT 
     COUNT(DISTINCT c.CustomerNo) AS PB_SUCCESS_CNT
-FROM #PURE_1_CUST t
-JOIN Customer_Migrate_buffer c
-    ON c.CustomerNo = t.SK_CUST_ID
+FROM Customer_Migrate_buffer c
 JOIN BSA_SUB_CUST_FACT d
     ON d.CustomerNo = c.CustomerNo
 JOIN PB_CUSTOMER_FACT p
@@ -83,15 +68,15 @@ JOIN PB_CUSTOMER_FACT p
 
 
 /* =========================================================
-   Step 6. 找出沒有進 PB 的客戶
+   Step 5. 找出 migration 名單中未寫入 PB 的客戶
+   驗證：
+   是否存在 migration 遺漏資料
    ========================================================= */
 
 SELECT 
     c.CustomerNo,
     d.cif_key
-FROM #PURE_1_CUST t
-JOIN Customer_Migrate_buffer c
-    ON c.CustomerNo = t.SK_CUST_ID
+FROM Customer_Migrate_buffer c
 JOIN BSA_SUB_CUST_FACT d
     ON d.CustomerNo = c.CustomerNo
 LEFT JOIN PB_CUSTOMER_FACT p
@@ -101,7 +86,32 @@ WHERE p.cif_key IS NULL;
 
 
 /* =========================================================
-   Step 7. 驗證 cust_nme 是否一致
+   Step 6. 找出非 migration 名單卻存在於 PB 的客戶
+   驗證：
+   是否存在非 migration 客戶被異常寫入 PB
+   （最重要的 contamination check）
+   ========================================================= */
+
+SELECT 
+    d.CustomerNo,
+    p.cif_key,
+    p.cust_nme
+FROM PB_CUSTOMER_FACT p
+JOIN BSA_SUB_CUST_FACT d
+    ON d.cif_key = p.cif_key
+
+LEFT JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = d.CustomerNo
+
+WHERE c.CustomerNo IS NULL;
+
+
+
+/* =========================================================
+   Step 7. migration 名單與 PB 姓名一致性驗證
+   驗證：
+   migration 後姓名是否一致
+   （若共有戶本來就不寫入，可忽略 mismatch）
    ========================================================= */
 
 SELECT 
@@ -109,9 +119,7 @@ SELECT
     c.CustomerNo,
     c.cust_nme AS buffer_cust_nme,
     p.cust_nme AS pb_cust_nme
-FROM #PURE_1_CUST t
-JOIN Customer_Migrate_buffer c
-    ON c.CustomerNo = t.SK_CUST_ID
+FROM Customer_Migrate_buffer c
 JOIN BSA_SUB_CUST_FACT d
     ON d.CustomerNo = c.CustomerNo
 JOIN PB_CUSTOMER_FACT p
@@ -122,54 +130,53 @@ WHERE ISNULL(c.cust_nme, '#')
 
 
 /* =========================================================
-   Step 8. 驗證 cust_nme 一致筆數
-   ========================================================= */
-
-SELECT 
-    COUNT(*) AS MATCH_CUST_NME_CNT
-FROM #PURE_1_CUST t
-JOIN Customer_Migrate_buffer c
-    ON c.CustomerNo = t.SK_CUST_ID
-JOIN BSA_SUB_CUST_FACT d
-    ON d.CustomerNo = c.CustomerNo
-JOIN PB_CUSTOMER_FACT p
-    ON p.cif_key = d.cif_key
-WHERE ISNULL(c.cust_nme, '#')
-    = ISNULL(p.cust_nme, '#');
-
-
-
-/* =========================================================
-   Step 9. 最終 reconciliation summary
+   Step 8. 最終 reconciliation summary
+   驗證：
+   migration 整體結果摘要
    ========================================================= */
 
 SELECT
-    (SELECT COUNT(*) 
-     FROM #PURE_1_CUST) AS PURE_1_TOTAL,
 
+    /* migration 母體 */
+    (SELECT COUNT(DISTINCT CustomerNo)
+     FROM Customer_Migrate_buffer) AS MIGRATION_TOTAL,
+
+
+
+    /* 成功 mapping 至 BSA */
     (SELECT COUNT(DISTINCT c.CustomerNo)
-     FROM #PURE_1_CUST t
-     JOIN Customer_Migrate_buffer c
-         ON c.CustomerNo = t.SK_CUST_ID
+     FROM Customer_Migrate_buffer c
      JOIN BSA_SUB_CUST_FACT d
          ON d.CustomerNo = c.CustomerNo) AS BSA_MAPPING_TOTAL,
 
+
+
+    /* 成功進 PB */
     (SELECT COUNT(DISTINCT c.CustomerNo)
-     FROM #PURE_1_CUST t
-     JOIN Customer_Migrate_buffer c
-         ON c.CustomerNo = t.SK_CUST_ID
+     FROM Customer_Migrate_buffer c
      JOIN BSA_SUB_CUST_FACT d
          ON d.CustomerNo = c.CustomerNo
      JOIN PB_CUSTOMER_FACT p
          ON p.cif_key = d.cif_key) AS PB_SUCCESS_TOTAL,
 
+
+
+    /* 未進 PB */
     (SELECT COUNT(*)
-     FROM #PURE_1_CUST t
-     JOIN Customer_Migrate_buffer c
-         ON c.CustomerNo = t.SK_CUST_ID
+     FROM Customer_Migrate_buffer c
      JOIN BSA_SUB_CUST_FACT d
          ON d.CustomerNo = c.CustomerNo
-     JOIN PB_CUSTOMER_FACT p
+     LEFT JOIN PB_CUSTOMER_FACT p
          ON p.cif_key = d.cif_key
-     WHERE ISNULL(c.cust_nme, '#')
-         <> ISNULL(p.cust_nme, '#')) AS CUST_NME_MISMATCH_TOTAL;
+     WHERE p.cif_key IS NULL) AS PB_MISSING_TOTAL,
+
+
+
+    /* 非 migration 名單卻存在 PB */
+    (SELECT COUNT(*)
+     FROM PB_CUSTOMER_FACT p
+     JOIN BSA_SUB_CUST_FACT d
+         ON d.cif_key = p.cif_key
+     LEFT JOIN Customer_Migrate_buffer c
+         ON c.CustomerNo = d.CustomerNo
+     WHERE c.CustomerNo IS NULL) AS PB_UNEXPECTED_TOTAL;
