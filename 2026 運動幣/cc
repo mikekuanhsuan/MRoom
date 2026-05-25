@@ -1,52 +1,49 @@
-你這題其實已經進到「驗證邏輯設計」最後一關了，很關鍵 👍
+好，這題我直接幫你「收斂成銀行可交付版本」。
 
-你現在看到的現象是：
+你現在其實不是在做 SQL 查詢了，你是在做：
 
-* total join 出來：3544
-* name mismatch：3508（幾乎全部）
-* name match：36（很少）
-
-但你老闆真正要你驗的是：
-
-「這 36 筆到底是不是 原本就存在 PB，不是 migration 造成的」
+🏦 Migration correctness verification（且不能依賴 SK 結果）
 
 ⸻
 
-⚠️ 先講核心問題
+🎯 你要驗證的本質只有 2 件事
 
-你現在這句 SQL：
+① 該進 PB 的（migration 名單）有沒有進去
 
-JOIN PB_CUSTOMER_FACT p
-  ON d.cif_key = p.cif_key
-
-它只告訴你：
-
-PB 有這個人
-
-❌ 但完全沒有告訴你：
-
-是 migration 進去的
-還是原本就存在的
+② 不該進 PB 的（非 migration）有沒有進去
 
 ⸻
 
-💥 所以你現在缺的關鍵維度是：
+⚠️ 你的核心限制
 
-👉 「migration 前 PB 是否已存在」
+你說：
+
+❌ 不能用 SK flag 當驗證依據
+❌ 只能用台新資料
+
+所以 SK 只能做一件事：
+
+👉 「定義 migration 母體」
+
+不能做：
+
+👉 結論判斷
 
 ⸻
 
-✅ 正確驗證方式（最重要）
+🧠 正確驗證架構（你要記這個）
 
-你要多一個概念：
-
-PB_EXIST_BEFORE_MIGRATION
+SK → 只負責定義 PURE_1（名單）
+        ↓
+台新 buffer / BSA / PB → 負責驗證結果
 
 ⸻
 
-🔥 正確解法（完整SQL）
+✅ 完整驗證 SQL（真正可交付版）
 
-Step 1：先定義 migration 對象（你已經有）
+⸻
+
+① 定義 migration 母體（只用來圈人）
 
 WITH PURE_1 AS (
     SELECT DISTINCT SK_CUST_ID
@@ -63,145 +60,112 @@ WITH PURE_1 AS (
 
 ⸻
 
-Step 2：抓 PB 現況
+② migration 成功進 PB 的數量
 
-, PB_NOW AS (
-    SELECT DISTINCT cif_key, cust_nme
-    FROM PB_CUSTOMER_FACT
-)
-
-⸻
-
-Step 3：找「pure1 有進 PB 的」
-
-, JOIN_RESULT AS (
-    SELECT 
-        c.CustomerNo,
-        d.cif_key,
-        c.cust_nme AS buffer_name,
-        p.cust_nme AS pb_name
-    FROM PURE_1 t
-    JOIN Customer_Migrate_buffer c
-        ON c.CustomerNo = t.SK_CUST_ID
-    JOIN BSA_SUB_CUST_FACT d
-        ON d.CustomerNo = c.CustomerNo
-    JOIN PB_NOW p
-        ON p.cif_key = d.cif_key
-)
+SELECT 
+    COUNT(DISTINCT c.CustomerNo) AS MIGRATED_TO_PB
+FROM PURE_1 t
+JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d
+    ON d.CustomerNo = c.CustomerNo
+JOIN PB_CUSTOMER_FACT p
+    ON p.cif_key = d.cif_key;
 
 ⸻
 
-Step 4：關鍵 👉 判斷「是不是原本就存在 PB」
+③ ❗ missing（該進 PB 但沒進）
 
-👉 你需要一個「migration before snapshot」
+👉 這是最重要 KPI
 
-但你現在沒有 historical table，所以只能用 proxy：
-
-⚠️ proxy 判斷法（實務常用）
-
-SELECT *
-FROM JOIN_RESULT
-WHERE ISNULL(buffer_name,'#') = ISNULL(pb_name,'#');
-
-👉 你那 36 筆就是這裡來的
+SELECT 
+    t.SK_CUST_ID AS CustomerNo
+FROM PURE_1 t
+JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d
+    ON d.CustomerNo = c.CustomerNo
+LEFT JOIN PB_CUSTOMER_FACT p
+    ON p.cif_key = d.cif_key
+WHERE p.cif_key IS NULL;
 
 ⸻
 
-🧠 重點來了（你現在真正的問題）
+④ ❗ extra（不該進 PB 但進了）
 
-你問：
+👉 這是 contamination check
 
-這 36 筆怎麼驗？
+SELECT 
+    d.CustomerNo,
+    p.cif_key
+FROM PB_CUSTOMER_FACT p
+JOIN BSA_SUB_CUST_FACT d
+    ON d.cif_key = p.cif_key
+LEFT JOIN PURE_1 t
+    ON t.SK_CUST_ID = d.CustomerNo
+WHERE t.SK_CUST_ID IS NULL;
+
+⸻
+
+⑤ name mismatch（你現在那 3508）
+
+SELECT 
+    d.cif_key,
+    c.CustomerNo,
+    c.cust_nme AS buffer_name,
+    p.cust_nme AS pb_name
+FROM PURE_1 t
+JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d
+    ON d.CustomerNo = c.CustomerNo
+JOIN PB_CUSTOMER_FACT p
+    ON p.cif_key = d.cif_key
+WHERE ISNULL(c.cust_nme,'#') <> ISNULL(p.cust_nme,'#');
+
+⸻
+
+📊 最終你要交付給老闆的是這 4 個數字
+
+只要這四個：
+
+指標	意義
+PURE_1_TOTAL	migration 對象
+MIGRATED_TO_PB	成功寫入
+MISSING_IN_PB	應該有但沒有
+EXTRA_IN_PB	不該有但存在
+
+⸻
+
+🚨 你現在 36 筆的正確解釋
+
+你之前問的：
+
+36 筆是什麼？
 
 答案是：
 
+👉 這是「存在於 PB，但 name 剛好一致的 overlap 資料」
+
+但在 migration 驗證裡：
+
+⚠️ 它不是成功，也不是錯誤
+⚠️ 它只是「無法判定變更的舊資料」
+
 ⸻
 
-🟡 這 36 筆其實「不能當 migration 成功」
+🧾 一句話收斂
 
-它們是：
+你這份 report 的真正結論應該是：
 
-✔ PB 本來就有
+Migration correctness = 只看「缺失」與「異常寫入」，不看 name mismatch。
 
+⸻
+
+如果你下一步要更進階，我可以幫你做：
+
+🔥「￼ 一鍵輸出 migration audit dashboard SQL（含 success rate %）」
 或
+🔥「￼ 老闆版 Excel 報表欄位設計」
 
-✔ buffer 沒更新 PB（沒覆蓋）
-
-⸻
-
-💥 最關鍵結論
-
-你現在的結果其實可以拆成 3 群：
-
-① mismatch 3508（最大宗）
-
-👉 幾乎可以判斷：
-
-* migration 有寫入
-* PB 是新資料
-* name 格式不同 / 更新過
-
-⸻
-
-② match 36（你問的）
-
-👉 這群通常是：
-
-* PB 原本就存在
-* migration 沒改到
-* 或 buffer 沒更新 PB
-
-📌 不是錯，是「未變更資料」
-
-⸻
-
-③ missing（你現在沒算）
-
-👉 很重要
-
--- pure1 有，但 PB 沒有
-
-這才是 migration failure
-
-⸻
-
-🚨 你老闆真正想看的是這三個
-
-你要改成這個思維：
-
-1️⃣ 有沒有該進 PB 沒進
-
-PURE_1 - PB = missing
-
-2️⃣ 有沒有不該進 PB 卻進了
-
-PB ∩ non-migration
-
-3️⃣ 有沒有 data corruption
-
-name mismatch / key mismatch
-
-⸻
-
-🧾 一句話總結你現在的 36 筆
-
-👉 這 36 筆不是 migration 成功或失敗
-👉 而是「PB 舊資料或未更新資料」
-
-⸻
-
-如果你要我幫你再升級一版
-
-我可以幫你做一個：
-
-📊「銀行級 migration reconciliation report」
-
-會直接輸出：
-
-* missing
-* extra
-* unchanged
-* mismatch
-* overlap rate
-
-而且老闆一看就懂那種 📈
+會直接變成可以交差那種。
