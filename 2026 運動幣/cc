@@ -1,47 +1,46 @@
-可以，這次我幫你整理成「一支可以直接交付的完整驗證 SQL」，而且完全符合你限制：
-
-❌ 不用 SK flag 做結論
-✅ SK 只用來定義 PURE_1（母體）
-✅ 所有驗證都用台新資料（buffer / BSA / PB）
+好，這次給你「可直接整段執行、不會再報 PURE_1 無效物件」的完整版（已改成 temp table，符合 SQL Server 實務寫法）。
 
 ⸻
 
-🏦 Migration Verification Full Script（可直接交付版）
+🏦 Migration Validation Full Script（可直接跑）
 
 /* =========================================================
    MIGRATION VALIDATION REPORT
    目的：
-   驗證 PURE_1 客戶是否正確進入 PB
-   並檢查是否有異常寫入或遺漏
+   驗證 PURE_1 客戶是否正確進入 PB，
+   並檢查是否有遺漏或異常寫入。
+   ⚠️ 注意：
+   - SK 只用來定義 PURE_1
+   - 驗證結果全部用台新資料
    ========================================================= */
 /* =========================================================
-   Step 1. 定義 PURE_1（migration 母體）
-   只用於圈定 migration 對象
+   Step 1. 建立 PURE_1（TEMP TABLE）
    ========================================================= */
-WITH PURE_1 AS (
-    SELECT DISTINCT SK_CUST_ID
-    FROM (
-        SELECT SK_CUST_ID
-        FROM BANCS_SK_CUST_INFO
-        WHERE CUST_RE_NO_FLG = '1'
-        EXCEPT
-        SELECT SK_CUST_ID
-        FROM BANCS_SK_CUST_INFO
-        WHERE CUST_RE_NO_FLG IN ('2','3')
-    ) t
-)
+IF OBJECT_ID('tempdb..#PURE_1') IS NOT NULL
+    DROP TABLE #PURE_1;
+SELECT DISTINCT SK_CUST_ID
+INTO #PURE_1
+FROM (
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE CUST_RE_NO_FLG = '1'
+    EXCEPT
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE CUST_RE_NO_FLG IN ('2','3')
+) t;
 /* =========================================================
-   Step 2. Migration 母體總數
+   Step 2. PURE_1 總數
    ========================================================= */
 SELECT 
     COUNT(*) AS PURE_1_TOTAL
-FROM PURE_1;
+FROM #PURE_1;
 /* =========================================================
-   Step 3. 成功 mapping 到 BSA
+   Step 3. Mapping 到 BSA
    ========================================================= */
 SELECT 
     COUNT(DISTINCT c.CustomerNo) AS BSA_MAPPING_TOTAL
-FROM PURE_1 t
+FROM #PURE_1 t
 JOIN Customer_Migrate_buffer c
     ON c.CustomerNo = t.SK_CUST_ID
 JOIN BSA_SUB_CUST_FACT d
@@ -51,7 +50,7 @@ JOIN BSA_SUB_CUST_FACT d
    ========================================================= */
 SELECT 
     COUNT(DISTINCT c.CustomerNo) AS PB_SUCCESS_TOTAL
-FROM PURE_1 t
+FROM #PURE_1 t
 JOIN Customer_Migrate_buffer c
     ON c.CustomerNo = t.SK_CUST_ID
 JOIN BSA_SUB_CUST_FACT d
@@ -59,12 +58,12 @@ JOIN BSA_SUB_CUST_FACT d
 JOIN PB_CUSTOMER_FACT p
     ON p.cif_key = d.cif_key;
 /* =========================================================
-   Step 5. ❗ Missing in PB（最重要 KPI）
+   Step 5. ❗ Missing in PB（該進沒進）
    ========================================================= */
 SELECT 
     t.SK_CUST_ID AS CustomerNo,
     d.cif_key
-FROM PURE_1 t
+FROM #PURE_1 t
 JOIN Customer_Migrate_buffer c
     ON c.CustomerNo = t.SK_CUST_ID
 JOIN BSA_SUB_CUST_FACT d
@@ -82,18 +81,18 @@ SELECT
 FROM PB_CUSTOMER_FACT p
 JOIN BSA_SUB_CUST_FACT d
     ON d.cif_key = p.cif_key
-LEFT JOIN PURE_1 t
+LEFT JOIN #PURE_1 t
     ON t.SK_CUST_ID = d.CustomerNo
 WHERE t.SK_CUST_ID IS NULL;
 /* =========================================================
-   Step 7. Name mismatch（資訊驗證，不影響 migration KPI）
+   Step 7. Name mismatch（僅參考，不影響 migration KPI）
    ========================================================= */
 SELECT 
     d.cif_key,
     c.CustomerNo,
     c.cust_nme AS buffer_cust_nme,
     p.cust_nme AS pb_cust_nme
-FROM PURE_1 t
+FROM #PURE_1 t
 JOIN Customer_Migrate_buffer c
     ON c.CustomerNo = t.SK_CUST_ID
 JOIN BSA_SUB_CUST_FACT d
@@ -102,18 +101,18 @@ JOIN PB_CUSTOMER_FACT p
     ON p.cif_key = d.cif_key
 WHERE ISNULL(c.cust_nme,'#') <> ISNULL(p.cust_nme,'#');
 /* =========================================================
-   Step 8. FINAL SUMMARY（交付用）
+   Step 8. FINAL SUMMARY（給老闆看的）
    ========================================================= */
 SELECT
-    (SELECT COUNT(*) FROM PURE_1) AS PURE_1_TOTAL,
+    (SELECT COUNT(*) FROM #PURE_1) AS PURE_1_TOTAL,
     (SELECT COUNT(DISTINCT c.CustomerNo)
-     FROM PURE_1 t
+     FROM #PURE_1 t
      JOIN Customer_Migrate_buffer c
          ON c.CustomerNo = t.SK_CUST_ID
      JOIN BSA_SUB_CUST_FACT d
          ON d.CustomerNo = c.CustomerNo) AS BSA_MAPPING_TOTAL,
     (SELECT COUNT(DISTINCT c.CustomerNo)
-     FROM PURE_1 t
+     FROM #PURE_1 t
      JOIN Customer_Migrate_buffer c
          ON c.CustomerNo = t.SK_CUST_ID
      JOIN BSA_SUB_CUST_FACT d
@@ -121,7 +120,7 @@ SELECT
      JOIN PB_CUSTOMER_FACT p
          ON p.cif_key = d.cif_key) AS PB_SUCCESS_TOTAL,
     (SELECT COUNT(*)
-     FROM PURE_1 t
+     FROM #PURE_1 t
      JOIN Customer_Migrate_buffer c
          ON c.CustomerNo = t.SK_CUST_ID
      JOIN BSA_SUB_CUST_FACT d
@@ -133,44 +132,36 @@ SELECT
      FROM PB_CUSTOMER_FACT p
      JOIN BSA_SUB_CUST_FACT d
          ON d.cif_key = p.cif_key
-     LEFT JOIN PURE_1 t
+     LEFT JOIN #PURE_1 t
          ON t.SK_CUST_ID = d.CustomerNo
      WHERE t.SK_CUST_ID IS NULL) AS EXTRA_IN_PB_TOTAL;
 
 ⸻
 
-🧠 這份 SQL 在做什麼（重點一句話版）
+🧠 這份在驗什麼（最重要一句話）
 
 👉 驗證 migration 是否：
 
-* 有漏人（MISSING_IN_PB）
-* 有偷進（EXTRA_IN_PB）
+* 有漏寫（MISSING_IN_PB）
+* 有偷寫（EXTRA_IN_PB）
 * 有成功寫入（PB_SUCCESS）
-* 有正確 mapping（BSA_MAPPING）
+* 有完整 mapping（BSA）
 
 ⸻
 
-📊 老闆最愛看的結論長這樣
+🚨 你剛剛遇到的錯誤本質
 
-KPI	意義
-PURE_1_TOTAL	migration 對象
-PB_SUCCESS_TOTAL	成功寫入
-MISSING_IN_PB_TOTAL	migration 遺漏
-EXTRA_IN_PB_TOTAL	異常寫入
+PURE_1 invalid object
 
-⸻
+原因：
 
-🚨 你現在那個 3508 / 36
-
-在這套架構裡會被自然歸類成：
-
-* 3508 → name mismatch（不影響 migration KPI）
-* 36 → overlap / historical data（不再當成功或失敗）
+👉 CTE 只能活一個 SQL
+👉 你需要「跨多段使用」
+👉 所以必須改 TEMP TABLE
 
 ⸻
 
-如果你下一步要再升級，我可以幫你做一個：
+如果你下一步要升級，我可以幫你做這個👇
 
-🔥「￼ 一鍵輸出 Excel migration report（欄位+格式+摘要）」
-或
-🔥「￼ 幫你寫成 stored procedure，直接每天跑」
+🔥「￼ 一鍵產出老闆版 Excel migration report（含 KPI + 異常清單 + % completion）」
+會直接變成可以交付審計那種版本。
