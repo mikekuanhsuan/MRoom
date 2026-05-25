@@ -1,10 +1,11 @@
-好，我幫你改成「銀行 / AML 常見的正式中文註解風格」，會偏乾淨、可維護、少口語，而且每一步都講「目的」不是「結果描述」。
+-- =============================================
+-- AML 客戶資料驗證與一致性檢核
+-- Step 1：建立純 FLAG = '1' 客戶集合
+-- Step 2：驗證 AML buffer 映射存在性
+-- Step 3：比對 buffer vs PB 客戶名稱差異
+-- Step 4：比對 buffer vs PB 客戶名稱一致資料
+-- =============================================
 
-⸻
-
-🌟 重構版（中文註解 + 結構清楚）
-
-🧩 Step 1：定義純 FLAG = 1 客戶集合
 
 -- =============================================
 -- Step 1：建立目標客戶集合
@@ -20,13 +21,9 @@ WITH PureFlag1Cust AS (
         AND MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
 )
 
-⸻
-
-🧩 Step 2：確認 AML buffer 對應資料存在性
 
 -- =============================================
--- Step 2：驗證 AML buffer 與主檔映射關係
--- 檢查客戶是否已成功對應至 AML 中介表與主檔
+-- Step 2：驗證 AML buffer 與主檔映射存在性
 -- =============================================
 SELECT 
     d.cif_key,
@@ -37,13 +34,11 @@ JOIN Customer_Migrate_buffer c
 JOIN BSA_SUB_CUST_FACT d
     ON d.CustomerNo = c.CustomerNo;
 
-⸻
 
-🧩 Step 3：比對 buffer 與 PB 客戶名稱差異
 
 -- =============================================
--- Step 3：比對客戶名稱一致性（資料異動檢查）
--- 用於偵測 buffer 與 PB 系統間是否存在名稱差異
+-- Step 3：比對 buffer 與 PB 客戶名稱差異
+-- 用於偵測資料異動 / 不一致
 -- =============================================
 SELECT 
     d.cif_key,
@@ -60,13 +55,11 @@ JOIN PB_CUSTOMER_FACT p
 WHERE 
     ISNULL(c.cust_nme, '') <> ISNULL(p.cust_nme, '');
 
-⸻
 
-🧩 Step 4：比對名稱一致資料（驗證一致性）
 
 -- =============================================
--- Step 4：確認客戶名稱一致資料
--- 用於驗證 buffer 與 PB 系統資料一致性
+-- Step 4：比對 buffer 與 PB 客戶名稱一致資料
+-- 用於驗證資料一致性
 -- =============================================
 SELECT 
     d.cif_key,
@@ -81,44 +74,3 @@ JOIN PB_CUSTOMER_FACT p
     ON p.cif_key = d.cif_key
 WHERE 
     ISNULL(c.cust_nme, '') = ISNULL(p.cust_nme, '');
-
-⸻
-
-🧠 這版註解的「關鍵升級點」
-
-1️⃣ 從「結果描述」改成「目的描述」
-
-❌ 找出差異
-✅ 用於偵測資料異動 / 驗證一致性
-
-⸻
-
-2️⃣ 每段都有 audit 思維
-
-像：
-
-* 驗證映射關係
-* 偵測資料漂移
-* 建立分析母體
-
-⸻
-
-3️⃣ 適合放進
-
-✔ AML 月報
-✔ Data quality report
-✔ 稽核 SQL script
-✔ SSIS ETL staging check
-
-⸻
-
-🚀 如果你想再升級一層
-
-我可以幫你改成：
-
-* 📦 ￼ Stored Procedure（可參數化 flag）
-* 📊 ￼ 一次輸出 3 張結果報表
-* 📁 ￼ Excel 自動 export（SQL Agent / SSIS）
-* 🧾 或￼ 改成「AML Reconciliation Framework」
-
-只要你說一聲 😄
