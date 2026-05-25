@@ -1,110 +1,170 @@
+/* =========================================================
+   Step 1. 建立「純1客戶」母體
+   ※ 這一步只是定義 migration 範圍
+   ========================================================= */
+
+IF OBJECT_ID('tempdb..#PURE_1_CUST') IS NOT NULL
+    DROP TABLE #PURE_1_CUST;
+
+SELECT DISTINCT SK_CUST_ID
+INTO #PURE_1_CUST
+FROM (
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE CUST_RE_NO_FLG = '1'
+
+    EXCEPT
+
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE CUST_RE_NO_FLG IN ('2', '3')
+) t;
+
+
+
+/* =========================================================
+   Step 2. 驗證母體總數
+   ========================================================= */
 
 SELECT 
-    d.cif_key,
+    COUNT(*) AS PURE_1_TOTAL_CNT
+FROM #PURE_1_CUST;
+
+
+
+/* =========================================================
+   Step 3. 驗證是否成功 mapping 至 BSA
+   ========================================================= */
+
+SELECT 
+    COUNT(DISTINCT c.CustomerNo) AS BSA_MAPPING_CNT
+FROM #PURE_1_CUST t
+JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d
+    ON d.CustomerNo = c.CustomerNo;
+
+
+
+/* =========================================================
+   Step 4. 找出沒有 mapping 到 BSA 的客戶
+   ========================================================= */
+
+SELECT 
+    t.SK_CUST_ID AS CustomerNo
+FROM #PURE_1_CUST t
+LEFT JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+LEFT JOIN BSA_SUB_CUST_FACT d
+    ON d.CustomerNo = c.CustomerNo
+WHERE d.CustomerNo IS NULL;
+
+
+
+/* =========================================================
+   Step 5. 驗證是否成功進 PB
+   ========================================================= */
+
+SELECT 
+    COUNT(DISTINCT c.CustomerNo) AS PB_SUCCESS_CNT
+FROM #PURE_1_CUST t
+JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d
+    ON d.CustomerNo = c.CustomerNo
+JOIN PB_CUSTOMER_FACT p
+    ON p.cif_key = d.cif_key;
+
+
+
+/* =========================================================
+   Step 6. 找出沒有進 PB 的客戶
+   ========================================================= */
+
+SELECT 
     c.CustomerNo,
-    c.cust_nme  AS buffer_cust_nme,
-    p.cust_nme  AS pb_cust_nme
-FROM (
-    SELECT SK_CUST_ID 
-    FROM BANCS_SK_CUST_INFO 
-    WHERE CUST_RE_NO_FLG = '1'
-
-    EXCEPT
-
-    SELECT SK_CUST_ID 
-    FROM BANCS_SK_CUST_INFO 
-    WHERE CUST_RE_NO_FLG IN ('2', '3')
-) AS b   
-
-JOIN Customer_Migrate_buffer c 
-    ON c.CustomerNo = b.SK_CUST_ID   
-
-JOIN BSA_SUB_CUST_FACT d 
-    ON d.CustomerNo = c.CustomerNo
-
-JOIN PB_CUSTOMER_FACT p
-    ON d.cif_key = p.cif_key
-
-WHERE 
-      c.cust_nme <> p.cust_nme
-   OR (c.cust_nme IS NULL AND p.cust_nme IS NOT NULL)
-   OR (c.cust_nme IS NOT NULL AND p.cust_nme IS NULL);
-
-
-   -----
-
-
-
-
-
-
-
-   --------
-
-
-   SELECT COUNT(*)
-FROM (
-    SELECT SK_CUST_ID 
-    FROM BANCS_SK_CUST_INFO 
-    WHERE CUST_RE_NO_FLG = '1'
-    EXCEPT
-    SELECT SK_CUST_ID 
-    FROM BANCS_SK_CUST_INFO 
-    WHERE CUST_RE_NO_FLG IN ('2', '3')
-) b
-JOIN Customer_Migrate_buffer c 
-    ON c.CustomerNo = b.SK_CUST_ID
-JOIN BSA_SUB_CUST_FACT d 
-    ON d.CustomerNo = c.CustomerNo
-JOIN PB_CUSTOMER_FACT p
-    ON d.cif_key = p.cif_key;
-
-
-
-	SELECT 
-    d.cif_key,
-    c.CustomerNo
-FROM (
-    SELECT SK_CUST_ID 
-    FROM BANCS_SK_CUST_INFO 
-    WHERE CUST_RE_NO_FLG = '1'
-    EXCEPT
-    SELECT SK_CUST_ID 
-    FROM BANCS_SK_CUST_INFO 
-    WHERE CUST_RE_NO_FLG IN ('2', '3')
-) b
-JOIN Customer_Migrate_buffer c 
-    ON c.CustomerNo = b.SK_CUST_ID
-JOIN BSA_SUB_CUST_FACT d 
+    d.cif_key
+FROM #PURE_1_CUST t
+JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d
     ON d.CustomerNo = c.CustomerNo
 LEFT JOIN PB_CUSTOMER_FACT p
-    ON d.cif_key = p.cif_key
+    ON p.cif_key = d.cif_key
 WHERE p.cif_key IS NULL;
 
 
 
-SELECT *
-FROM (
-    SELECT SK_CUST_ID 
-    FROM BANCS_SK_CUST_INFO 
-    WHERE CUST_RE_NO_FLG = '1'
-    EXCEPT
-    SELECT SK_CUST_ID 
-    FROM BANCS_SK_CUST_INFO 
-    WHERE CUST_RE_NO_FLG IN ('2', '3')
-) b
-JOIN Customer_Migrate_buffer c 
-    ON c.CustomerNo = b.SK_CUST_ID
-JOIN BSA_SUB_CUST_FACT d 
+/* =========================================================
+   Step 7. 驗證 cust_nme 是否一致
+   ========================================================= */
+
+SELECT 
+    d.cif_key,
+    c.CustomerNo,
+    c.cust_nme AS buffer_cust_nme,
+    p.cust_nme AS pb_cust_nme
+FROM #PURE_1_CUST t
+JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d
     ON d.CustomerNo = c.CustomerNo
 JOIN PB_CUSTOMER_FACT p
-    ON d.cif_key = p.cif_key
-WHERE 
-    ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#');
+    ON p.cif_key = d.cif_key
+WHERE ISNULL(c.cust_nme, '#')
+   <> ISNULL(p.cust_nme, '#');
 
 
 
-老闆說要驗證
-只能用台新的資料不能用SK給的
+/* =========================================================
+   Step 8. 驗證 cust_nme 一致筆數
+   ========================================================= */
 
-這要怎麼驗證阿
+SELECT 
+    COUNT(*) AS MATCH_CUST_NME_CNT
+FROM #PURE_1_CUST t
+JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d
+    ON d.CustomerNo = c.CustomerNo
+JOIN PB_CUSTOMER_FACT p
+    ON p.cif_key = d.cif_key
+WHERE ISNULL(c.cust_nme, '#')
+    = ISNULL(p.cust_nme, '#');
+
+
+
+/* =========================================================
+   Step 9. 最終 reconciliation summary
+   ========================================================= */
+
+SELECT
+    (SELECT COUNT(*) 
+     FROM #PURE_1_CUST) AS PURE_1_TOTAL,
+
+    (SELECT COUNT(DISTINCT c.CustomerNo)
+     FROM #PURE_1_CUST t
+     JOIN Customer_Migrate_buffer c
+         ON c.CustomerNo = t.SK_CUST_ID
+     JOIN BSA_SUB_CUST_FACT d
+         ON d.CustomerNo = c.CustomerNo) AS BSA_MAPPING_TOTAL,
+
+    (SELECT COUNT(DISTINCT c.CustomerNo)
+     FROM #PURE_1_CUST t
+     JOIN Customer_Migrate_buffer c
+         ON c.CustomerNo = t.SK_CUST_ID
+     JOIN BSA_SUB_CUST_FACT d
+         ON d.CustomerNo = c.CustomerNo
+     JOIN PB_CUSTOMER_FACT p
+         ON p.cif_key = d.cif_key) AS PB_SUCCESS_TOTAL,
+
+    (SELECT COUNT(*)
+     FROM #PURE_1_CUST t
+     JOIN Customer_Migrate_buffer c
+         ON c.CustomerNo = t.SK_CUST_ID
+     JOIN BSA_SUB_CUST_FACT d
+         ON d.CustomerNo = c.CustomerNo
+     JOIN PB_CUSTOMER_FACT p
+         ON p.cif_key = d.cif_key
+     WHERE ISNULL(c.cust_nme, '#')
+         <> ISNULL(p.cust_nme, '#')) AS CUST_NME_MISMATCH_TOTAL;
