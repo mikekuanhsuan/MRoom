@@ -1,50 +1,23 @@
-好，這題我直接幫你「收斂成銀行可交付版本」。
+可以，這次我幫你整理成「一支可以直接交付的完整驗證 SQL」，而且完全符合你限制：
 
-你現在其實不是在做 SQL 查詢了，你是在做：
-
-🏦 Migration correctness verification（且不能依賴 SK 結果）
-
-⸻
-
-🎯 你要驗證的本質只有 2 件事
-
-① 該進 PB 的（migration 名單）有沒有進去
-
-② 不該進 PB 的（非 migration）有沒有進去
+❌ 不用 SK flag 做結論
+✅ SK 只用來定義 PURE_1（母體）
+✅ 所有驗證都用台新資料（buffer / BSA / PB）
 
 ⸻
 
-⚠️ 你的核心限制
+🏦 Migration Verification Full Script（可直接交付版）
 
-你說：
-
-❌ 不能用 SK flag 當驗證依據
-❌ 只能用台新資料
-
-所以 SK 只能做一件事：
-
-👉 「定義 migration 母體」
-
-不能做：
-
-👉 結論判斷
-
-⸻
-
-🧠 正確驗證架構（你要記這個）
-
-SK → 只負責定義 PURE_1（名單）
-        ↓
-台新 buffer / BSA / PB → 負責驗證結果
-
-⸻
-
-✅ 完整驗證 SQL（真正可交付版）
-
-⸻
-
-① 定義 migration 母體（只用來圈人）
-
+/* =========================================================
+   MIGRATION VALIDATION REPORT
+   目的：
+   驗證 PURE_1 客戶是否正確進入 PB
+   並檢查是否有異常寫入或遺漏
+   ========================================================= */
+/* =========================================================
+   Step 1. 定義 PURE_1（migration 母體）
+   只用於圈定 migration 對象
+   ========================================================= */
 WITH PURE_1 AS (
     SELECT DISTINCT SK_CUST_ID
     FROM (
@@ -57,13 +30,27 @@ WITH PURE_1 AS (
         WHERE CUST_RE_NO_FLG IN ('2','3')
     ) t
 )
-
-⸻
-
-② migration 成功進 PB 的數量
-
+/* =========================================================
+   Step 2. Migration 母體總數
+   ========================================================= */
 SELECT 
-    COUNT(DISTINCT c.CustomerNo) AS MIGRATED_TO_PB
+    COUNT(*) AS PURE_1_TOTAL
+FROM PURE_1;
+/* =========================================================
+   Step 3. 成功 mapping 到 BSA
+   ========================================================= */
+SELECT 
+    COUNT(DISTINCT c.CustomerNo) AS BSA_MAPPING_TOTAL
+FROM PURE_1 t
+JOIN Customer_Migrate_buffer c
+    ON c.CustomerNo = t.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d
+    ON d.CustomerNo = c.CustomerNo;
+/* =========================================================
+   Step 4. 成功進 PB
+   ========================================================= */
+SELECT 
+    COUNT(DISTINCT c.CustomerNo) AS PB_SUCCESS_TOTAL
 FROM PURE_1 t
 JOIN Customer_Migrate_buffer c
     ON c.CustomerNo = t.SK_CUST_ID
@@ -71,15 +58,12 @@ JOIN BSA_SUB_CUST_FACT d
     ON d.CustomerNo = c.CustomerNo
 JOIN PB_CUSTOMER_FACT p
     ON p.cif_key = d.cif_key;
-
-⸻
-
-③ ❗ missing（該進 PB 但沒進）
-
-👉 這是最重要 KPI
-
+/* =========================================================
+   Step 5. ❗ Missing in PB（最重要 KPI）
+   ========================================================= */
 SELECT 
-    t.SK_CUST_ID AS CustomerNo
+    t.SK_CUST_ID AS CustomerNo,
+    d.cif_key
 FROM PURE_1 t
 JOIN Customer_Migrate_buffer c
     ON c.CustomerNo = t.SK_CUST_ID
@@ -88,32 +72,27 @@ JOIN BSA_SUB_CUST_FACT d
 LEFT JOIN PB_CUSTOMER_FACT p
     ON p.cif_key = d.cif_key
 WHERE p.cif_key IS NULL;
-
-⸻
-
-④ ❗ extra（不該進 PB 但進了）
-
-👉 這是 contamination check
-
+/* =========================================================
+   Step 6. ❗ Extra in PB（不該進卻存在）
+   ========================================================= */
 SELECT 
     d.CustomerNo,
-    p.cif_key
+    p.cif_key,
+    p.cust_nme
 FROM PB_CUSTOMER_FACT p
 JOIN BSA_SUB_CUST_FACT d
     ON d.cif_key = p.cif_key
 LEFT JOIN PURE_1 t
     ON t.SK_CUST_ID = d.CustomerNo
 WHERE t.SK_CUST_ID IS NULL;
-
-⸻
-
-⑤ name mismatch（你現在那 3508）
-
+/* =========================================================
+   Step 7. Name mismatch（資訊驗證，不影響 migration KPI）
+   ========================================================= */
 SELECT 
     d.cif_key,
     c.CustomerNo,
-    c.cust_nme AS buffer_name,
-    p.cust_nme AS pb_name
+    c.cust_nme AS buffer_cust_nme,
+    p.cust_nme AS pb_cust_nme
 FROM PURE_1 t
 JOIN Customer_Migrate_buffer c
     ON c.CustomerNo = t.SK_CUST_ID
@@ -122,50 +101,76 @@ JOIN BSA_SUB_CUST_FACT d
 JOIN PB_CUSTOMER_FACT p
     ON p.cif_key = d.cif_key
 WHERE ISNULL(c.cust_nme,'#') <> ISNULL(p.cust_nme,'#');
+/* =========================================================
+   Step 8. FINAL SUMMARY（交付用）
+   ========================================================= */
+SELECT
+    (SELECT COUNT(*) FROM PURE_1) AS PURE_1_TOTAL,
+    (SELECT COUNT(DISTINCT c.CustomerNo)
+     FROM PURE_1 t
+     JOIN Customer_Migrate_buffer c
+         ON c.CustomerNo = t.SK_CUST_ID
+     JOIN BSA_SUB_CUST_FACT d
+         ON d.CustomerNo = c.CustomerNo) AS BSA_MAPPING_TOTAL,
+    (SELECT COUNT(DISTINCT c.CustomerNo)
+     FROM PURE_1 t
+     JOIN Customer_Migrate_buffer c
+         ON c.CustomerNo = t.SK_CUST_ID
+     JOIN BSA_SUB_CUST_FACT d
+         ON d.CustomerNo = c.CustomerNo
+     JOIN PB_CUSTOMER_FACT p
+         ON p.cif_key = d.cif_key) AS PB_SUCCESS_TOTAL,
+    (SELECT COUNT(*)
+     FROM PURE_1 t
+     JOIN Customer_Migrate_buffer c
+         ON c.CustomerNo = t.SK_CUST_ID
+     JOIN BSA_SUB_CUST_FACT d
+         ON d.CustomerNo = c.CustomerNo
+     LEFT JOIN PB_CUSTOMER_FACT p
+         ON p.cif_key = d.cif_key
+     WHERE p.cif_key IS NULL) AS MISSING_IN_PB_TOTAL,
+    (SELECT COUNT(*)
+     FROM PB_CUSTOMER_FACT p
+     JOIN BSA_SUB_CUST_FACT d
+         ON d.cif_key = p.cif_key
+     LEFT JOIN PURE_1 t
+         ON t.SK_CUST_ID = d.CustomerNo
+     WHERE t.SK_CUST_ID IS NULL) AS EXTRA_IN_PB_TOTAL;
 
 ⸻
 
-📊 最終你要交付給老闆的是這 4 個數字
+🧠 這份 SQL 在做什麼（重點一句話版）
 
-只要這四個：
+👉 驗證 migration 是否：
 
-指標	意義
+* 有漏人（MISSING_IN_PB）
+* 有偷進（EXTRA_IN_PB）
+* 有成功寫入（PB_SUCCESS）
+* 有正確 mapping（BSA_MAPPING）
+
+⸻
+
+📊 老闆最愛看的結論長這樣
+
+KPI	意義
 PURE_1_TOTAL	migration 對象
-MIGRATED_TO_PB	成功寫入
-MISSING_IN_PB	應該有但沒有
-EXTRA_IN_PB	不該有但存在
+PB_SUCCESS_TOTAL	成功寫入
+MISSING_IN_PB_TOTAL	migration 遺漏
+EXTRA_IN_PB_TOTAL	異常寫入
 
 ⸻
 
-🚨 你現在 36 筆的正確解釋
+🚨 你現在那個 3508 / 36
 
-你之前問的：
+在這套架構裡會被自然歸類成：
 
-36 筆是什麼？
-
-答案是：
-
-👉 這是「存在於 PB，但 name 剛好一致的 overlap 資料」
-
-但在 migration 驗證裡：
-
-⚠️ 它不是成功，也不是錯誤
-⚠️ 它只是「無法判定變更的舊資料」
+* 3508 → name mismatch（不影響 migration KPI）
+* 36 → overlap / historical data（不再當成功或失敗）
 
 ⸻
 
-🧾 一句話收斂
+如果你下一步要再升級，我可以幫你做一個：
 
-你這份 report 的真正結論應該是：
-
-Migration correctness = 只看「缺失」與「異常寫入」，不看 name mismatch。
-
-⸻
-
-如果你下一步要更進階，我可以幫你做：
-
-🔥「￼ 一鍵輸出 migration audit dashboard SQL（含 success rate %）」
+🔥「￼ 一鍵輸出 Excel migration report（欄位+格式+摘要）」
 或
-🔥「￼ 老闆版 Excel 報表欄位設計」
-
-會直接變成可以交差那種。
+🔥「￼ 幫你寫成 stored procedure，直接每天跑」
