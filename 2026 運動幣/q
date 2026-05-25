@@ -1,182 +1,77 @@
-/* =========================================================
-   驗證目的：
-   驗證此次 migration 僅寫入 Customer_Migrate_buffer 內的客戶，
-   不存在非 migration 名單客戶被異常寫入 PB_CUSTOMER_FACT。
-
-   驗證方式：
-   完全不使用 SK flag / BANCS_SK_CUST_INFO。
-   僅使用台新 migration 名單與 PB 結果進行 reconciliation。
-   ========================================================= */
-
-
-
-/* =========================================================
-   Step 1. Migration 母體總數
-   驗證：
-   Customer_Migrate_buffer 共有多少客戶
-   ========================================================= */
-
-SELECT 
-    COUNT(DISTINCT CustomerNo) AS MIGRATION_TOTAL_CNT
-FROM Customer_Migrate_buffer;
-
-
-
-/* =========================================================
-   Step 2. 成功 mapping 至 BSA 的客戶數
-   驗證：
-   migration 名單是否成功建立 cif_key mapping
-   ========================================================= */
-
-SELECT 
-    COUNT(DISTINCT c.CustomerNo) AS BSA_MAPPING_CNT
-FROM Customer_Migrate_buffer c
-JOIN BSA_SUB_CUST_FACT d
-    ON d.CustomerNo = c.CustomerNo;
-
-
-
-/* =========================================================
-   Step 3. 找出沒有 mapping 至 BSA 的客戶
-   驗證：
-   哪些 migration 客戶無法建立 cif_key
-   ========================================================= */
+看起來你已經非常有概念了！你寫的這段語法邏輯基本上方向完全正確，利用 LEFT JOIN Cust_NP_Migrate_buffer 串接 cif_key 來比對 HIGHRISK 欄位是非常標準的做法。
+不過，如果要確保它**百分之百能精準抓出你預期的 25 筆不同**，我們需要微調兩個小地方，避免被 NULL 值或是多重條件的 CASE WHEN 排序給干擾。
+以下為你調整後的完整 SQL 語法：
+```sql
+;WITH Pure_Flag1 AS (
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    GROUP BY SK_CUST_ID
+    HAVING 
+        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
+        AND
+        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
+),
+Base_36 AS (
+    SELECT 
+        d.cif_key,
+        c.CustomerNo,
+        c.cust_nme AS buffer_cust_nme,
+        p.cust_nme AS pb_cust_nme,
+        c.OPEN_DTE AS buffer_open_dte,
+        p.OPEN_DTE AS pb_open_dte,
+        p.HIGHRISK AS pb_highrisk -- 確保 PB 端的 HIGHRISK 有被選出來
+    FROM Pure_Flag1 b
+    JOIN Customer_Migrate_buffer c 
+        ON c.CustomerNo = b.SK_CUST_ID
+    JOIN BSA_SUB_CUST_FACT d 
+        ON d.CustomerNo = c.CustomerNo
+    JOIN PB_CUSTOMER_FACT p
+        ON d.cif_key = p.cif_key
+    WHERE 
+        ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
+)
 
 SELECT 
-    c.CustomerNo
-FROM Customer_Migrate_buffer c
-LEFT JOIN BSA_SUB_CUST_FACT d
-    ON d.CustomerNo = c.CustomerNo
-WHERE d.CustomerNo IS NULL;
+    CASE 
+        -- 情況 1：日期不同（原本的那 11 筆）
+        WHEN ISNULL(CAST(main.buffer_open_dte AS DATE), '19000101') 
+          <> ISNULL(CAST(main.pb_open_dte AS DATE), '19000101') 
+        THEN '❌ 日期不同 (先前確認的11筆)' 
+        
+        -- 情況 2：日期相同，但 HIGHRISK 不同（你現在想找的 25 筆）
+        -- 💡 這裡加上 ISNULL 處理，預防有任何一端的 HIGHRISK 是 NULL
+        WHEN ISNULL(main.pb_highrisk, '#') <> ISNULL(np.HIGHRISK, '#') 
+        THEN '⚠️ 日期相同，但 HIGHRISK 不同 (預期25筆)'
+        
+        -- 情況 3：日期相同，且 HIGHRISK 也相同
+        ELSE '✅ 日期相同，且 HIGHRISK 相同'
+    END AS [詳細比對結果],
+    main.cif_key,
+    main.CustomerNo,
+    main.buffer_cust_nme,
+    main.buffer_open_dte,
+    main.pb_open_dte,
+    main.pb_highrisk AS [PB端的HighRisk],
+    np.HIGHRISK AS [NP_Buffer端的HighRisk]
+FROM Base_36 main
+-- 💡 使用 LEFT JOIN 串接。請確保 Cust_NP_Migrate_buffer 裡的 CIF_KEY 是唯一的，否則資料筆數會膨脹
+LEFT JOIN Cust_NP_Migrate_buffer np 
+    ON main.cif_key = np.CIF_KEY
+-- 💡 調整排序：讓你想看的「HIGHRISK不同」排在最上面，再來是「日期不同」
+ORDER BY 
+    CASE 
+        WHEN ISNULL(CAST(main.buffer_open_dte AS DATE), '19000101') = ISNULL(CAST(main.pb_open_dte AS DATE), '19000101') 
+         AND ISNULL(main.pb_highrisk, '#') <> ISNULL(np.HIGHRISK, '#') THEN 1  -- 最優先看
+        WHEN ISNULL(CAST(main.buffer_open_dte AS DATE), '19000101') <> ISNULL(CAST(main.pb_open_dte AS DATE), '19000101') THEN 2  -- 其次看
+        ELSE 3 
+    END ASC, 
+    main.CustomerNo;
 
-
-
-/* =========================================================
-   Step 4. 成功寫入 PB 的客戶數
-   驗證：
-   migration 名單中有多少客戶成功進入 PB_CUSTOMER_FACT
-   ========================================================= */
-
-SELECT 
-    COUNT(DISTINCT c.CustomerNo) AS PB_SUCCESS_CNT
-FROM Customer_Migrate_buffer c
-JOIN BSA_SUB_CUST_FACT d
-    ON d.CustomerNo = c.CustomerNo
-JOIN PB_CUSTOMER_FACT p
-    ON p.cif_key = d.cif_key;
-
-
-
-/* =========================================================
-   Step 5. 找出 migration 名單中未寫入 PB 的客戶
-   驗證：
-   是否存在 migration 遺漏資料
-   ========================================================= */
-
-SELECT 
-    c.CustomerNo,
-    d.cif_key
-FROM Customer_Migrate_buffer c
-JOIN BSA_SUB_CUST_FACT d
-    ON d.CustomerNo = c.CustomerNo
-LEFT JOIN PB_CUSTOMER_FACT p
-    ON p.cif_key = d.cif_key
-WHERE p.cif_key IS NULL;
-
-
-
-/* =========================================================
-   Step 6. 找出非 migration 名單卻存在於 PB 的客戶
-   驗證：
-   是否存在非 migration 客戶被異常寫入 PB
-   （最重要的 contamination check）
-   ========================================================= */
-
-SELECT 
-    d.CustomerNo,
-    p.cif_key,
-    p.cust_nme
-FROM PB_CUSTOMER_FACT p
-JOIN BSA_SUB_CUST_FACT d
-    ON d.cif_key = p.cif_key
-
-LEFT JOIN Customer_Migrate_buffer c
-    ON c.CustomerNo = d.CustomerNo
-
-WHERE c.CustomerNo IS NULL;
-
-
-
-/* =========================================================
-   Step 7. migration 名單與 PB 姓名一致性驗證
-   驗證：
-   migration 後姓名是否一致
-   （若共有戶本來就不寫入，可忽略 mismatch）
-   ========================================================= */
-
-SELECT 
-    d.cif_key,
-    c.CustomerNo,
-    c.cust_nme AS buffer_cust_nme,
-    p.cust_nme AS pb_cust_nme
-FROM Customer_Migrate_buffer c
-JOIN BSA_SUB_CUST_FACT d
-    ON d.CustomerNo = c.CustomerNo
-JOIN PB_CUSTOMER_FACT p
-    ON p.cif_key = d.cif_key
-WHERE ISNULL(c.cust_nme, '#')
-   <> ISNULL(p.cust_nme, '#');
-
-
-
-/* =========================================================
-   Step 8. 最終 reconciliation summary
-   驗證：
-   migration 整體結果摘要
-   ========================================================= */
-
-SELECT
-
-    /* migration 母體 */
-    (SELECT COUNT(DISTINCT CustomerNo)
-     FROM Customer_Migrate_buffer) AS MIGRATION_TOTAL,
-
-
-
-    /* 成功 mapping 至 BSA */
-    (SELECT COUNT(DISTINCT c.CustomerNo)
-     FROM Customer_Migrate_buffer c
-     JOIN BSA_SUB_CUST_FACT d
-         ON d.CustomerNo = c.CustomerNo) AS BSA_MAPPING_TOTAL,
-
-
-
-    /* 成功進 PB */
-    (SELECT COUNT(DISTINCT c.CustomerNo)
-     FROM Customer_Migrate_buffer c
-     JOIN BSA_SUB_CUST_FACT d
-         ON d.CustomerNo = c.CustomerNo
-     JOIN PB_CUSTOMER_FACT p
-         ON p.cif_key = d.cif_key) AS PB_SUCCESS_TOTAL,
-
-
-
-    /* 未進 PB */
-    (SELECT COUNT(*)
-     FROM Customer_Migrate_buffer c
-     JOIN BSA_SUB_CUST_FACT d
-         ON d.CustomerNo = c.CustomerNo
-     LEFT JOIN PB_CUSTOMER_FACT p
-         ON p.cif_key = d.cif_key
-     WHERE p.cif_key IS NULL) AS PB_MISSING_TOTAL,
-
-
-
-    /* 非 migration 名單卻存在 PB */
-    (SELECT COUNT(*)
-     FROM PB_CUSTOMER_FACT p
-     JOIN BSA_SUB_CUST_FACT d
-         ON d.cif_key = p.cif_key
-     LEFT JOIN Customer_Migrate_buffer c
-         ON c.CustomerNo = d.CustomerNo
-     WHERE c.CustomerNo IS NULL) AS PB_UNEXPECTED_TOTAL;
+```
+### 🛠️ 幫你修改的重點說明：
+ 1. **簡化 CASE WHEN 邏輯**：
+   原本你的寫法是 CASE 裡面又包了一層 CASE（巢狀結構）。我把它拆解成平行的三個條件，這樣 SQL 在執行和閱讀上會更直覺，比較不容易因為括號或層級弄錯而發生邏輯漏洞。
+ 2. **優化 ORDER BY 排序**：
+   因為字串排序（DESC）可能不會剛好把你最想看的 ⚠️ 日期相同，但 HIGHRISK 不同 排在最上面。我改用權重（1, 2, 3）來排序，**確保那 25 筆目標資料一定會乖乖排在最頂端**。
+ 3. **注意 Cust_NP_Migrate_buffer 的資料唯一性**：
+   執行後請幫我確認一下總筆數是不是維持在 36 筆。如果總筆數超出了（例如變成 37 筆以上），代表 Cust_NP_Migrate_buffer 表格中，同一個 CIF_KEY 有重複的資料列，到時候 LEFT JOIN 就需要再額外下 GROUP BY 或 ROW_NUMBER() 調整。如果剛好是 36 筆就完全沒問題！
