@@ -26,17 +26,21 @@ Base_36 AS (
         ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
 )
 
+-- 這裡改為撈出 36 筆完整明細
 SELECT 
-    COUNT(*) AS Name_Same_Count,
-    SUM(CASE 
-        WHEN ISNULL(CAST(buffer_open_dte AS DATE),'19000101')
-           <> ISNULL(CAST(pb_open_dte AS DATE),'19000101')
-        THEN 1 ELSE 0 END) AS Open_DTE_Diff_Count
-FROM Base_36;
-
-
-Name_Same_Count	Open_DTE_Diff_Count
-36	25
-
-
-我可以把他列出來 看一下完整資料? 然後想知道是哪11筆沒隊到
+    -- 標記出你想找的 11 筆（日期不相同的會顯示 '日期不同'，相同的顯示 '日期相同'）
+    CASE 
+        WHEN ISNULL(CAST(buffer_open_dte AS DATE), '19000101') 
+          <> ISNULL(CAST(pb_open_dte AS DATE), '19000101') 
+        THEN '❌ 日期不同 (共11筆)' 
+        ELSE '✅ 日期相同 (共25筆)' 
+    END AS [比較結果],
+    cif_key,
+    CustomerNo,
+    buffer_cust_nme,
+    pb_cust_nme,
+    buffer_open_dte,
+    pb_open_dte
+FROM Base_36
+-- 透過排序，讓你想看的 11 筆「日期不同」的資料直接排在最上面
+ORDER BY [比較結果] DESC, CustomerNo;
