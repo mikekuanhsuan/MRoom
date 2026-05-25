@@ -1,3 +1,113 @@
+你現在要找的是：
+
+* Cust_NP_Migrate_buffer 中 IsBearerShares = '1' 有 217 筆
+* 對應到 bsa_sub_cust_fact + mapping 後只有 215 筆
+
+也就是：
+
+👉 有 2 筆沒有成功對到 bsa_sub_cust_fact
+
+最乾淨的方式就是直接用 EXCEPT 找差異。🌪️
+
+/* =========================================
+   找出 Cust_NP_Migrate_buffer 有
+   但 bsa_sub_cust_fact 沒有的 2 筆
+========================================= */
+SELECT DISTINCT
+    b.CIF_KEY
+FROM Cust_NP_Migrate_buffer b
+WHERE b.IsBearerShares = '1'
+EXCEPT
+SELECT DISTINCT
+    m.SOURCE_CIF_KEY
+FROM bsa_sub_cust_fact a
+JOIN CIF_Migrate_Mapping_TEMP m
+    ON a.CIF_KEY = m.NEW_CIF_KEY
+WHERE a.Cust_With_Bearer_Shares = 'Y';
+
+這樣會直接吐出差異的 CIF_KEY。
+
+⸻
+
+如果你想直接看完整資料，可以再包一次：
+
+/* =========================================
+   顯示差異的完整資料
+========================================= */
+WITH Diff AS (
+    SELECT DISTINCT
+        b.CIF_KEY
+    FROM Cust_NP_Migrate_buffer b
+    WHERE b.IsBearerShares = '1'
+    EXCEPT
+    SELECT DISTINCT
+        m.SOURCE_CIF_KEY
+    FROM bsa_sub_cust_fact a
+    JOIN CIF_Migrate_Mapping_TEMP m
+        ON a.CIF_KEY = m.NEW_CIF_KEY
+    WHERE a.Cust_With_Bearer_Shares = 'Y'
+)
+SELECT b.*
+FROM Cust_NP_Migrate_buffer b
+JOIN Diff d
+    ON b.CIF_KEY = d.CIF_KEY;
+
+⸻
+
+你也可以反向確認：
+
+看看是不是有資料存在於 bsa_sub_cust_fact，但 buffer 沒有。
+
+/* =========================================
+   反向檢查
+========================================= */
+SELECT DISTINCT
+    m.SOURCE_CIF_KEY
+FROM bsa_sub_cust_fact a
+JOIN CIF_Migrate_Mapping_TEMP m
+    ON a.CIF_KEY = m.NEW_CIF_KEY
+WHERE a.Cust_With_Bearer_Shares = 'Y'
+EXCEPT
+SELECT DISTINCT
+    b.CIF_KEY
+FROM Cust_NP_Migrate_buffer b
+WHERE b.IsBearerShares = '1';
+
+⸻
+
+通常這種差 2 筆，兇手很常是：
+
+* mapping table 沒 mapping 到
+* NEW_CIF_KEY 不存在
+* Cust_With_Bearer_Shares 沒被更新成 Y
+* duplicate 被 DISTINCT 吃掉
+* NULL 值
+* 一對多 mapping 🧩
+
+建議你再檢查這兩個：
+
+-- 是否沒有 mapping
+SELECT *
+FROM CIF_Migrate_Mapping_TEMP
+WHERE SOURCE_CIF_KEY IN (
+    -- 差異 CIF_KEY 貼這裡
+);
+-- 是否 mapping 到後不存在 fact
+SELECT *
+FROM bsa_sub_cust_fact
+WHERE CIF_KEY IN (
+    SELECT NEW_CIF_KEY
+    FROM CIF_Migrate_Mapping_TEMP
+    WHERE SOURCE_CIF_KEY IN (
+        -- 差異 CIF_KEY
+    )
+);
+
+這樣幾乎就能把那 2 筆「幽靈客戶 👻」抓出來。
+
+
+？
+
 SELECT IsBearerShares,* FROM Cust_NP_Migrate_buffer WHERE IsBearerShares = '1'
 
 筆數217
