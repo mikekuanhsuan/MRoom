@@ -1,125 +1,82 @@
-/* =========================================================
-   驗證目的：
-   驗證 flag=1 且非 2/3 客戶，
-   是否正確未寫入 PB_CUSTOMER_FACT。
-
-   說明：
-   1. SK 資料僅用於定義 migration 母體
-   2. 驗證結果完全使用台新資料進行 reconciliation
-   ========================================================= */
 
 
-
-/* =========================================================
-   Step 1. 建立「純1客戶」母體
-   flag = 1
-   排除 flag = 2 / 3
-   ========================================================= */
-
-IF OBJECT_ID('tempdb..#PURE_1_CUST') IS NOT NULL
-    DROP TABLE #PURE_1_CUST;
-
-SELECT DISTINCT SK_CUST_ID
-INTO #PURE_1_CUST
+SELECT d.cif_key , d.CustomerNo
 FROM (
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
+    SELECT SK_CUST_ID 
+    FROM BANCS_SK_CUST_INFO 
     WHERE CUST_RE_NO_FLG = '1'
 
     EXCEPT
 
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG IN ('2','3')
-) t;
+    SELECT SK_CUST_ID 
+    FROM BANCS_SK_CUST_INFO 
+    WHERE CUST_RE_NO_FLG IN ('2', '3')
+) AS b   
+
+JOIN Customer_Migrate_buffer c 
+    ON c.CustomerNo = b.SK_CUST_ID   
+
+JOIN BSA_SUB_CUST_FACT d 
+    ON d.CustomerNo = c.CustomerNo;
 
 
+--3544
 
-/* =========================================================
-   Step 2. 純1客戶總數
-   ========================================================= */
-
+		 
 SELECT 
-    COUNT(*) AS PURE_1_TOTAL_CNT
-FROM #PURE_1_CUST;
-
-
-
-/* =========================================================
-   Step 3. 純1客戶是否存在 migration 名單
-   驗證：
-   哪些共有戶被放進 migration buffer
-   ========================================================= */
-
-SELECT 
-    t.SK_CUST_ID AS CustomerNo
-FROM #PURE_1_CUST t
-JOIN Customer_Migrate_buffer c
-    ON c.CustomerNo = t.SK_CUST_ID;
-
-
-
-/* =========================================================
-   Step 4. 純1客戶是否寫入 PB
-   驗證：
-   不應 migration 的共有戶，
-   是否異常存在 PB
-   ========================================================= */
-
-SELECT 
-    t.SK_CUST_ID AS CustomerNo,
     d.cif_key,
-    p.cust_nme
-FROM #PURE_1_CUST t
+    c.CustomerNo,
+    c.cust_nme  AS buffer_cust_nme,
+    p.cust_nme  AS pb_cust_nme
+FROM (
+    SELECT SK_CUST_ID 
+    FROM BANCS_SK_CUST_INFO 
+    WHERE CUST_RE_NO_FLG = '1'
 
-JOIN BSA_SUB_CUST_FACT d
-    ON d.CustomerNo = t.SK_CUST_ID
+    EXCEPT
+
+    SELECT SK_CUST_ID 
+    FROM BANCS_SK_CUST_INFO 
+    WHERE CUST_RE_NO_FLG IN ('2', '3')
+) AS b   
+
+JOIN Customer_Migrate_buffer c 
+    ON c.CustomerNo = b.SK_CUST_ID   
+
+JOIN BSA_SUB_CUST_FACT d 
+    ON d.CustomerNo = c.CustomerNo
 
 JOIN PB_CUSTOMER_FACT p
-    ON p.cif_key = d.cif_key;
+    ON d.cif_key = p.cif_key
+
+WHERE 
+      c.cust_nme <> p.cust_nme
+   OR (c.cust_nme IS NULL AND p.cust_nme IS NOT NULL)
+   OR (c.cust_nme IS NOT NULL AND p.cust_nme IS NULL);
 
 
-
-/* =========================================================
-   Step 5. 計算異常寫入 PB 的總數
-   ========================================================= */
-
-SELECT 
-    COUNT(DISTINCT t.SK_CUST_ID) AS UNEXPECTED_PB_CNT
-FROM #PURE_1_CUST t
-
-JOIN BSA_SUB_CUST_FACT d
-    ON d.CustomerNo = t.SK_CUST_ID
-
+--3508
+   
+SELECT *
+FROM (
+    SELECT SK_CUST_ID 
+    FROM BANCS_SK_CUST_INFO 
+    WHERE CUST_RE_NO_FLG = '1'
+    EXCEPT
+    SELECT SK_CUST_ID 
+    FROM BANCS_SK_CUST_INFO 
+    WHERE CUST_RE_NO_FLG IN ('2', '3')
+) b
+JOIN Customer_Migrate_buffer c 
+    ON c.CustomerNo = b.SK_CUST_ID
+JOIN BSA_SUB_CUST_FACT d 
+    ON d.CustomerNo = c.CustomerNo
 JOIN PB_CUSTOMER_FACT p
-    ON p.cif_key = d.cif_key;
+    ON d.cif_key = p.cif_key
+WHERE 
+    ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#');
 
 
+--36
 
-/* =========================================================
-   Step 6. 最終 reconciliation summary
-   ========================================================= */
-
-SELECT
-
-    /* 純1客戶總數 */
-    (SELECT COUNT(*)
-     FROM #PURE_1_CUST) AS PURE_1_TOTAL,
-
-
-
-    /* 存在 migration buffer */
-    (SELECT COUNT(DISTINCT t.SK_CUST_ID)
-     FROM #PURE_1_CUST t
-     JOIN Customer_Migrate_buffer c
-         ON c.CustomerNo = t.SK_CUST_ID) AS IN_BUFFER_TOTAL,
-
-
-
-    /* 異常存在 PB */
-    (SELECT COUNT(DISTINCT t.SK_CUST_ID)
-     FROM #PURE_1_CUST t
-     JOIN BSA_SUB_CUST_FACT d
-         ON d.CustomerNo = t.SK_CUST_ID
-     JOIN PB_CUSTOMER_FACT p
-         ON p.cif_key = d.cif_key) AS IN_PB_TOTAL;
+-- 因為她現在cust_nme 都一樣 要怎麼驗正 36筆原本就是PB資料沒有透過Customer_Migrate_buffer的資料更新
