@@ -1,204 +1,25 @@
+SELECT DISTINCT
+    b.CIF_KEY,
+    a.CustomerNo
+FROM Cust_NP_Migrate_buffer b
+JOIN CIF_Migrate_Mapping_TEMP m
+    ON b.CIF_KEY = m.SOURCE_CIF_KEY
+JOIN bsa_sub_cust_fact a
+    ON m.NEW_CIF_KEY = a.CIF_KEY
+JOIN BANCS_SK_CUST_INFO s
+    ON a.CustomerNo = s.SK_CUST_ID
+WHERE b.IsBearerShares = '1'
+  AND s.CUST_RE_NO_FLG = '1'
 
+EXCEPT
 
-SELECT name 
-FROM sys.columns 
-WHERE object_id = OBJECT_ID('Cust_NP_Migrate_buffer');
-
-CIF_KEY
-IsSARFiled
-PEPBitwiseCode
-ReviewDt
-HIGHRISK
-RiskScore
-Warn_Restrict_Account
-SDST2400001
-IsComplexStructure
-IsBearerShares
-
-
-
-
-SELECT name 
-FROM sys.columns 
-WHERE object_id = OBJECT_ID('CIF_Migrate_Mapping_TEMP');
-
-ACTION
-SOURCE_CIF_KEY
-NEW_CIF_KEY
-
-
-
-
-SELECT name 
-FROM sys.columns 
-WHERE object_id = OBJECT_ID('bsa_sub_cust_fact');
-CIF_KEY
-OCCUP
-IDENT
-IDENTO
-ISSBY
-IDNUM
-RELFI
-RELFIOTH
-INRLFI
-INRLFISTAT
-INRLDT
-EXEMPTED
-CUST_TYPE_CDE
-CTRYCD
-EXEMPTDT
-EXEMPTEXPDT
-PREVEXEMPTDT
-NEWRNW_STAT
-AMDRVK_STAT
-EXEMPTBASIS
-EXEMPTCTRL
-APPR_OFCR
-APPR_OFCR_LNME
-APPR_OFCR_FNME
-APPR_OFCR_MNME
-APPR_OFCR_TITLE
-APPRDT
-CONTACTPHN
-CONTACTFNME
-CONTACTLNME
-CONTACTMNME
-LUPDUID
-LUPDDT
-EXEMPT_REM
-EXEMPT_AMT
-MTRIND
-MTREM
-RNW_APPR_OFCR_LNME
-RNW_APPR_OFCR_FNME
-RNW_APPR_OFCR_MNME
-DCCNO
-FILEDIND
-VERIFIED
-SUSPICIOUS
-HIGHRISK
-CLASSNOTE
-NXTRVDT
-HRScore
-WATCH_LIST_REASON
-BizOwnershipCode
-APPR_OFCR_PHN
-RNW_APPR_OFCR_PHN
-RNW_APPR_OFCR_TITLE
-ID_EXPIRY_DT
-CIPScore
-CHIGHRISK
-CRScore
-SC01
-SC02
-SC03
-SC04
-SC05
-SC06
-SC07
-SC08
-SC09
-SC10
-SC11
-SC12
-SC13
-SC14
-SC15
-SC16
-SC17
-SC18
-SC19
-IsPEPHit
-IsOtherListHit
-CIPRiskRanking
-CustomerNo
-HR_LastReviewedBy
-HR_LastReviewedDt
-HR_LastReviewedUTCDt
-Legal_ID
-HRSRiskRanking
-CIP_LastReviewedBy
-CIP_LastReviewedDt
-CIP_LastReviewedUTCDt
-RiskScore
-Risk_LastReviewedBy
-Risk_LastReviewedDt
-Risk_LastReviewedUTCDt
-ISSBY_STATE
-EmployerName
-EmployerAddr
-EmployerPhone
-IsBelievedSuspicious
-IsMoneyTransmitter
-IsNevadaBranch
-IsTransmitOwnNetwork
-IsCashChecker
-IsCashRedeemer
-HasNegativeNews
-NegativeNewsRemark
-IsBelievedSuspiciousRemark
-BIZ_ESTABLISH_YR
-IsSARFiled
-IsSARFiled_LastUpdatedDate
-IsSARFiled_LastUpdatedDate_UTC
-TIME_KEY
-HoldMailAcct
-DepositNetAsset
-BankDealingPeriodCode
-IsMultipleAcctName
-IsComplexStructure
-IsOtherPersonHandleBusiness
-CustomerCategory
-IsForeignEntity
-IslkNegNewsRelatedParties
-IslkAcctPositionListedCompany
-IslkCustSpecLocation
-lkCustWealthCtry
-CoreSystem
-Alias_Name
-Place_Of_Birth
-ElectricalPaymentAccount
-IdentityAuthenticationMechanism1
-IdentityAuthenticationMechanism2
-Main_Business_Address
-Main_Business_Country
-Cust_Product_Service
-Cust_Method_Of_Opening
-Cust_Account_Purpose
-Source_Of_Fund
-Source_Of_Wealth
-Business_Operation_Stat
-First_Trxn_Amt
-Serving_Entity
-JobTitle
-Cust_With_Bearer_Shares
-Uncooperative_Flag
-Trustee_Flag
-Spec_Product_Risk_Code
-OBUFlag
-OBUCustomerType
-CustomerScale
-CustomerLevel
-AnnualIncome
-Education
-Corr_Addr_Change_Flag
-MailRejectCode
-SARExcludeFlag
-Is_PEP
-Is_Foreign_PEP
-Is_Domestic_PEP
-Is_Foreign_Org_PEP
-Is_EX_PEP
-Cust_RP_Is_PEP
-Is_NN
-Is_Blacklist
-Is_High_Risk_Remark
-Warn_Restrict_Account
-Gender
-Nationality2
-Unique_ID_Issuing_Ctry
-MultiAcctAdjRiskFactor
-AccountOfficerEmployeeId
-AccountOfficerEmployeeName
-SAR_BranchNo
-Risk_LastReviewedDt_User
+SELECT DISTINCT
+    m.SOURCE_CIF_KEY,
+    a.CustomerNo
+FROM bsa_sub_cust_fact a
+JOIN CIF_Migrate_Mapping_TEMP m
+    ON a.CIF_KEY = m.NEW_CIF_KEY
+JOIN BANCS_SK_CUST_INFO s
+    ON a.CustomerNo = s.SK_CUST_ID
+WHERE a.Cust_With_Bearer_Shares = 'Y'
+  AND s.CUST_RE_NO_FLG = '1';
