@@ -101,3 +101,10 @@ JOIN PB_CUSTOMER_FACT p
     ON d.cif_key = p.cif_key
 WHERE 
     ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#');
+
+
+
+老闆說要驗證
+只能用台新的資料不能用SK給的
+
+這要怎麼驗證阿
