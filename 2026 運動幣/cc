@@ -44,3 +44,11 @@ SELECT
 FROM Base_36
 -- 透過排序，讓你想看的 11 筆「日期不同」的資料直接排在最上面
 ORDER BY [比較結果] DESC, CustomerNo;
+
+
+
+
+我這些 日期相同的要再去跟 Cust_NP_Migrate_buffer 的HIGHRISK 欄位比較 是不是不同 因為他們都有 HIGHRISK 欄位
+應該要出現25筆不同才對  要怎麼寫
+SELECT HIGHRISK, * FROM Cust_NP_Migrate_buffer WHERE CIF_KEY ='463bcfcf-2beb-e511-80c8-0050568c710a'
+
