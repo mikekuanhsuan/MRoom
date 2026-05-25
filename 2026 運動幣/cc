@@ -1,292 +1,159 @@
------------------------ 純 FLAG=1 客戶總數
+你現在遇到的是典型的「筆數差 2，但 EXCEPT 跑出 3 筆」的狀況。
+這通常不是資料真的多 3 筆，而是：
 
-;WITH Pure_Flag1 AS (
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY SK_CUST_ID
-    HAVING 
-        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-        AND
-        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
-)
-SELECT COUNT(*) AS Pure_Flag1_Count
-FROM Pure_Flag1;
+* CustomerNo / CIF_KEY 有一對多
+* mapping table 有重複
+* NULL
+* DISTINCT 粒度不同
+* 同一 CIF 對到多個 NEW_CIF_KEY
 
-----------------------------------------------------------名稱不同（應為 3508 筆）
-;WITH Pure_Flag1 AS (
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY SK_CUST_ID
-    HAVING 
-        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-        AND
-        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
-)
-SELECT 
-    d.cif_key,
-    c.CustomerNo,
-    c.cust_nme AS buffer_cust_nme,
-    p.cust_nme AS pb_cust_nme
-FROM Pure_Flag1 b
-JOIN Customer_Migrate_buffer c 
-    ON c.CustomerNo = b.SK_CUST_ID
-JOIN BSA_SUB_CUST_FACT d 
-    ON d.CustomerNo = c.CustomerNo
-JOIN PB_CUSTOMER_FACT p
-    ON d.cif_key = p.cif_key
-WHERE 
-    ISNULL(c.cust_nme,'#') <> ISNULL(p.cust_nme,'#');
+像資料庫在玩分身術 🫠
 
+你目前：
 
-	----------------------------------------------------------  名稱相同（應為 36 筆）
+-- 左邊
+Cust_NP_Migrate_buffer
+WHERE IsBearerShares = '1'
 
+vs
 
-	;WITH Pure_Flag1 AS (
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY SK_CUST_ID
-    HAVING 
-        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-        AND
-        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
-)
-SELECT 
-    d.cif_key,
-    c.CustomerNo,
-    c.cust_nme AS buffer_cust_nme,
-    p.cust_nme AS pb_cust_nme
-FROM Pure_Flag1 b
-JOIN Customer_Migrate_buffer c 
-    ON c.CustomerNo = b.SK_CUST_ID
-JOIN BSA_SUB_CUST_FACT d 
-    ON d.CustomerNo = c.CustomerNo
-JOIN PB_CUSTOMER_FACT p
-    ON d.cif_key = p.cif_key
-WHERE 
-    ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
+-- 右邊
+bsa_sub_cust_fact + mapping
+WHERE Cust_With_Bearer_Shares = 'Y'
 
+你真正比的是：
 
+b.CIF_KEY
 
+跟
 
+m.SOURCE_CIF_KEY
 
-		----------------------------------------------------------  
+但原本筆數是：
 
-;WITH Pure_Flag1 AS (
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY SK_CUST_ID
-    HAVING 
-        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-        AND
-        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
-),
-Base_36 AS (
-    SELECT 
-        d.cif_key,
-        c.CustomerNo,
-        c.cust_nme AS buffer_cust_nme,
-        p.cust_nme AS pb_cust_nme,
-        c.OPEN_DTE AS buffer_open_dte,
-        p.OPEN_DTE AS pb_open_dte
-    FROM Pure_Flag1 b
-    JOIN Customer_Migrate_buffer c 
-        ON c.CustomerNo = b.SK_CUST_ID
-    JOIN BSA_SUB_CUST_FACT d 
-        ON d.CustomerNo = c.CustomerNo
-    JOIN PB_CUSTOMER_FACT p
-        ON d.cif_key = p.cif_key
-    WHERE 
-        ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
-)
+217 vs 215
 
-SELECT 
-    COUNT(*) AS Name_Same_Count,
-    SUM(CASE 
-        WHEN ISNULL(CAST(buffer_open_dte AS DATE),'19000101')
-           <> ISNULL(CAST(pb_open_dte AS DATE),'19000101')
-        THEN 1 ELSE 0 END) AS Open_DTE_Diff_Count
-FROM Base_36;
+這是「結果集筆數」。
 
+而 EXCEPT 是：
 
-----------------------------------------------------------
+DISTINCT CIF_KEY
 
+這是「唯一值筆數」。
 
-;WITH Pure_Flag1 AS (
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY SK_CUST_ID
-    HAVING 
-        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-        AND
-        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
-),
-Base_36 AS (
-    SELECT 
-        d.cif_key,
-        c.CustomerNo,
-        c.cust_nme AS buffer_cust_nme,
-        p.cust_nme AS pb_cust_nme,
-        c.OPEN_DTE AS buffer_open_dte,
-        p.OPEN_DTE AS pb_open_dte
-    FROM Pure_Flag1 b
-    JOIN Customer_Migrate_buffer c 
-        ON c.CustomerNo = b.SK_CUST_ID
-    JOIN BSA_SUB_CUST_FACT d 
-        ON d.CustomerNo = c.CustomerNo
-    JOIN PB_CUSTOMER_FACT p
-        ON d.cif_key = p.cif_key
-    WHERE 
-        ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
-)
+兩件事不是同一個世界 🌪️
 
--- 這裡改為撈出 36 筆完整明細
-SELECT 
-    -- 標記出你想找的 11 筆（日期不相同的會顯示 '日期不同'，相同的顯示 '日期相同'）
-    CASE 
-        WHEN ISNULL(CAST(buffer_open_dte AS DATE), '19000101') 
-          <> ISNULL(CAST(pb_open_dte AS DATE), '19000101') 
-        THEN '日期不同 (共11筆)' 
-        ELSE '日期相同 (共25筆)' 
-    END AS [比較結果],
-    cif_key,
-    CustomerNo,
-    buffer_cust_nme,
-    pb_cust_nme,
-    buffer_open_dte,
-    pb_open_dte
-FROM Base_36
+你很可能有：
 
+217 筆資料
+但只有 214 個 distinct CIF_KEY
 
+因此：
 
-------
+* count 差 2
+* distinct key 差 3
 
+是完全可能的。
 
-;WITH Pure_Flag1 AS (
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY SK_CUST_ID
-    HAVING 
-        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-        AND
-        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
-),
-Base_36 AS (
-    SELECT 
-        d.cif_key,
-        c.CustomerNo,
-        c.cust_nme AS buffer_cust_nme,
-        p.cust_nme AS pb_cust_nme,
-        c.OPEN_DTE AS buffer_open_dte,
-        p.OPEN_DTE AS pb_open_dte
-    FROM Pure_Flag1 b
-    JOIN Customer_Migrate_buffer c 
-        ON c.CustomerNo = b.SK_CUST_ID
-    JOIN BSA_SUB_CUST_FACT d 
-        ON d.CustomerNo = c.CustomerNo
-    JOIN PB_CUSTOMER_FACT p
-        ON d.cif_key = p.cif_key
-    WHERE 
-        ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
-)
-SELECT 
-    cif_key,
-    CustomerNo,
-    buffer_cust_nme,
-    pb_cust_nme,
-    buffer_open_dte,
-    pb_open_dte
-FROM Base_36
-WHERE 
-    ISNULL(CAST(buffer_open_dte AS DATE), '19000101') 
-    <> 
-    ISNULL(CAST(pb_open_dte AS DATE), '19000101');
+你先跑這個：
 
-----------------------------------
-;WITH Pure_Flag1 AS (
-    SELECT SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY SK_CUST_ID
-    HAVING 
-        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-        AND
-        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
-),
-Base_36 AS (
-    SELECT 
-        d.cif_key,
-        c.CustomerNo,
-        c.cust_nme AS buffer_cust_nme,
-        p.cust_nme AS pb_cust_nme,
-        c.OPEN_DTE AS buffer_open_dte,
-        p.OPEN_DTE AS pb_open_dte
-    FROM Pure_Flag1 b
-    JOIN Customer_Migrate_buffer c 
-        ON c.CustomerNo = b.SK_CUST_ID
-    JOIN BSA_SUB_CUST_FACT d 
-        ON d.CustomerNo = c.CustomerNo
-    JOIN PB_CUSTOMER_FACT p
-        ON d.cif_key = p.cif_key
-    WHERE 
-        ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
-)
+-- buffer 實際筆數
+SELECT COUNT(*)
+FROM Cust_NP_Migrate_buffer
+WHERE IsBearerShares = '1';
+-- buffer distinct CIF_KEY
+SELECT COUNT(DISTINCT CIF_KEY)
+FROM Cust_NP_Migrate_buffer
+WHERE IsBearerShares = '1';
 
-SELECT 
-    cif_key,
-    CustomerNo,
-    buffer_cust_nme,
-    pb_cust_nme,
-    buffer_open_dte,
-    pb_open_dte
-FROM Base_36
-WHERE 
-    ISNULL(CAST(buffer_open_dte AS DATE), '19000101') 
-    = ISNULL(CAST(pb_open_dte AS DATE), '19000101');
+再跑：
 
+-- AML 實際筆數
+SELECT COUNT(*)
+FROM bsa_sub_cust_fact a
+JOIN CIF_Migrate_Mapping_TEMP m
+    ON a.CIF_KEY = m.NEW_CIF_KEY
+WHERE a.Cust_With_Bearer_Shares = 'Y';
+-- AML distinct SOURCE_CIF_KEY
+SELECT COUNT(DISTINCT m.SOURCE_CIF_KEY)
+FROM bsa_sub_cust_fact a
+JOIN CIF_Migrate_Mapping_TEMP m
+    ON a.CIF_KEY = m.NEW_CIF_KEY
+WHERE a.Cust_With_Bearer_Shares = 'Y';
 
+你大概率會看到：
 
+count(*) 差 2
+但 distinct 差 3
 
-SELECT * FROM CIF_Migrate_Mapping_TEMP WHERE NEW_CIF_KEY = '46DDAA21-F2A3-466B-8B07-E85B6ECCACCA'
-SELECT CustomerNo,*  FROM BSA_SUB_CUST_FACT WHERE CIF_KEY 
-in(
-'46DDAA21-F2A3-466B-8B07-E85B6ECCACCA',
-'AAD4DF02-7894-4B1C-94D6-75B4FB1F69D3',
-'BAD8B60B-5B89-4E3C-B644-1AD8E00F8EDF',
-'06BF069B-B242-483A-9D5B-2F1EC21D0CBE',
-'F892862B-446A-49C5-98DB-9A3907D3DEF1',
-'5B1EE552-701F-4728-9A6E-04A84D5ED184',
-'22507C12-0EDA-4DD7-98EC-60D3445FB305',
-'674BE9F9-A4B9-43F3-90C3-B20362879E83',
-'FDB54543-1AE7-4C5D-809C-82D741413241',
-'5C2C003F-9ACB-4A1E-B752-A263934982AC',
-'E31B656F-E1C1-4B7A-9120-B1902F74058E'
-)
+真正該查的是：
 
-SELECt * FROM BSA_SUB_CUST_FACT  a
-join CIF_Migrate_Mapping_TEMP   b on a.cif_key = b.NEW_CIF_KEY
-join  Customer_Migrate_buffer  c on c.CustomerNo = a.CustomerNo
- WHERE a.CIF_KEY in
- (
-'46DDAA21-F2A3-466B-8B07-E85B6ECCACCA',
-'AAD4DF02-7894-4B1C-94D6-75B4FB1F69D3',
-'BAD8B60B-5B89-4E3C-B644-1AD8E00F8EDF',
-'06BF069B-B242-483A-9D5B-2F1EC21D0CBE',
-'F892862B-446A-49C5-98DB-9A3907D3DEF1',
-'5B1EE552-701F-4728-9A6E-04A84D5ED184',
-'22507C12-0EDA-4DD7-98EC-60D3445FB305',
-'674BE9F9-A4B9-43F3-90C3-B20362879E83',
-'FDB54543-1AE7-4C5D-809C-82D741413241',
-'5C2C003F-9ACB-4A1E-B752-A263934982AC',
-'E31B656F-E1C1-4B7A-9120-B1902F74058E'
-)
+Step 1 查 buffer 有沒有重複 CIF_KEY
 
+SELECT
+    CIF_KEY,
+    COUNT(*) AS CNT
+FROM Cust_NP_Migrate_buffer
+WHERE IsBearerShares = '1'
+GROUP BY CIF_KEY
+HAVING COUNT(*) > 1;
 
+Step 2 查 mapping 有沒有一對多
 
+這個超常出事 ⚠️
 
+SELECT
+    SOURCE_CIF_KEY,
+    COUNT(DISTINCT NEW_CIF_KEY) AS CNT
+FROM CIF_Migrate_Mapping_TEMP
+GROUP BY SOURCE_CIF_KEY
+HAVING COUNT(DISTINCT NEW_CIF_KEY) > 1;
 
-    我後來發現只要比較Customer_Migrate_buffer 的CustomerNo 是不是跟BSA_SUB_CUST_FACT 的CustomerNo 不一樣就好
+再查反向：
 
+SELECT
+    NEW_CIF_KEY,
+    COUNT(DISTINCT SOURCE_CIF_KEY) AS CNT
+FROM CIF_Migrate_Mapping_TEMP
+GROUP BY NEW_CIF_KEY
+HAVING COUNT(DISTINCT SOURCE_CIF_KEY) > 1;
 
-整個要怎麼改比較好
+Step 3 把那 3 筆完整攤開看
 
-我發現我寫得太攏長了
+你現在只看到 key。
 
+直接看完整 mapping：
+
+SELECT
+    b.CIF_KEY,
+    m.SOURCE_CIF_KEY,
+    m.NEW_CIF_KEY,
+    a.CustomerNo,
+    a.Cust_With_Bearer_Shares
+FROM Cust_NP_Migrate_buffer b
+LEFT JOIN CIF_Migrate_Mapping_TEMP m
+    ON b.CIF_KEY = m.SOURCE_CIF_KEY
+LEFT JOIN bsa_sub_cust_fact a
+    ON a.CIF_KEY = m.NEW_CIF_KEY
+WHERE b.IsBearerShares = '1'
+AND (
+        a.Cust_With_Bearer_Shares IS NULL
+        OR a.Cust_With_Bearer_Shares <> 'Y'
+    );
+
+這支通常一跑就真相大白 🕵️
+
+最常見會看到：
+
+* mapping 有但 AML 沒資料
+* AML 有資料但 flag 不是 Y
+* 同一 CIF 被 mapping 成多筆
+* buffer 有重複資料
+
+你現在的問題本質上不是 EXCEPT 錯。
+而是：
+
+你在比較「distinct key」
+但前面看的卻是「raw row count」
+
+這兩個維度不同，所以數字看起來像量子糾纏。
