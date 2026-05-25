@@ -52,3 +52,59 @@ ORDER BY [比較結果] DESC, CustomerNo;
 應該要出現25筆不同才對  要怎麼寫
 SELECT HIGHRISK, * FROM Cust_NP_Migrate_buffer WHERE CIF_KEY ='463bcfcf-2beb-e511-80c8-0050568c710a'
 
+
+;WITH Pure_Flag1 AS (
+    SELECT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    GROUP BY SK_CUST_ID
+    HAVING 
+        MAX(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
+        AND
+        MAX(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) = 1
+),
+Base_36 AS (
+    SELECT 
+        d.cif_key,
+        c.CustomerNo,
+        c.cust_nme AS buffer_cust_nme,
+        p.cust_nme AS pb_cust_nme,
+        c.OPEN_DTE AS buffer_open_dte,
+        p.OPEN_DTE AS pb_open_dte,
+        p.HIGHRISK AS pb_highrisk -- 假設 PB 端的 HIGHRISK 欄位在此，若在其他表請自行更換別名
+    FROM Pure_Flag1 b
+    JOIN Customer_Migrate_buffer c 
+        ON c.CustomerNo = b.SK_CUST_ID
+    JOIN BSA_SUB_CUST_FACT d 
+        ON d.CustomerNo = c.CustomerNo
+    JOIN PB_CUSTOMER_FACT p
+        ON d.cif_key = p.cif_key
+    WHERE 
+        ISNULL(c.cust_nme,'#') = ISNULL(p.cust_nme,'#')
+)
+
+SELECT 
+    CASE 
+        -- 條件 1：先找出姓名相同、且日期相同的 25 筆
+        WHEN ISNULL(CAST(main.buffer_open_dte AS DATE), '19000101') 
+           = ISNULL(CAST(main.pb_open_dte AS DATE), '19000101') 
+        THEN 
+            -- 條件 2：在這 25 筆當中，比對 HIGHRISK 是否不同
+            CASE 
+                WHEN ISNULL(main.pb_highrisk, '#') <> ISNULL(np.HIGHRISK, '#') 
+                THEN '⚠️ 日期相同，但 HIGHRISK 不同 (預期25筆)'
+                ELSE '✅ 日期相同，且 HIGHRISK 相同'
+            END
+        ELSE '❌ 日期本來就不同 (先前確認的11筆)' 
+    END AS [詳細比對結果],
+    main.cif_key,
+    main.CustomerNo,
+    main.buffer_cust_nme,
+    main.buffer_open_dte,
+    main.pb_open_dte,
+    main.pb_highrisk AS [PB端的HighRisk],
+    np.HIGHRISK AS [NP_Buffer端的HighRisk]
+FROM Base_36 main
+-- Left Join 關聯到你提到的 Cust_NP_Migrate_buffer 
+LEFT JOIN Cust_NP_Migrate_buffer np 
+    ON main.cif_key = np.CIF_KEY
+ORDER BY [詳細比對結果] DESC, main.CustomerNo;
