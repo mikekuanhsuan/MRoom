@@ -1,3 +1,95 @@
+很好，這一步是正確節奏 👍
+先「算清楚會被刪多少」，再動刀。
+
+你可以直接用同一個 ROW_NUMBER() 邏輯去 COUNT RN > 1 的筆數。
+
+⸻
+
+✅ 先查「會被刪除的數量」
+
+;WITH CTE AS (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY
+                    ISNULL(TemplateId,0),
+                    ISNULL(GroupId,0),
+                    ISNULL(Parameter1,''),
+                    ISNULL(Parameter2,''),
+                    ISNULL(Parameter3,''),
+                    ISNULL(Parameter4,''),
+                    ISNULL(Parameter5,''),
+                    ISNULL(Parameter6,''),
+                    ISNULL(Parameter7,''),
+                    ISNULL(Parameter8,''),
+                    ISNULL(Parameter9,''),
+                    ISNULL(Parameter10,''),
+                    ISNULL(Score,0),
+                    ISNULL(CreatedBy,''),
+                    ISNULL(Enabled,0),
+                    ISNULL(Deleted,0),
+                    ISNULL(Repeatable,0),
+                    ISNULL(Category,''),
+                    ISNULL(LastModifedBy,''),
+                    ISNULL(qryId,0)
+               ORDER BY (SELECT NULL)
+           ) AS RN
+    FROM HRS_QuerySyntaxes
+)
+SELECT COUNT(*) AS WillBeDeletedCount
+FROM CTE
+WHERE RN > 1;
+
+⸻
+
+🧠 這個數字代表什麼？
+
+👉 「真正會被刪掉的筆數」
+
+不是總資料量
+而是：
+
+* 每組重複資料中
+* 第 2 筆開始的總和
+
+例如：
+
+group	總筆數	會刪
+A	3	2
+B	2	1
+C	1	0
+
+👉 結果 = 3
+
+⸻
+
+🔥 如果你想更保險（推薦）
+
+可以再加一個：
+
+SELECT COUNT(*) AS TotalRows FROM HRS_QuerySyntaxes;
+
+再比對：
+
+* 原始總數
+* ●	去重後剩餘
+* = 刪除數
+
+⸻
+
+🧾 想再進一步（我可以幫你做）
+
+如果你下一步想更安全一點，我可以幫你升級成：
+
+✔ 先產生「刪除清單表」
+
+✔ 或先 INSERT INTO backup table
+
+✔ 或直接標記 RN，不真的刪
+
+只要說一句：「我要安全版」就行 😄
+
+
+
 那你現在真正要的是：
 
 在 HRS_QuerySyntaxes 自己裡面去重複
