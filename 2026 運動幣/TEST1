@@ -1,67 +1,145 @@
+那你現在真正要的是：
 
+在 HRS_QuerySyntaxes 自己裡面去重複
 
+每組資料只保留一筆，其餘刪掉。
 
-SELECT COUNT(*)  HRS_QuerySyntaxes
-FROM HRS_QuerySyntaxes A
-INNER JOIN VERIFY..HRS_QuerySyntaxes B
-    ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-    AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-    AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-    AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-    AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-    AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-    AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-    AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-    AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-    AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-    AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-    AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-    AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-    AND ISNULL(A.CreatedDate,'19000101') = ISNULL(B.CreatedDate,'19000101')
-    AND ISNULL(A.CreatedDate_UTC,'19000101') = ISNULL(B.CreatedDate_UTC,'19000101')
-    AND ISNULL(A.LastModifiedDate,'19000101') = ISNULL(B.LastModifiedDate,'19000101')
-    AND ISNULL(A.LastModifiedDate_UTC,'19000101') = ISNULL(B.LastModifiedDate_UTC,'19000101')
-    AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
-    AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-    AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
-    AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-    AND ISNULL(A.Category,'') = ISNULL(B.Category,'')
-    AND ISNULL(A.LastModifedBy,'') = ISNULL(B.LastModifedBy,'')
-    AND ISNULL(A.qryId,0) = ISNULL(B.qryId,0);
+這種情境最穩的寫法是 ROW_NUMBER()。
 
+⸻
 
+建議寫法
 
+;WITH CTE AS (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY
+                    ISNULL(TemplateId,0),
+                    ISNULL(GroupId,0),
+                    ISNULL(Parameter1,''),
+                    ISNULL(Parameter2,''),
+                    ISNULL(Parameter3,''),
+                    ISNULL(Parameter4,''),
+                    ISNULL(Parameter5,''),
+                    ISNULL(Parameter6,''),
+                    ISNULL(Parameter7,''),
+                    ISNULL(Parameter8,''),
+                    ISNULL(Parameter9,''),
+                    ISNULL(Parameter10,''),
+                    ISNULL(Score,0),
+                    ISNULL(CreatedBy,''),
+                    ISNULL(Enabled,0),
+                    ISNULL(Deleted,0),
+                    ISNULL(Repeatable,0),
+                    ISNULL(Category,''),
+                    ISNULL(LastModifedBy,''),
+                    ISNULL(qryId,0)
+               ORDER BY (SELECT NULL)
+           ) AS RN
+    FROM HRS_QuerySyntaxes
+)
+DELETE FROM CTE
+WHERE RN > 1;
 
-DELETE A
-FROM HRS_QuerySyntaxes A
-INNER JOIN VERIFY..HRS_QuerySyntaxes B
-    ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-    AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-    AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-    AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-    AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-    AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-    AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-    AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-    AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-    AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-    AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-    AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-    AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-    AND ISNULL(A.CreatedDate,'19000101') = ISNULL(B.CreatedDate,'19000101')
-    AND ISNULL(A.CreatedDate_UTC,'19000101') = ISNULL(B.CreatedDate_UTC,'19000101')
-    AND ISNULL(A.LastModifiedDate,'19000101') = ISNULL(B.LastModifiedDate,'19000101')
-    AND ISNULL(A.LastModifiedDate_UTC,'19000101') = ISNULL(B.LastModifiedDate_UTC,'19000101')
-    AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
-    AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-    AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
-    AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-    AND ISNULL(A.Category,'') = ISNULL(B.Category,'')
-    AND ISNULL(A.LastModifedBy,'') = ISNULL(B.LastModifedBy,'')
-    AND ISNULL(A.qryId,0) = ISNULL(B.qryId,0);
+⸻
 
+這段在做什麼？
 
-我現在是要刪除 
-HRS_QuerySyntaxes 裡面資料跟 VERIFY..HRS_QuerySyntaxes   有重複的部分
+它會：
 
-我上面這樣寫好像是把整個資料刪除
+相同資料分成同一組
+
+用：
+
+PARTITION BY
+
+判斷哪些算重複。
+
+⸻
+
+每組編號
+
+ROW_NUMBER()
+
+會變成：
+
+資料	RN
+第一筆	1
+第二筆	2
+第三筆	3
+
+⸻
+
+刪除重複
+
+WHERE RN > 1
+
+保留第一筆，只刪：
+
+* 2
+* 3
+* 4…
+
+像夜店門口保全：
+
+「同名同長相只能進一個，其它出去 🕶️」
+
+⸻
+
+很重要 ⚠️
+
+我幫你把這些欄位拿掉了：
+
+CreatedDate
+CreatedDate_UTC
+LastModifiedDate
+LastModifiedDate_UTC
+
+因為這種時間欄位通常每筆都不同。
+
+你如果放進去：
+
+* SQL 幾乎不會認為是重複資料
+* 去重複會失敗
+
+⸻
+
+建議先驗證再刪
+
+先看哪些會被刪：
+
+;WITH CTE AS (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY
+                    ISNULL(TemplateId,0),
+                    ISNULL(GroupId,0),
+                    ISNULL(Parameter1,''),
+                    ISNULL(Parameter2,''),
+                    ISNULL(Parameter3,''),
+                    ISNULL(Parameter4,''),
+                    ISNULL(Parameter5,''),
+                    ISNULL(Parameter6,''),
+                    ISNULL(Parameter7,''),
+                    ISNULL(Parameter8,''),
+                    ISNULL(Parameter9,''),
+                    ISNULL(Parameter10,''),
+                    ISNULL(Score,0),
+                    ISNULL(CreatedBy,''),
+                    ISNULL(Enabled,0),
+                    ISNULL(Deleted,0),
+                    ISNULL(Repeatable,0),
+                    ISNULL(Category,''),
+                    ISNULL(LastModifedBy,''),
+                    ISNULL(qryId,0)
+               ORDER BY (SELECT NULL)
+           ) AS RN
+    FROM HRS_QuerySyntaxes
+)
+SELECT *
+FROM CTE
+WHERE RN > 1;
+
+先看結果，再執行 DELETE。
+資料庫世界裡，DELETE 像按下太空艙 eject 鍵 🚀
+先 preview 永遠是好文明。
