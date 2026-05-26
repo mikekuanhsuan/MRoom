@@ -1,88 +1,159 @@
-1. 需求概述
-
-因應香港內部稽核對 AML 管治之要求，需優化香港分行 HKAML 組每月 Trade Finance 紅旗交易月報。
-
-本次需求主要針對 Trade Finance 紅旗交易月報新增相關欄位資訊呈現，並補齊 Loan 類交易之 AML_INFO_SEQ 資料流。
-
-目前 Loan 類交易之 AML_INFO_SEQ 僅存在於 HKWBS(LON_INFO)，未下送至 HKODS，導致 OBODS 產製 AML 月報時無法取得完整資訊。
-
-本次整合測試將聚焦驗證新增欄位之資料傳遞與報表顯示正確性，確認：
-
-* HKWBS 是否正確下送 AML_INFO_SEQ 至 HKODS
-* OBODS 是否可正確取得 AML_INFO_SEQ
-* AML 月報新增欄位是否正確顯示
-* 既有 AML 月報功能不受影響
+好，直接給你一套「兩段式」：
+👉 先看數量
+👉 再實際刪除
+而且完全符合你：只刪 VERIFY 有的 + HRS 去重後的資料
 
 ⸻
 
-2. 測試項目概述
+🧮 ① 先看「會刪幾筆」
 
-依據需求規格書內容進行整合測試，確認新增欄位資料於跨系統間傳遞與報表顯示正確性。
-
-測試項目如下：
-
-* HKWBS Loan 資料 AML_INFO_SEQ 欄位下送檢核
-* HKODS AML_INFO_SEQ 欄位接收驗證
-* OBODS AML_INFO_SEQ 資料取得驗證
-* AML 月報新增欄位顯示驗證
-* 既有 AML 月報功能影響確認
+;WITH Dedup AS (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY
+                    ISNULL(TemplateId,0),
+                    ISNULL(GroupId,0),
+                    ISNULL(Parameter1,''),
+                    ISNULL(Parameter2,''),
+                    ISNULL(Parameter3,''),
+                    ISNULL(Parameter4,''),
+                    ISNULL(Parameter5,''),
+                    ISNULL(Parameter6,''),
+                    ISNULL(Parameter7,''),
+                    ISNULL(Parameter8,''),
+                    ISNULL(Parameter9,''),
+                    ISNULL(Parameter10,''),
+                    ISNULL(Score,0),
+                    ISNULL(CreatedBy,''),
+                    ISNULL(Enabled,0),
+                    ISNULL(Deleted,0),
+                    ISNULL(Repeatable,0),
+                    ISNULL(Category,''),
+                    ISNULL(LastModifedBy,''),
+                    ISNULL(qryId,0)
+               ORDER BY (SELECT NULL)
+           ) AS RN
+    FROM HRS_QuerySyntaxes
+)
+SELECT COUNT(*) AS WillBeDeletedCount
+FROM Dedup A
+WHERE A.RN > 1
+AND EXISTS (
+    SELECT 1
+    FROM VERIFY..HRS_QuerySyntaxes B
+    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+      AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
+      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+      AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
+      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+      AND ISNULL(A.Category,'') = ISNULL(B.Category,'')
+      AND ISNULL(A.LastModifedBy,'') = ISNULL(B.LastModifedBy,'')
+      AND ISNULL(A.qryId,0) = ISNULL(B.qryId,0)
+);
 
 ⸻
 
-3. 測試範圍
+🧹 ② 正式刪除
 
-本次測試範圍僅針對新增欄位與相關報表顯示功能進行驗證。
-
-資料流程如下：
-
-HKWBS → HKODS → OBODS → AML 月報
-
-測試流程如下：
-
-1. 於 HKWBS 建立包含 AML_INFO_SEQ 之 Loan 測試資料
-2. 驗證 HKWBS 是否成功下送 AML_INFO_SEQ 至 HKODS
-3. 驗證 HKODS 是否正確保存 AML_INFO_SEQ
-4. 驗證 OBODS 是否成功取得 AML_INFO_SEQ
-5. 驗證 AML 月報新增欄位顯示內容是否正確
-
-本次驗證新增欄位如下：
-
-* AML_INFO_SEQ
-* Red Flag Reason and Content
-* Remarks
-* Goods Code
-* Merchandise
-* Vessel Name
-* Flag of Vessel
+;WITH Dedup AS (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY
+                    ISNULL(TemplateId,0),
+                    ISNULL(GroupId,0),
+                    ISNULL(Parameter1,''),
+                    ISNULL(Parameter2,''),
+                    ISNULL(Parameter3,''),
+                    ISNULL(Parameter4,''),
+                    ISNULL(Parameter5,''),
+                    ISNULL(Parameter6,''),
+                    ISNULL(Parameter7,''),
+                    ISNULL(Parameter8,''),
+                    ISNULL(Parameter9,''),
+                    ISNULL(Parameter10,''),
+                    ISNULL(Score,0),
+                    ISNULL(CreatedBy,''),
+                    ISNULL(Enabled,0),
+                    ISNULL(Deleted,0),
+                    ISNULL(Repeatable,0),
+                    ISNULL(Category,''),
+                    ISNULL(LastModifedBy,''),
+                    ISNULL(qryId,0)
+               ORDER BY (SELECT NULL)
+           ) AS RN
+    FROM HRS_QuerySyntaxes
+)
+DELETE A
+FROM Dedup A
+WHERE A.RN > 1
+AND EXISTS (
+    SELECT 1
+    FROM VERIFY..HRS_QuerySyntaxes B
+    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+      AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
+      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+      AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
+      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+      AND ISNULL(A.Category,'') = ISNULL(B.Category,'')
+      AND ISNULL(A.LastModifedBy,'') = ISNULL(B.LastModifedBy,'')
+      AND ISNULL(A.qryId,0) = ISNULL(B.qryId,0)
+);
 
 ⸻
 
-4. 測試時程規劃
+⚡ 你會得到的結果
 
-測試流程	預計開始時間	預計結束時間
-測試案例撰寫與討論	D	D+2
-環境驗證與測試資料建置	D+3	D+4
-執行整合測試	D+5	D+7
-問題修正與重新驗證	D+7	D+9
-測試報告彙整	D+9	D+10
+先跑 COUNT：
+
+👉 例如：
+
+WillBeDeletedCount = 128
+
+再 DELETE：
+
+👉 真正刪 128 筆
 
 ⸻
 
-5. 測試資料準備方法
+🧠 小提醒（很關鍵）
 
-測試資料來源：
+這種寫法保證：
 
-於 HKWBS 建立包含 AML_INFO_SEQ 之 Loan 類 Trade Finance 紅旗交易測試資料。
+✔ 不會整表刪光
+✔ 只刪 VERIFY 已存在的
+✔ 同 group 只保留 1 筆
+✔ 安全性比 JOIN DELETE 高一層
 
-測試資料條件：
+⸻
 
-* Trade Date 落於測試月份區間
-* Red Flag = Y
-* 包含完整 AML_INFO_SEQ 與新增欄位資訊
+如果你下一步想更進階，我可以幫你做：
 
-驗證方式：
+🧾 「￼ 刪除前備份 table」
+🧾 「￼ 只標記不刪（soft delete）」
+🧾 「￼ 顯示每個 group 被刪幾筆」
 
-* 比對 HKWBS、HKODS、OBODS 各系統 AML_INFO_SEQ 資料一致性
-* 比對 AML 月報新增欄位內容正確性
-* 確認新增欄位顯示正常
-* 確認既有 AML 月報功能未受影響
+直接說一聲就行 😄
