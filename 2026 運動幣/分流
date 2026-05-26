@@ -1,59 +1,89 @@
-SELECT 
-    TemplateId,
-    GroupId,
-    Parameter1,
-    Parameter2,
-    Parameter3,
-    Parameter4,
-    Parameter5,
-    Parameter6,
-    Parameter7,
-    Parameter8,
-    Parameter9,
-    Parameter10,
-    Score,
-    CreatedDate,
-    CreatedDate_UTC,
-    LastModifiedDate,
-    LastModifiedDate_UTC,
-    CreatedBy,
-    Enabled,
-    Deleted,
-    Repeatable,
-    Category,
-    LastModifedBy,
-    qryId,
-    COUNT(*) AS CNT
-FROM HRS_QuerySyntaxes
-GROUP BY
-    TemplateId,
-    GroupId,
-    Parameter1,
-    Parameter2,
-    Parameter3,
-    Parameter4,
-    Parameter5,
-    Parameter6,
-    Parameter7,
-    Parameter8,
-    Parameter9,
-    Parameter10,
-    Score,
-    CreatedDate,
-    CreatedDate_UTC,
-    LastModifiedDate,
-    LastModifiedDate_UTC,
-    CreatedBy,
-    Enabled,
-    Deleted,
-    Repeatable,
-    Category,
-    LastModifedBy,
-    qryId
-HAVING COUNT(*) > 1;
+那你這需求其實很單純 👍
 
+你是要：
 
+HRS_QuerySyntaxes 裡面，只要有存在於 VERIFY..HRS_QuerySyntaxes 的資料，就刪掉。
 
+這種就是標準：
 
+DELETE A
+FROM HRS_QuerySyntaxes A
+INNER JOIN VERIFY..HRS_QuerySyntaxes B
 
-沒東西耶
+但因為沒有唯一鍵可直接對應，所以要用所有欄位比對。
+
+先做安全版確認：
+
+SELECT COUNT(*)
+FROM HRS_QuerySyntaxes A
+INNER JOIN VERIFY..HRS_QuerySyntaxes B
+    ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+    AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+    AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+    AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+    AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+    AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+    AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+    AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+    AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+    AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+    AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+    AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+    AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+    AND ISNULL(A.CreatedDate,'19000101') = ISNULL(B.CreatedDate,'19000101')
+    AND ISNULL(A.CreatedDate_UTC,'19000101') = ISNULL(B.CreatedDate_UTC,'19000101')
+    AND ISNULL(A.LastModifiedDate,'19000101') = ISNULL(B.LastModifiedDate,'19000101')
+    AND ISNULL(A.LastModifiedDate_UTC,'19000101') = ISNULL(B.LastModifiedDate_UTC,'19000101')
+    AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
+    AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+    AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
+    AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+    AND ISNULL(A.Category,'') = ISNULL(B.Category,'')
+    AND ISNULL(A.LastModifedBy,'') = ISNULL(B.LastModifedBy,'')
+    AND ISNULL(A.qryId,0) = ISNULL(B.qryId,0);
+
+確認數量沒問題後，再執行刪除：
+
+DELETE A
+FROM HRS_QuerySyntaxes A
+INNER JOIN VERIFY..HRS_QuerySyntaxes B
+    ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+    AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+    AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+    AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+    AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+    AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+    AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+    AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+    AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+    AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+    AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+    AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+    AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+    AND ISNULL(A.CreatedDate,'19000101') = ISNULL(B.CreatedDate,'19000101')
+    AND ISNULL(A.CreatedDate_UTC,'19000101') = ISNULL(B.CreatedDate_UTC,'19000101')
+    AND ISNULL(A.LastModifiedDate,'19000101') = ISNULL(B.LastModifiedDate,'19000101')
+    AND ISNULL(A.LastModifiedDate_UTC,'19000101') = ISNULL(B.LastModifiedDate_UTC,'19000101')
+    AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
+    AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+    AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
+    AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+    AND ISNULL(A.Category,'') = ISNULL(B.Category,'')
+    AND ISNULL(A.LastModifedBy,'') = ISNULL(B.LastModifedBy,'')
+    AND ISNULL(A.qryId,0) = ISNULL(B.qryId,0);
+
+建議你再包 transaction：
+
+BEGIN TRAN;
+-- DELETE
+ROLLBACK;
+
+先看刪除筆數：
+
+(236442 rows affected)
+
+確認正確後再：
+
+COMMIT;
+
+這樣比較不會上演「凌晨兩點還原備份大逃殺」 🌋
