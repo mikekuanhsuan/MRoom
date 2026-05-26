@@ -10,3 +10,57 @@ HRSTemplateId
 TemplateAnswerType
 OptionList
 OptionCode
+
+
+
+你這張 table 比較簡單，欄位比較少 🌱
+
+你現在需求一樣是：
+
+HRS_CIP_TemplateMappings 裡，只要資料存在於 VERIFY..HRS_CIP_TemplateMappings，就刪掉。
+
+先跑確認筆數版本：
+
+SELECT COUNT(*)
+FROM HRS_CIP_TemplateMappings A
+INNER JOIN VERIFY..HRS_CIP_TemplateMappings B
+    ON ISNULL(A.HRSQueryId,0) = ISNULL(B.HRSQueryId,0)
+    AND ISNULL(A.CIPQueryId,0) = ISNULL(B.CIPQueryId,0)
+    AND ISNULL(A.CIP_CustomerType,'') = ISNULL(B.CIP_CustomerType,'')
+    AND ISNULL(A.HRSTemplateId,0) = ISNULL(B.HRSTemplateId,0)
+    AND ISNULL(A.TemplateAnswerType,'') = ISNULL(B.TemplateAnswerType,'')
+    AND ISNULL(A.OptionList,'') = ISNULL(B.OptionList,'')
+    AND ISNULL(A.OptionCode,'') = ISNULL(B.OptionCode,'');
+
+確認數量正確後，再執行刪除：
+
+BEGIN TRAN;
+DELETE A
+FROM HRS_CIP_TemplateMappings A
+INNER JOIN VERIFY..HRS_CIP_TemplateMappings B
+    ON ISNULL(A.HRSQueryId,0) = ISNULL(B.HRSQueryId,0)
+    AND ISNULL(A.CIPQueryId,0) = ISNULL(B.CIPQueryId,0)
+    AND ISNULL(A.CIP_CustomerType,'') = ISNULL(B.CIP_CustomerType,'')
+    AND ISNULL(A.HRSTemplateId,0) = ISNULL(B.HRSTemplateId,0)
+    AND ISNULL(A.TemplateAnswerType,'') = ISNULL(B.TemplateAnswerType,'')
+    AND ISNULL(A.OptionList,'') = ISNULL(B.OptionList,'')
+    AND ISNULL(A.OptionCode,'') = ISNULL(B.OptionCode,'');
+-- 先確認刪除筆數
+SELECT @@ROWCOUNT AS DeletedRows;
+ROLLBACK;
+
+如果 DeletedRows 正確：
+
+把最後：
+
+ROLLBACK;
+
+改成：
+
+COMMIT;
+
+就正式刪除完成。
+
+這種做法很像資料庫版的：
+
+🧹「VERIFY 有的，我全部掃出去」
