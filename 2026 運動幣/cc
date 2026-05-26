@@ -1,23 +1,142 @@
-SELECT DISTINCT
-    b.CIF_KEY
-FROM Cust_NP_Migrate_buffer b
-JOIN CIF_Migrate_Mapping_TEMP m
-    ON b.CIF_KEY = m.SOURCE_CIF_KEY
-JOIN bsa_sub_cust_fact a
-    ON m.NEW_CIF_KEY = a.CIF_KEY
-JOIN BANCS_SK_CUST_INFO s
-    ON a.CustomerNo = s.SK_CUST_ID
-WHERE b.IsBearerShares = '1'
-  AND ISNULL(s.CUST_RE_NO_FLG, '') <> '1'
+因為兩個 table 欄位完全一樣，重點是：
 
-INTERSECT
+你是把 VERIFY..HRS_QuerySyntaxes 的資料「多倒了一次」進 HRS_QuerySyntaxes。
+所以現在要做的是：
 
-SELECT DISTINCT
-    m.SOURCE_CIF_KEY
-FROM bsa_sub_cust_fact a
-JOIN CIF_Migrate_Mapping_TEMP m
-    ON a.CIF_KEY = m.NEW_CIF_KEY
-JOIN BANCS_SK_CUST_INFO s
-    ON a.CustomerNo = s.SK_CUST_ID
-WHERE a.Cust_With_Bearer_Shares = 'Y'
-  AND ISNULL(s.CUST_RE_NO_FLG, '') <> '1';
+1. 找出重複資料
+2. 只刪掉「多倒入的那份」
+3. 保留原本資料
+
+⚠️ 最重要的是：
+
+ID 很可能是 identity，而且倒入時可能連 ID 一起進去了。
+所以不能直接只靠 ID 判斷。
+
+比較安全的方式是：
+
+* 用所有業務欄位比對
+* 用 ROW_NUMBER() 保留第一筆
+* 刪掉多出來的 duplicate
+
+像資料考古學家拿著牙刷慢慢刷 🪥
+
+你可以先「確認有哪些重複」：
+
+SELECT 
+    TemplateId,
+    GroupId,
+    Parameter1,
+    Parameter2,
+    Parameter3,
+    Parameter4,
+    Parameter5,
+    Parameter6,
+    Parameter7,
+    Parameter8,
+    Parameter9,
+    Parameter10,
+    Score,
+    CreatedDate,
+    CreatedDate_UTC,
+    LastModifiedDate,
+    LastModifiedDate_UTC,
+    CreatedBy,
+    Enabled,
+    Deleted,
+    Repeatable,
+    Category,
+    LastModifedBy,
+    qryId,
+    COUNT(*) AS CNT
+FROM HRS_QuerySyntaxes
+GROUP BY
+    TemplateId,
+    GroupId,
+    Parameter1,
+    Parameter2,
+    Parameter3,
+    Parameter4,
+    Parameter5,
+    Parameter6,
+    Parameter7,
+    Parameter8,
+    Parameter9,
+    Parameter10,
+    Score,
+    CreatedDate,
+    CreatedDate_UTC,
+    LastModifiedDate,
+    LastModifiedDate_UTC,
+    CreatedBy,
+    Enabled,
+    Deleted,
+    Repeatable,
+    Category,
+    LastModifedBy,
+    qryId
+HAVING COUNT(*) > 1;
+
+如果確認真的是重複倒入，那可以這樣刪：
+
+;WITH CTE AS
+(
+    SELECT *,
+        ROW_NUMBER() OVER
+        (
+            PARTITION BY
+                TemplateId,
+                GroupId,
+                Parameter1,
+                Parameter2,
+                Parameter3,
+                Parameter4,
+                Parameter5,
+                Parameter6,
+                Parameter7,
+                Parameter8,
+                Parameter9,
+                Parameter10,
+                Score,
+                CreatedDate,
+                CreatedDate_UTC,
+                LastModifiedDate,
+                LastModifiedDate_UTC,
+                CreatedBy,
+                Enabled,
+                Deleted,
+                Repeatable,
+                Category,
+                LastModifedBy,
+                qryId
+            ORDER BY ID
+        ) AS RN
+    FROM HRS_QuerySyntaxes
+)
+DELETE FROM CTE
+WHERE RN > 1;
+
+這段意思：
+
+* 同樣內容的資料視為同一組
+* ROW_NUMBER() 會編號
+* 第一筆 RN = 1 保留
+* 後面的 RN > 1 全刪掉
+
+🧨 執行前建議：
+
+先改成 SELECT 測試：
+
+SELECT *
+FROM CTE
+WHERE RN > 1;
+
+確認真的都是你誤倒入的資料再 DELETE。
+
+如果你想更保險一點，我也可以幫你寫：
+
+* 「￼ 只刪 VERIFY 那批」
+* 「￼ 先備份再刪」
+* 「￼ 比對差異筆數」
+* 「￼ 產生 rollback script」
+
+那種偏銀行級防爆版本 🏦
