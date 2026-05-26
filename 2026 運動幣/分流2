@@ -1,3 +1,17 @@
+SELECT count(*) FROM BANCS_SK_CUST_INFO s
+WHERE s.CUST_RE_NO_FLG IN ('2','3') AND s.SK_CUST_ID <> s.TS_CUST_ID
+
+有4476117
+
+SELECT count(*) FROM BSA_SUB_CUST_FACT f
+JOIN BANCS_SK_CUST_INFO s    ON f.customerno = s.TS_CUST_ID
+WHERE s.CUST_RE_NO_FLG IN ('2','3')  AND s.SK_CUST_ID <> s.TS_CUST_ID;
+有 4475734
+
+
+我想找出差異的383 長怎樣
+
+
 SELECT  * FROM HRS_CIP_TemplateMappings 
 SELECT  * FROM VERIFY..HRS_CIP_TemplateMappings
 
