@@ -1,353 +1,64 @@
-SELECT IsBearerShares,* FROM Cust_NP_Migrate_buffer WHERE IsBearerShares = '1'
+SELECT  COUNT(*) FROM HRS_QuerySyntaxes  數量 479790
 
-SELECT a.Cust_With_Bearer_Shares,a.CustomerNo, a.*
-FROM bsa_sub_cust_fact a
-JOIN CIF_Migrate_Mapping_TEMP b ON a.CIF_KEY = b.NEW_CIF_KEY
-WHERE a.Cust_With_Bearer_Shares = 'Y';
+SELECT  COUNT(*) FROM VERIFY..HRS_QuerySyntaxes 數量 236442
 
 
-這邊差異2
+我不小心把 VERIFY..HRS_QuerySyntaxes 倒入HRS_QuerySyntaxes
+
+我現在要怎麼比較兩個table 然後把 不小心倒入的刪除掉
 
 
-SELECT DISTINCT
-    b.CIF_KEY
-FROM Cust_NP_Migrate_buffer b
-WHERE b.IsBearerShares = '1'
-EXCEPT
-SELECT DISTINCT
-    m.SOURCE_CIF_KEY
-FROM bsa_sub_cust_fact a
-JOIN CIF_Migrate_Mapping_TEMP m
-    ON a.CIF_KEY = m.NEW_CIF_KEY
-WHERE a.Cust_With_Bearer_Shares = 'Y';
+ HRS_QuerySyntaxes 他有的欄位
+ID
+TemplateId
+GroupId
+Parameter1
+Parameter2
+Parameter3
+Parameter4
+Parameter5
+Parameter6
+Parameter7
+Parameter8
+Parameter9
+Parameter10
+Score
+CreatedDate
+CreatedDate_UTC
+LastModifiedDate
+LastModifiedDate_UTC
+CreatedBy
+Enabled
+Deleted
+Repeatable
+Category
+LastModifedBy
+qryId
 
+ VERIFY..HRS_QuerySyntaxes 他有的欄位
 
-這邊出現3筆
-
-
-但我看3筆沒問題 到底哪裡出問題
-
-
-你現在要找的是：
-
-* Cust_NP_Migrate_buffer 中 IsBearerShares = '1' 有 217 筆
-* 對應到 bsa_sub_cust_fact + mapping 後只有 215 筆
-
-也就是：
-
-👉 有 2 筆沒有成功對到 bsa_sub_cust_fact
-
-最乾淨的方式就是直接用 EXCEPT 找差異。🌪️
-
-/* =========================================
-   找出 Cust_NP_Migrate_buffer 有
-   但 bsa_sub_cust_fact 沒有的 2 筆
-========================================= */
-SELECT DISTINCT
-    b.CIF_KEY
-FROM Cust_NP_Migrate_buffer b
-WHERE b.IsBearerShares = '1'
-EXCEPT
-SELECT DISTINCT
-    m.SOURCE_CIF_KEY
-FROM bsa_sub_cust_fact a
-JOIN CIF_Migrate_Mapping_TEMP m
-    ON a.CIF_KEY = m.NEW_CIF_KEY
-WHERE a.Cust_With_Bearer_Shares = 'Y';
-
-這樣會直接吐出差異的 CIF_KEY。
-
-⸻
-
-如果你想直接看完整資料，可以再包一次：
-
-/* =========================================
-   顯示差異的完整資料
-========================================= */
-WITH Diff AS (
-    SELECT DISTINCT
-        b.CIF_KEY
-    FROM Cust_NP_Migrate_buffer b
-    WHERE b.IsBearerShares = '1'
-    EXCEPT
-    SELECT DISTINCT
-        m.SOURCE_CIF_KEY
-    FROM bsa_sub_cust_fact a
-    JOIN CIF_Migrate_Mapping_TEMP m
-        ON a.CIF_KEY = m.NEW_CIF_KEY
-    WHERE a.Cust_With_Bearer_Shares = 'Y'
-)
-SELECT b.*
-FROM Cust_NP_Migrate_buffer b
-JOIN Diff d
-    ON b.CIF_KEY = d.CIF_KEY;
-
-⸻
-
-你也可以反向確認：
-
-看看是不是有資料存在於 bsa_sub_cust_fact，但 buffer 沒有。
-
-/* =========================================
-   反向檢查
-========================================= */
-SELECT DISTINCT
-    m.SOURCE_CIF_KEY
-FROM bsa_sub_cust_fact a
-JOIN CIF_Migrate_Mapping_TEMP m
-    ON a.CIF_KEY = m.NEW_CIF_KEY
-WHERE a.Cust_With_Bearer_Shares = 'Y'
-EXCEPT
-SELECT DISTINCT
-    b.CIF_KEY
-FROM Cust_NP_Migrate_buffer b
-WHERE b.IsBearerShares = '1';
-
-⸻
-
-通常這種差 2 筆，兇手很常是：
-
-* mapping table 沒 mapping 到
-* NEW_CIF_KEY 不存在
-* Cust_With_Bearer_Shares 沒被更新成 Y
-* duplicate 被 DISTINCT 吃掉
-* NULL 值
-* 一對多 mapping 🧩
-
-建議你再檢查這兩個：
-
--- 是否沒有 mapping
-SELECT *
-FROM CIF_Migrate_Mapping_TEMP
-WHERE SOURCE_CIF_KEY IN (
-    -- 差異 CIF_KEY 貼這裡
-);
--- 是否 mapping 到後不存在 fact
-SELECT *
-FROM bsa_sub_cust_fact
-WHERE CIF_KEY IN (
-    SELECT NEW_CIF_KEY
-    FROM CIF_Migrate_Mapping_TEMP
-    WHERE SOURCE_CIF_KEY IN (
-        -- 差異 CIF_KEY
-    )
-);
-
-這樣幾乎就能把那 2 筆「幽靈客戶 👻」抓出來。
-
-
-？
-
-SELECT IsBearerShares,* FROM Cust_NP_Migrate_buffer WHERE IsBearerShares = '1'
-
-筆數217
-
-SELECT a.Cust_With_Bearer_Shares,a.CustomerNo, a.*
-FROM bsa_sub_cust_fact a
-JOIN CIF_Migrate_Mapping_TEMP b ON a.CIF_KEY = b.NEW_CIF_KEY
-WHERE a.Cust_With_Bearer_Shares = 'Y';
-
-
-筆數215
-
-我要怎麼找出差異的2筆
-
-
-
-
-SELECT name 
-FROM sys.columns 
-WHERE object_id = OBJECT_ID('Cust_NP_Migrate_buffer');
-
-CIF_KEY
-IsSARFiled
-PEPBitwiseCode
-ReviewDt
-HIGHRISK
-RiskScore
-Warn_Restrict_Account
-SDST2400001
-IsComplexStructure
-IsBearerShares
-
-SELECT name 
-FROM sys.columns 
-WHERE object_id = OBJECT_ID('bsa_sub_cust_fact');
-CIF_KEY
-OCCUP
-IDENT
-IDENTO
-ISSBY
-IDNUM
-RELFI
-RELFIOTH
-INRLFI
-INRLFISTAT
-INRLDT
-EXEMPTED
-CUST_TYPE_CDE
-CTRYCD
-EXEMPTDT
-EXEMPTEXPDT
-PREVEXEMPTDT
-NEWRNW_STAT
-AMDRVK_STAT
-EXEMPTBASIS
-EXEMPTCTRL
-APPR_OFCR
-APPR_OFCR_LNME
-APPR_OFCR_FNME
-APPR_OFCR_MNME
-APPR_OFCR_TITLE
-APPRDT
-CONTACTPHN
-CONTACTFNME
-CONTACTLNME
-CONTACTMNME
-LUPDUID
-LUPDDT
-EXEMPT_REM
-EXEMPT_AMT
-MTRIND
-MTREM
-RNW_APPR_OFCR_LNME
-RNW_APPR_OFCR_FNME
-RNW_APPR_OFCR_MNME
-DCCNO
-FILEDIND
-VERIFIED
-SUSPICIOUS
-HIGHRISK
-CLASSNOTE
-NXTRVDT
-HRScore
-WATCH_LIST_REASON
-BizOwnershipCode
-APPR_OFCR_PHN
-RNW_APPR_OFCR_PHN
-RNW_APPR_OFCR_TITLE
-ID_EXPIRY_DT
-CIPScore
-CHIGHRISK
-CRScore
-SC01
-SC02
-SC03
-SC04
-SC05
-SC06
-SC07
-SC08
-SC09
-SC10
-SC11
-SC12
-SC13
-SC14
-SC15
-SC16
-SC17
-SC18
-SC19
-IsPEPHit
-IsOtherListHit
-CIPRiskRanking
-CustomerNo
-HR_LastReviewedBy
-HR_LastReviewedDt
-HR_LastReviewedUTCDt
-Legal_ID
-HRSRiskRanking
-CIP_LastReviewedBy
-CIP_LastReviewedDt
-CIP_LastReviewedUTCDt
-RiskScore
-Risk_LastReviewedBy
-Risk_LastReviewedDt
-Risk_LastReviewedUTCDt
-ISSBY_STATE
-EmployerName
-EmployerAddr
-EmployerPhone
-IsBelievedSuspicious
-IsMoneyTransmitter
-IsNevadaBranch
-IsTransmitOwnNetwork
-IsCashChecker
-IsCashRedeemer
-HasNegativeNews
-NegativeNewsRemark
-IsBelievedSuspiciousRemark
-BIZ_ESTABLISH_YR
-IsSARFiled
-IsSARFiled_LastUpdatedDate
-IsSARFiled_LastUpdatedDate_UTC
-TIME_KEY
-HoldMailAcct
-DepositNetAsset
-BankDealingPeriodCode
-IsMultipleAcctName
-IsComplexStructure
-IsOtherPersonHandleBusiness
-CustomerCategory
-IsForeignEntity
-IslkNegNewsRelatedParties
-IslkAcctPositionListedCompany
-IslkCustSpecLocation
-lkCustWealthCtry
-CoreSystem
-Alias_Name
-Place_Of_Birth
-ElectricalPaymentAccount
-IdentityAuthenticationMechanism1
-IdentityAuthenticationMechanism2
-Main_Business_Address
-Main_Business_Country
-Cust_Product_Service
-Cust_Method_Of_Opening
-Cust_Account_Purpose
-Source_Of_Fund
-Source_Of_Wealth
-Business_Operation_Stat
-First_Trxn_Amt
-Serving_Entity
-JobTitle
-Cust_With_Bearer_Shares
-Uncooperative_Flag
-Trustee_Flag
-Spec_Product_Risk_Code
-OBUFlag
-OBUCustomerType
-CustomerScale
-CustomerLevel
-AnnualIncome
-Education
-Corr_Addr_Change_Flag
-MailRejectCode
-SARExcludeFlag
-Is_PEP
-Is_Foreign_PEP
-Is_Domestic_PEP
-Is_Foreign_Org_PEP
-Is_EX_PEP
-Cust_RP_Is_PEP
-Is_NN
-Is_Blacklist
-Is_High_Risk_Remark
-Warn_Restrict_Account
-Gender
-Nationality2
-Unique_ID_Issuing_Ctry
-MultiAcctAdjRiskFactor
-AccountOfficerEmployeeId
-AccountOfficerEmployeeName
-SAR_BranchNo
-Risk_LastReviewedDt_User
-
-
-SELECT name 
-FROM sys.columns 
-WHERE object_id = OBJECT_ID('CIF_Migrate_Mapping_TEMP');
-ACTION
-SOURCE_CIF_KEY
-NEW_CIF_KEY
+ID
+TemplateId
+GroupId
+Parameter1
+Parameter2
+Parameter3
+Parameter4
+Parameter5
+Parameter6
+Parameter7
+Parameter8
+Parameter9
+Parameter10
+Score
+CreatedDate
+CreatedDate_UTC
+LastModifiedDate
+LastModifiedDate_UTC
+CreatedBy
+Enabled
+Deleted
+Repeatable
+Category
+LastModifedBy
+qryId
