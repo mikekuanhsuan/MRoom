@@ -1,44 +1,20 @@
-好，直接給你一套「兩段式」：
-👉 先看數量
-👉 再實際刪除
-而且完全符合你：只刪 VERIFY 有的 + HRS 去重後的資料
+好，這句話就把規則鎖死了 🔒
+
+你現在要的是最單純版本：
+
+👉 只要 VERIFY..HRS_QuerySyntaxes 有
+👉 就刪 HRS_QuerySyntaxes
+❌ 不做去重
+❌ 不做 RN
+❌ 不影響其他資料
 
 ⸻
 
-🧮 ① 先看「會刪幾筆」
+🧮 ① 先看會刪幾筆（正確版本）
 
-;WITH Dedup AS (
-    SELECT *,
-           ROW_NUMBER() OVER (
-               PARTITION BY
-                    ISNULL(TemplateId,0),
-                    ISNULL(GroupId,0),
-                    ISNULL(Parameter1,''),
-                    ISNULL(Parameter2,''),
-                    ISNULL(Parameter3,''),
-                    ISNULL(Parameter4,''),
-                    ISNULL(Parameter5,''),
-                    ISNULL(Parameter6,''),
-                    ISNULL(Parameter7,''),
-                    ISNULL(Parameter8,''),
-                    ISNULL(Parameter9,''),
-                    ISNULL(Parameter10,''),
-                    ISNULL(Score,0),
-                    ISNULL(CreatedBy,''),
-                    ISNULL(Enabled,0),
-                    ISNULL(Deleted,0),
-                    ISNULL(Repeatable,0),
-                    ISNULL(Category,''),
-                    ISNULL(LastModifedBy,''),
-                    ISNULL(qryId,0)
-               ORDER BY (SELECT NULL)
-           ) AS RN
-    FROM HRS_QuerySyntaxes
-)
 SELECT COUNT(*) AS WillBeDeletedCount
-FROM Dedup A
-WHERE A.RN > 1
-AND EXISTS (
+FROM HRS_QuerySyntaxes A
+WHERE EXISTS (
     SELECT 1
     FROM VERIFY..HRS_QuerySyntaxes B
     WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
@@ -54,6 +30,7 @@ AND EXISTS (
       AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
       AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
       AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+      AND ISNULL(A.CreatedDate,'19000101') = ISNULL(B.CreatedDate,'19000101')
       AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
       AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
       AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
@@ -65,40 +42,11 @@ AND EXISTS (
 
 ⸻
 
-🧹 ② 正式刪除
+🧹 ② 正式刪除（完全對應你需求）
 
-;WITH Dedup AS (
-    SELECT *,
-           ROW_NUMBER() OVER (
-               PARTITION BY
-                    ISNULL(TemplateId,0),
-                    ISNULL(GroupId,0),
-                    ISNULL(Parameter1,''),
-                    ISNULL(Parameter2,''),
-                    ISNULL(Parameter3,''),
-                    ISNULL(Parameter4,''),
-                    ISNULL(Parameter5,''),
-                    ISNULL(Parameter6,''),
-                    ISNULL(Parameter7,''),
-                    ISNULL(Parameter8,''),
-                    ISNULL(Parameter9,''),
-                    ISNULL(Parameter10,''),
-                    ISNULL(Score,0),
-                    ISNULL(CreatedBy,''),
-                    ISNULL(Enabled,0),
-                    ISNULL(Deleted,0),
-                    ISNULL(Repeatable,0),
-                    ISNULL(Category,''),
-                    ISNULL(LastModifedBy,''),
-                    ISNULL(qryId,0)
-               ORDER BY (SELECT NULL)
-           ) AS RN
-    FROM HRS_QuerySyntaxes
-)
 DELETE A
-FROM Dedup A
-WHERE A.RN > 1
-AND EXISTS (
+FROM HRS_QuerySyntaxes A
+WHERE EXISTS (
     SELECT 1
     FROM VERIFY..HRS_QuerySyntaxes B
     WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
@@ -114,6 +62,7 @@ AND EXISTS (
       AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
       AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
       AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+      AND ISNULL(A.CreatedDate,'19000101') = ISNULL(B.CreatedDate,'19000101')
       AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
       AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
       AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
@@ -125,35 +74,34 @@ AND EXISTS (
 
 ⸻
 
-⚡ 你會得到的結果
+🧠 這版邏輯是「純交集刪除」
 
-先跑 COUNT：
+可以用一句話理解：
 
-👉 例如：
-
-WillBeDeletedCount = 128
-
-再 DELETE：
-
-👉 真正刪 128 筆
+🔥 VERIFY 裡有的 A，全砍
 
 ⸻
 
-🧠 小提醒（很關鍵）
+⚠️ 很重要提醒（這版的特性）
 
-這種寫法保證：
+✔ 優點
 
-✔ 不會整表刪光
-✔ 只刪 VERIFY 已存在的
-✔ 同 group 只保留 1 筆
-✔ 安全性比 JOIN DELETE 高一層
+* 邏輯簡單
+* 不會誤做去重
+* 完全 match 才刪
+
+⚠️ 風險
+
+* VERIFY 只要一筆 match → A 可能很多筆全刪
+* 如果 VERIFY 是「乾淨版本」，這很正常
+* 如果 VERIFY 有錯資料 → 會一起炸
 
 ⸻
 
-如果你下一步想更進階，我可以幫你做：
+如果你下一步想再進階，我可以幫你做：
 
-🧾 「￼ 刪除前備份 table」
-🧾 「￼ 只標記不刪（soft delete）」
-🧾 「￼ 顯示每個 group 被刪幾筆」
+🧾 「￼ 只刪 VERIFY 最新版本」
+🧾 「￼ 只刪 A 中重複且 VERIFY 存在的那一筆」
+🧾 「￼ 刪除前差異報表（強烈推薦）」
 
-直接說一聲就行 😄
+直接講你的下一步，我幫你把 SQL 變成手術刀等級 🗡️
