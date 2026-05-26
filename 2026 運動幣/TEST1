@@ -1,10 +1,85 @@
+你這邊是想把原本超長的 JOIN 比對，改成用 ROW_NUMBER() 分組方式來做資料比對。
+通常這樣做是為了避免：
 
+* 重複資料造成 Cartesian 爆量
+* 同樣內容多筆時 join 不準
+* 想一筆一筆對應比對
 
+可以改成這種寫法 👇
 
-SELECT COUNT(*)  HRS_QuerySyntaxes
-FROM HRS_QuerySyntaxes A
-INNER JOIN VERIFY..HRS_QuerySyntaxes B
-    ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+;WITH A_TABLE AS
+(
+    SELECT 
+        groupid = ROW_NUMBER() OVER (
+            PARTITION BY 
+                ISNULL(TemplateId,0),
+                ISNULL(GroupId,0),
+                ISNULL(Parameter1,''),
+                ISNULL(Parameter2,''),
+                ISNULL(Parameter3,''),
+                ISNULL(Parameter4,''),
+                ISNULL(Parameter5,''),
+                ISNULL(Parameter6,''),
+                ISNULL(Parameter7,''),
+                ISNULL(Parameter8,''),
+                ISNULL(Parameter9,''),
+                ISNULL(Parameter10,''),
+                ISNULL(Score,0),
+                ISNULL(CreatedDate,'19000101'),
+                ISNULL(CreatedDate_UTC,'19000101'),
+                ISNULL(LastModifiedDate,'19000101'),
+                ISNULL(LastModifiedDate_UTC,'19000101'),
+                ISNULL(CreatedBy,''),
+                ISNULL(Enabled,0),
+                ISNULL(Deleted,0),
+                ISNULL(Repeatable,0),
+                ISNULL(Category,''),
+                ISNULL(LastModifedBy,''),
+                ISNULL(qryId,0)
+            ORDER BY qryId
+        ),
+        *
+    FROM HRS_QuerySyntaxes
+),
+B_TABLE AS
+(
+    SELECT 
+        groupid = ROW_NUMBER() OVER (
+            PARTITION BY 
+                ISNULL(TemplateId,0),
+                ISNULL(GroupId,0),
+                ISNULL(Parameter1,''),
+                ISNULL(Parameter2,''),
+                ISNULL(Parameter3,''),
+                ISNULL(Parameter4,''),
+                ISNULL(Parameter5,''),
+                ISNULL(Parameter6,''),
+                ISNULL(Parameter7,''),
+                ISNULL(Parameter8,''),
+                ISNULL(Parameter9,''),
+                ISNULL(Parameter10,''),
+                ISNULL(Score,0),
+                ISNULL(CreatedDate,'19000101'),
+                ISNULL(CreatedDate_UTC,'19000101'),
+                ISNULL(LastModifiedDate,'19000101'),
+                ISNULL(LastModifiedDate_UTC,'19000101'),
+                ISNULL(CreatedBy,''),
+                ISNULL(Enabled,0),
+                ISNULL(Deleted,0),
+                ISNULL(Repeatable,0),
+                ISNULL(Category,''),
+                ISNULL(LastModifedBy,''),
+                ISNULL(qryId,0)
+            ORDER BY qryId
+        ),
+        *
+    FROM VERIFY..HRS_QuerySyntaxes
+)
+SELECT COUNT(*) AS HRS_QuerySyntaxes
+FROM A_TABLE A
+INNER JOIN B_TABLE B
+    ON A.groupid = B.groupid
+    AND ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
     AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
     AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
     AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
@@ -29,13 +104,11 @@ INNER JOIN VERIFY..HRS_QuerySyntaxes B
     AND ISNULL(A.LastModifedBy,'') = ISNULL(B.LastModifedBy,'')
     AND ISNULL(A.qryId,0) = ISNULL(B.qryId,0);
 
+這種寫法的核心像是在資料堆裡幫每組長得一模一樣的資料貼上流水號 🏷️
+避免：
 
+* A 有 2 筆
+* B 有 2 筆
+* join 後變 4 筆
 
-幫我用下面這種方式改 分類 
-;with temTable as 
-(
- select groupid = ROW_NUMBER() over (partition by  HRSQueryId,CIPQueryId,CIP_CustomerType  order by HRSQueryId,CIPQueryId,CIP_CustomerType ),* 
- from HRS_CIP_TemplateMappings 
-
-)
-SELECT * from temTable 
+這種「資料繁殖術」突然發生。
