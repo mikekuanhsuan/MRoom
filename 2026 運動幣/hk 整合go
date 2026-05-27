@@ -1,107 +1,39 @@
-好，這句話就把規則鎖死了 🔒
-
-你現在要的是最單純版本：
-
-👉 只要 VERIFY..HRS_QuerySyntaxes 有
-👉 就刪 HRS_QuerySyntaxes
-❌ 不做去重
-❌ 不做 RN
-❌ 不影響其他資料
-
-⸻
-
-🧮 ① 先看會刪幾筆（正確版本）
-
-SELECT COUNT(*) AS WillBeDeletedCount
-FROM HRS_QuerySyntaxes A
+根據您提供的圖片，您目前有兩張表 HRS_QuerySyntaxes 和 VERIFY.HRS_QuerySyntaxes，但它們的資料筆數不一致（分別為 479,790 和 236,442 筆）。
+您想要刪除 HRS_QuerySyntaxes 表中，那些在 VERIFY.HRS_QuerySyntaxes 表也存在的資料。
+### 重要前置提醒
+在執行刪除指令前，請務必先確認：
+ 1. **備份資料**：請確保您已經備份了原表，以免誤刪導致無法復原。
+ 2. **確認關聯鍵 (Join Key)**：您需要明確知道這兩張表是透過哪個「唯一識別欄位」（例如：ID 或 qryId）來進行比對。如果這兩張表是完全相同的結構，通常會使用主鍵 (Primary Key) 來比對。
+### 操作建議
+建議您使用 DELETE 配合 EXISTS 或 JOIN 語法來進行刪除。以下以 **ID** 為關聯欄位作為範例（請將 ID 替換為實際用來識別唯一資料的欄位名稱）：
+#### 方法一：使用 EXISTS (推薦，效能通常較好且直觀)
+這個語法會將 HRS_QuerySyntaxes 中，ID 與 VERIFY 表中 ID 相符的資料刪除。
+```sql
+DELETE FROM HRS_QuerySyntaxes
 WHERE EXISTS (
-    SELECT 1
-    FROM VERIFY..HRS_QuerySyntaxes B
-    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-      AND ISNULL(A.CreatedDate,'19000101') = ISNULL(B.CreatedDate,'19000101')
-      AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
-      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-      AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
-      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-      AND ISNULL(A.Category,'') = ISNULL(B.Category,'')
-      AND ISNULL(A.LastModifedBy,'') = ISNULL(B.LastModifedBy,'')
-      AND ISNULL(A.qryId,0) = ISNULL(B.qryId,0)
+    SELECT 1 
+    FROM VERIFY.HRS_QuerySyntaxes AS V
+    WHERE HRS_QuerySyntaxes.ID = V.ID
 );
 
-⸻
+```
+#### 方法二：使用 JOIN (刪除語法)
+這是另一種常用的方式，透過內部連結來定位要刪除的目標。
+```sql
+DELETE T1
+FROM HRS_QuerySyntaxes AS T1
+INNER JOIN VERIFY.HRS_QuerySyntaxes AS T2
+    ON T1.ID = T2.ID;
 
-🧹 ② 正式刪除（完全對應你需求）
+```
+### 進階建議：先進行測試
+在真正執行 DELETE 之前，強烈建議您先執行一次 SELECT 來檢查到底會刪除哪些資料，確保結果如您預期：
+```sql
+SELECT T1.*
+FROM HRS_QuerySyntaxes AS T1
+INNER JOIN VERIFY.HRS_QuerySyntaxes AS T2
+    ON T1.ID = T2.ID;
 
-DELETE A
-FROM HRS_QuerySyntaxes A
-WHERE EXISTS (
-    SELECT 1
-    FROM VERIFY..HRS_QuerySyntaxes B
-    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-      AND ISNULL(A.CreatedDate,'19000101') = ISNULL(B.CreatedDate,'19000101')
-      AND ISNULL(A.CreatedBy,'') = ISNULL(B.CreatedBy,'')
-      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-      AND ISNULL(A.Deleted,0) = ISNULL(B.Deleted,0)
-      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-      AND ISNULL(A.Category,'') = ISNULL(B.Category,'')
-      AND ISNULL(A.LastModifedBy,'') = ISNULL(B.LastModifedBy,'')
-      AND ISNULL(A.qryId,0) = ISNULL(B.qryId,0)
-);
-
-⸻
-
-🧠 這版邏輯是「純交集刪除」
-
-可以用一句話理解：
-
-🔥 VERIFY 裡有的 A，全砍
-
-⸻
-
-⚠️ 很重要提醒（這版的特性）
-
-✔ 優點
-
-* 邏輯簡單
-* 不會誤做去重
-* 完全 match 才刪
-
-⚠️ 風險
-
-* VERIFY 只要一筆 match → A 可能很多筆全刪
-* 如果 VERIFY 是「乾淨版本」，這很正常
-* 如果 VERIFY 有錯資料 → 會一起炸
-
-⸻
-
-如果你下一步想再進階，我可以幫你做：
-
-🧾 「￼ 只刪 VERIFY 最新版本」
-🧾 「￼ 只刪 A 中重複且 VERIFY 存在的那一筆」
-🧾 「￼ 刪除前差異報表（強烈推薦）」
-
-直接講你的下一步，我幫你把 SQL 變成手術刀等級 🗡️
+```
+執行上述 SELECT 後，檢查出來的資料數量應與您預期刪除的筆數一致。確認無誤後，再將語法改為 DELETE 執行即可。
+請問您的這兩張表是否有明確的主鍵欄位（如 ID）可以用來進行比對？
