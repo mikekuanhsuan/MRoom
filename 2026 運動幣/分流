@@ -1,3 +1,71 @@
+你說得完全正確！這點非常關鍵，是我之前的盲點。
+用 ROW_NUMBER() 去無腦刪除「第 2 筆」是錯的，因為從你提供的資料來看，這兩筆資料根本是**不同內容的資料**（qryId、TemplateId、時間都不一樣），它們只是剛好「撞號」共用了同一個 ID。
+所以正確的邏輯應該是：
+ 1. **保留孤兒 (6906筆)**：ID 根本不在 VERIFY 裡面的，不動它。
+ 2. **保留原本資料 (236,442筆)**：跟 VERIFY 的 ID 一樣，而且 **qryId 等詳細內容也一模一樣**的，才是我們要留的（像 HRSU2400690）。
+ 3. **刪除衝突資料 (236,442筆)**：ID 雖然在 VERIFY 裡面有，但 **qryId 卻對不起來**的，就是你後來多倒進去的錯誤資料（像 HRSU2600016），這才是我們要殺掉的。
+我們改用 ID 加上 qryId 進行雙重比對，這樣就能 100% 精準刪除你不要的那筆。
+### 第一步：精準預覽 (Preview)
+請先跑這段，這會透過 ID 與 qryId 雙重驗證，確保我們抓到的是真正多出來的那筆。
+```sql
+SELECT 
+    CASE 
+        WHEN V_ID.ID IS NULL THEN '保留 (孤兒資料 6906 筆)'
+        WHEN V_Exact.ID IS NOT NULL THEN '保留 (與 VERIFY 完全一致的正牌資料 236442 筆)'
+        ELSE '準備刪除 (多倒進去的衝突資料 236442 筆)'
+    END AS DataGroup,
+    COUNT(*) AS RecordCount
+FROM BSADBTW..HRS_QuerySyntaxes B
+LEFT JOIN VERIFY..HRS_QuerySyntaxes V_ID 
+    ON B.ID = V_ID.ID
+LEFT JOIN VERIFY..HRS_QuerySyntaxes V_Exact 
+    ON B.ID = V_Exact.ID 
+   AND ISNULL(B.qryId, '') = ISNULL(V_Exact.qryId, '')  -- 加上 qryId 精準比對
+GROUP BY 
+    CASE 
+        WHEN V_ID.ID IS NULL THEN '保留 (孤兒資料 6906 筆)'
+        WHEN V_Exact.ID IS NOT NULL THEN '保留 (與 VERIFY 完全一致的正牌資料 236442 筆)'
+        ELSE '準備刪除 (多倒進去的衝突資料 236442 筆)'
+    END;
+
+```
+### 第二步：執行刪除 (Delete)
+確認上面分組的數字沒錯（準備刪除的應該要是 236,442 筆），就可以執行這段。這段會精準把 HRSU2600016 這種多出來的殺掉，完美保留 HRSU2400690 與 6906 筆孤兒。
+```sql
+BEGIN TRAN;
+
+DELETE B
+FROM BSADBTW..HRS_QuerySyntaxes B
+WHERE 
+    -- 條件 1：這個 ID 在 VERIFY 裡面有 (鎖定撞號的群組，放過 6906 筆孤兒)
+    EXISTS (
+        SELECT 1 
+        FROM VERIFY..HRS_QuerySyntaxes V 
+        WHERE V.ID = B.ID
+    )
+    -- 條件 2：但它的內容 (qryId) 卻跟 VERIFY 裡面的那筆對不上 (抓出多出來的冒牌貨)
+    AND NOT EXISTS (
+        SELECT 1 
+        FROM VERIFY..HRS_QuerySyntaxes V_Exact 
+        WHERE V_Exact.ID = B.ID 
+          AND ISNULL(V_Exact.qryId, '') = ISNULL(B.qryId, '')
+    );
+
+-- 執行完看訊息，應該要是「受影響的 236442 個資料列」
+
+-- 確認筆數沒錯，請執行：
+-- COMMIT;
+
+-- 發現不對勁，請立刻復原：
+-- ROLLBACK;
+
+```
+
+
+
+^_^
+
+
 SELECT * FROM BSADBTW..HRS_QuerySyntaxes WHERE ID = '983981'
 
 
