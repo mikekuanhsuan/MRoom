@@ -1,18 +1,30 @@
-BEGIN TRAN;
+ID
+TemplateId
+GroupId
+Parameter1
+Parameter2
+Parameter3
+Parameter4
+Parameter5
+Parameter6
+Parameter7
+Parameter8
+Parameter9
+Parameter10
+Score
+CreatedDate
+CreatedDate_UTC
+LastModifiedDate
+LastModifiedDate_UTC
+CreatedBy
+Enabled
+Deleted
+Repeatable
+Category
+LastModifedBy
+qryId
 
-DELETE B
-FROM BSADBTW..HRS_QuerySyntaxes B
-INNER JOIN VERIFY..HRS_QuerySyntaxes V
-    ON ISNULL(B.ID,0) = ISNULL(V.ID,0)
-   AND ISNULL(B.qryId,'') = ISNULL(V.qryId,'')
-   AND ISNULL(B.TemplateId,0) = ISNULL(V.TemplateId,0)
-   AND ISNULL(B.GroupId,0) = ISNULL(V.GroupId,0)
-   AND ISNULL(B.Parameter1,'') = ISNULL(V.Parameter1,'')
-   AND ISNULL(B.Parameter2,'') = ISNULL(V.Parameter2,'')
-   AND ISNULL(B.Parameter3,'') = ISNULL(V.Parameter3,'')
-   -- 其餘欄位全部補齊
 
-SELECT @@ROWCOUNT AS DeletedCount;
-
--- COMMIT
--- ROLLBACK
+這是所有欄位 你幫我看一下
+但我依樣是要用分類的方式來寫
+原本的方式會有問題 你這樣會全部刪除掉 因為他有可能是重複資料
