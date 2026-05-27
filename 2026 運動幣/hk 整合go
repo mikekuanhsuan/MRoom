@@ -1,74 +1,7 @@
-對，現在問題抓到了 🎯
+select COUNT(*) from HRS_QuerySyntaxes  -- 479790
+select COUNT(*) from VERIFY..HRS_QuerySyntaxes  -- 236442
 
-你的：
 
-INNER JOIN
-
-會造成：
-
-多對多 matching
-
-所以筆數爆炸。
-
-⸻
-
-例如：
-
-假設：
-
-HRS_QuerySyntaxes
-
-資料	筆數
-A	2
-
-VERIFY..HRS_QuerySyntaxes
-
-資料	筆數
-A	2
-
-INNER JOIN 後：
-
-2 × 2 = 4
-
-所以：
-
-236442 不代表 join 後一定是 236442
-
-你現在的：
-
-470855
-
-代表 VERIFY 裡面自己也有 duplicate。
-
-資料像兩群史萊姆撞在一起，直接倍增了 🫠
-
-⸻
-
-你真正要的是：
-
-「以 VERIFY 的唯一內容為基準刪除」
-
-也就是：
-
-HRS_QuerySyntaxes 中
-只要存在 VERIFY 的內容
-就刪除
-
-而不是 join 幾次刪幾次。
-
-⸻
-
-正確寫法
-
-要用：
-
-WHERE EXISTS
-
-不是 INNER JOIN。
-
-⸻
-
-正確確認數量
 
 SELECT COUNT(*) AS WillDeleteCount
 FROM HRS_QuerySyntaxes A
@@ -95,45 +28,12 @@ WHERE EXISTS (
       AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
 );
 
-⸻
+-- 470855
 
-這個數量才會接近：
 
-236442
+470855這樣也不對
 
-或可能略少，因為：
 
-* VERIFY 有些 duplicate
-* HRS_QuerySyntaxes 不一定都有
+我這樣不是刪除236442 
 
-⸻
-
-真正刪除
-
-DELETE A
-FROM HRS_QuerySyntaxes A
-WHERE EXISTS (
-    SELECT 1
-    FROM VERIFY..HRS_QuerySyntaxes B
-    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-      AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
-      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-      AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
-      AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
-);
-
-這樣才不會發生：
-🧨 join multiplication explosion。
+我是只要刪除236442
