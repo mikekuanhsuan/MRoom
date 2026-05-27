@@ -1,60 +1,114 @@
-select COUNT(*) from BSADBTW..HRS_QuerySyntaxes 數量479790
-select COUNT(*) from VERIFY..HRS_QuerySyntaxes 數量236442
+### 為什麼學長會說「還是會刪錯筆」？
+學長之所以發現會刪錯（他特別挑了 ID = 983237 來看），核心原因在於你原本的 ROW_NUMBER 寫法少了一個 **「絕對排序基準 (Tie-breaker)」**，導致 SQL Server 發生 **隨機刪除** 的狀況。
+當 BSADBTW 裡面有兩筆重複的 ID：
+ 1. 若這兩筆的 qryId **都**跟 VERIFY 一樣（或者**都**不一樣），這兩筆資料在你的 CASE WHEN 邏輯裡，都會拿到相同分數（都是 1，或都是 2）。
+ 2. 在同分的情況下，ROW_NUMBER() 會**隨機**分配 1 號跟 2 號。
+ 3. 如果這兩筆資料雖然 qryId 相同，但**其他欄位**（例如 TemplateId, Score, CreatedDate）不同。你的程式一旦隨機賦予 rn = 2，就會把真正那筆完美吻合 VERIFY 的正牌資料給殺掉，反而留下了壞掉的雙胞胎。
+### 修正策略：加入「多層優先度」與「時間壓底排序」
+為了確保留下的那一筆是「最完美」的正牌資料，ORDER BY 裡面必須做到兩件事：
+ 1. **擴大優先度 1 的比對範圍**：不能只比對 qryId，應該把其他不容許出錯的核心欄位（如 TemplateId, GroupId）也加進去。
+ 2. **加入最後的 Tie-breaker**：在所有分數都相同的情況下，強制用 LastModifiedDate DESC 來排序，確保永遠保留「最新」的那筆，而不是讓系統隨機亂殺。
+以下是幫你改寫好的檢驗與刪除語法：
+#### 1. 檢驗用語法 (分類統計)
+```sql
+WITH CheckCTE AS (
+    SELECT 
+        B.ID,
+        -- 判斷這筆 ID 是否為孤兒
+        CASE WHEN EXISTS (SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V WHERE V.ID = B.ID) THEN 1 ELSE 0 END AS HasVerify,
+        
+        -- 強制給重複資料排號碼 (1號保留，2號以上刪除)
+        ROW_NUMBER() OVER(
+            PARTITION BY B.ID 
+            ORDER BY 
+                CASE 
+                    -- 優先度 1：qryId 以及其他「核心欄位」完全吻合 VERIFY (請自行替換最重要的欄位)
+                    WHEN EXISTS (
+                        SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
+                        WHERE V.ID = B.ID 
+                          AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
+                          AND ISNULL(V.TemplateId, -1) = ISNULL(B.TemplateId, -1)
+                          AND ISNULL(V.GroupId, -1) = ISNULL(B.GroupId, -1)
+                    ) THEN 1 
+                    
+                    -- 優先度 2：退而求其次，至少 qryId 吻合
+                    WHEN EXISTS (
+                        SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
+                        WHERE V.ID = B.ID 
+                          AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
+                    ) THEN 2 
+                    
+                    -- 優先度 3：都不吻合 (冒牌貨)
+                    ELSE 3 
+                END ASC,
+                
+                -- 致命關鍵 (Tie-breaker)：如果分數一樣，強迫留下最後更新的那一筆，避免隨機排序
+                B.LastModifiedDate DESC
+        ) AS rn
+    FROM BSADBTW..HRS_QuerySyntaxes B
+)
+SELECT 
+    CASE 
+        WHEN HasVerify = 0 THEN '1. 保留 (孤兒資料)'
+        WHEN rn = 1 THEN '2. 保留 (與 VERIFY 最吻合的正牌資料)'
+        ELSE '3. 準備刪除 (多倒進去的衝突與完全重複資料)'
+    END AS DataGroup,
+    COUNT(*) AS RecordCount
+FROM CheckCTE
+GROUP BY 
+    CASE 
+        WHEN HasVerify = 0 THEN '1. 保留 (孤兒資料)'
+        WHEN rn = 1 THEN '2. 保留 (與 VERIFY 最吻合的正牌資料)'
+        ELSE '3. 準備刪除 (多倒進去的衝突與完全重複資料)'
+    END
+ORDER BY DataGroup;
 
-因為我多倒檔案
-因為我需要刪除BSADBTW..HRS_QuerySyntaxes 多出來的236442筆資料
+```
+#### 2. 實際刪除語法
+利用你修正過加上 HasVerify = 1 的保護機制，結合上述的新排序規則：
+```sql
+BEGIN TRAN;
 
+WITH CleanCTE AS (
+    SELECT 
+        B.ID,
+        CASE WHEN EXISTS (SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V WHERE V.ID = B.ID) THEN 1 ELSE 0 END AS HasVerify,
+        
+        ROW_NUMBER() OVER(
+            PARTITION BY B.ID 
+            ORDER BY 
+                CASE 
+                    WHEN EXISTS (
+                        SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
+                        WHERE V.ID = B.ID 
+                          AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
+                          AND ISNULL(V.TemplateId, -1) = ISNULL(B.TemplateId, -1)
+                          AND ISNULL(V.GroupId, -1) = ISNULL(B.GroupId, -1)
+                    ) THEN 1 
+                    WHEN EXISTS (
+                        SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
+                        WHERE V.ID = B.ID 
+                          AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
+                    ) THEN 2 
+                    ELSE 3 
+                END ASC,
+                B.LastModifiedDate DESC
+        ) AS rn
+    FROM BSADBTW..HRS_QuerySyntaxes B
+)
 
-但我需要標記BSADBTW..HRS_QuerySyntaxes 跟 VERIFY..HRS_QuerySyntaxes 比對資料
+-- 直接刪除具備 VERIFY 對照組，且排名第 2 筆以後的重複/衝突資料
+DELETE FROM CleanCTE
+WHERE HasVerify = 1
+  AND rn > 1;
 
-因為不是全部重複
-我需要
-group 1 跟 2
-重複的資料設定2 沒重複的設定1
-然後最後可能會剩下一些1 的資料
+-- 確認刪除筆數
+SELECT @@ROWCOUNT AS DeletedCount;
 
-我最後要刪除1 的資料
+-- 確認無誤後再執行
+-- COMMIT;
+-- 如需回復
+-- ROLLBACK;
 
-
-給我刪除前確認筆數
-跟刪除的code
-
-
-
-HRS_QuerySyntaxes 的欄位資訊
-
-Column_name	Type	Computed	Length	Prec	Scale	Nullable	TrimTrailingBlanks	FixedLenNullInSource	Collation
-ID	int	no	4	10   	0    	no	(n/a)	(n/a)	NULL
-TemplateId	int	no	4	10   	0    	no	(n/a)	(n/a)	NULL
-GroupId	int	no	4	10   	0    	no	(n/a)	(n/a)	NULL
-Parameter1	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter2	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter3	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter4	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter5	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter6	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter7	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter8	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter9	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter10	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Score	decimal	no	5	7    	2    	yes	(n/a)	(n/a)	NULL
-CreatedDate	datetime	no	8	     	     	no	(n/a)	(n/a)	NULL
-CreatedDate_UTC	datetime	no	8	     	     	no	(n/a)	(n/a)	NULL
-LastModifiedDate	datetime	no	8	     	     	yes	(n/a)	(n/a)	NULL
-LastModifiedDate_UTC	datetime	no	8	     	     	yes	(n/a)	(n/a)	NULL
-CreatedBy	nvarchar	no	80	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Enabled	bit	no	1	     	     	no	(n/a)	(n/a)	NULL
-Deleted	nchar	no	2	     	     	no	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Repeatable	bit	no	1	     	     	no	(n/a)	(n/a)	NULL
-Category	tinyint	no	1	3    	0    	no	(n/a)	(n/a)	NULL
-LastModifedBy	nvarchar	no	80	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-qryId	varchar	no	15	     	     	yes	no	yes	Chinese_Taiwan_Stroke_CI_AS
-
-
-
-RowGuidCol
-No rowguidcol column defined.
-
-
-Data_located_on_filegroup
-PRIMARY
+```
+需要幫你把清單上的 20 幾個欄位，全都寫成更簡潔的全欄位比對條件，還是目前只要挑選幾個關鍵欄位比對就足夠了？
