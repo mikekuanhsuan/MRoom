@@ -1,50 +1,84 @@
-沒有，我剛剛那段 沒有真的幫你建立 1 / 2 標籤欄位，而是用「隱形規則」在做分類。
-
-我幫你講清楚現在狀態👇
+對，你的直覺是對的 👍
 
 ⸻
 
-🧠 你現在這版 SQL 在做什麼？
+🧠 ALTER TABLE 會不會改原本 table？
 
-用 ID 排序（ROW_NUMBER）
-最小 ID = RN 1（當作原始）
-其餘 RN > 1（當作後來匯入）
+❗會
 
-👉 等於是「假裝有 1 / 2」
+ALTER TABLE = 永久修改 schema
 
-但實際上：
+會真的改：
 
-❌ 沒有 DataTag 欄位
-❌ 沒有真的寫入 1 / 2
+* 加欄位
+* 改結構
+* 寫進 metadata
 
-⸻
-
-💡 你問的重點
-
-「有沒有幫我設定 1 跟 2？」
-
-答案：
-
-❌ 沒有實體設定
-
-✔ 只有邏輯上等價於 1 / 2
+👉 之後所有 system / query / ETL 都會看到這個欄位
 
 ⸻
 
-🟢 如果你要「真的 1 / 2 標籤」（建議做）
+🚫 你的需求
 
-你需要這樣做👇
+你說：
 
-⸻
+❌ 不要改原本 table
+✔ 可以臨時用
 
-✨ Step 1：新增欄位
-
-ALTER TABLE BSADBTW..HRS_QuerySyntaxes
-ADD DataTag INT NULL;
+那就完全不要用 ALTER
 
 ⸻
 
-🟢 Step 2：標記「原始資料 = 1」
+🟢 正確做法（臨時標籤）
+
+我們用：
+
+👉 CTE / Temp Table（不動原表）
+
+⸻
+
+💡 方案 1（推薦）：CTE 標籤版
+
+✔ 不改 table
+
+✔ 可重複跑
+
+✔ 安全
+
+;WITH Ranked AS (
+    SELECT 
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY
+                TemplateId,
+                GroupId,
+                Parameter1,
+                Parameter2,
+                Parameter3,
+                Parameter4,
+                Parameter5,
+                Parameter6,
+                Parameter7,
+                Parameter8,
+                Parameter9,
+                Parameter10,
+                Score,
+                Enabled,
+                Deleted,
+                Repeatable,
+                Category,
+                qryId
+            ORDER BY ID
+        ) AS RN
+    FROM BSADBTW..HRS_QuerySyntaxes
+)
+SELECT COUNT(*) AS WillDeleteCount
+FROM Ranked
+WHERE RN > 1;
+
+⸻
+
+💣 真正刪除（臨時版本）
 
 ;WITH Ranked AS (
     SELECT 
@@ -73,20 +107,17 @@ ADD DataTag INT NULL;
         ) AS RN
     FROM BSADBTW..HRS_QuerySyntaxes
 )
-UPDATE A
-SET DataTag = 1
-FROM BSADBTW..HRS_QuerySyntaxes A
-JOIN Ranked R ON A.ID = R.ID
-WHERE R.RN = 1;
+DELETE FROM Ranked
+WHERE RN > 1;
 
 ⸻
 
-🔴 Step 3：標記「後來匯入 = 2」
+🟡 方案 2（更安全）：先丟 temp table
 
-;WITH Ranked AS (
-    SELECT 
-        ID,
-        ROW_NUMBER() OVER (
+如果你想「像 1 / 2 標籤但不污染原表」：
+
+SELECT *,
+       ROW_NUMBER() OVER (
             PARTITION BY
                 TemplateId,
                 GroupId,
@@ -107,47 +138,47 @@ WHERE R.RN = 1;
                 Category,
                 qryId
             ORDER BY ID
-        ) AS RN
-    FROM BSADBTW..HRS_QuerySyntaxes
-)
-UPDATE A
-SET DataTag = 2
+       ) AS RN
+INTO #tmp
+FROM BSADBTW..HRS_QuerySyntaxes;
+
+然後：
+
+DELETE A
 FROM BSADBTW..HRS_QuerySyntaxes A
-JOIN Ranked R ON A.ID = R.ID
-WHERE R.RN > 1;
+JOIN #tmp T ON A.ID = T.ID
+WHERE T.RN > 1;
 
 ⸻
 
-💣 Step 4：真正刪除（你要的）
+🧠 重點幫你整理
 
-DELETE
-FROM BSADBTW..HRS_QuerySyntaxes
-WHERE DataTag = 2;
-
-⸻
-
-🧠 差別整理
-
-方法	有沒有真的 1/2	安全性	可維護性
-ROW_NUMBER	❌	⚠️ 中	❌ 一次性
-DataTag	✔	✔ 高	✔ 可重複用
+方法	會改 table？	推薦度
+ALTER TABLE	❌會（永久）	❌
+CTE	❌不會	✔✔✔
+#temp table	❌不會	✔✔✔✔
 
 ⸻
 
-🚀 重點結論
+🚀 給你的最佳解（建議用）
 
-👉 我剛剛給你的是「一次性刪除方案」
-👉 你現在問的是「正式資料治理方案」
+👉 用這個：
+
+#tmp + RN + delete join
+
+因為：
+
+* 可 debug
+* 可查 RN 分布
+* 不會誤刪
+* 可 rollback 重跑
 
 ⸻
 
-如果你要，我可以幫你再升一級👇
+如果你下一步要，我可以幫你做👇
 
-🔥 進階版（推薦）
+🔥「￼ 先列出 236442 明細 + 分組 + 哪些會被刪」
+🔥「￼ 做成報表（Excel ready）」
+🔥「￼ 確認 100% safe 再 delete」
 
-* 自動偵測 duplicate group
-* 自動標 1 / 2 / 3
-* 支援未來每次匯入
-* 不再需要 VERIFY table
-
-那個就會變成真正「資料清洗系統」了 👍
+這個已經是資料清洗 pipeline 等級了 👍
