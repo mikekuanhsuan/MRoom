@@ -1,132 +1,27 @@
 
-你現在兩邊差了 383 筆，代表：
+SELECT COUNT(*) AS WillDelete
+FROM BSADBTW..HRS_QuerySyntaxes A
+WHERE EXISTS (
+    SELECT 1
+    FROM VERIFY..HRS_QuerySyntaxes B
+    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+      AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+      AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+      AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+);
 
-* BANCS_SK_CUST_INFO 裡符合條件的 TS_CUST_ID
-* 沒有成功 join 到 BSA_SUB_CUST_FACT.customerno
-
-可以直接用 NOT EXISTS 找出那 383 筆 👇
-
-SELECT 
-    s.SK_CUST_ID,
-    s.TS_CUST_ID,
-    s.CUST_RE_NO_FLG,
-    s.*
-FROM BANCS_SK_CUST_INFO s
-WHERE s.CUST_RE_NO_FLG IN ('2','3')
-    AND s.SK_CUST_ID <> s.TS_CUST_ID
-    AND NOT EXISTS (
-        SELECT 1
-        FROM BSA_SUB_CUST_FACT f
-        WHERE f.customerno = s.TS_CUST_ID
-    );
-
-如果你只想先確認是不是 383 筆：
-
-SELECT COUNT(*)
-FROM BANCS_SK_CUST_INFO s
-WHERE s.CUST_RE_NO_FLG IN ('2','3')
-    AND s.SK_CUST_ID <> s.TS_CUST_ID
-    AND NOT EXISTS (
-        SELECT 1
-        FROM BSA_SUB_CUST_FACT f
-        WHERE f.customerno = s.TS_CUST_ID
-    );
-
-這種差異很像資料宇宙裡的「幽靈客戶」👻
-在 BANCS_SK_CUST_INFO 有留下痕跡，但 FACT 表沒接到。通常可能是：
-
-* FACT 尚未入資料
-* customerNo 格式不同
-* 前後空白
-* leading zero
-* 被 filter 掉
-* join key 不一致
-
-你也可以順便檢查有沒有空白問題：
-
-WHERE LTRIM(RTRIM(f.customerno)) = LTRIM(RTRIM(s.TS_CUST_ID))
-
-有時候那 383 筆只是被空白偷偷藏起來了 🫥
-
-
-
-SELECT count(*) FROM BANCS_SK_CUST_INFO s
-WHERE s.CUST_RE_NO_FLG IN ('2','3') AND s.SK_CUST_ID <> s.TS_CUST_ID
-
-有4476117
-
-SELECT count(*) FROM BSA_SUB_CUST_FACT f
-JOIN BANCS_SK_CUST_INFO s    ON f.customerno = s.TS_CUST_ID
-WHERE s.CUST_RE_NO_FLG IN ('2','3')  AND s.SK_CUST_ID <> s.TS_CUST_ID;
-有 4475734
-
-
-我想找出差異的383 長怎樣
-
-
-SELECT  * FROM HRS_CIP_TemplateMappings 
-SELECT  * FROM VERIFY..HRS_CIP_TemplateMappings
-
-這也是幫我寫
-
-HRSQueryId
-CIPQueryId
-CIP_CustomerType
-HRSTemplateId
-TemplateAnswerType
-OptionList
-OptionCode
-
-
-
-你這張 table 比較簡單，欄位比較少 🌱
-
-你現在需求一樣是：
-
-HRS_CIP_TemplateMappings 裡，只要資料存在於 VERIFY..HRS_CIP_TemplateMappings，就刪掉。
-
-先跑確認筆數版本：
-
-SELECT COUNT(*)
-FROM HRS_CIP_TemplateMappings A
-INNER JOIN VERIFY..HRS_CIP_TemplateMappings B
-    ON ISNULL(A.HRSQueryId,0) = ISNULL(B.HRSQueryId,0)
-    AND ISNULL(A.CIPQueryId,0) = ISNULL(B.CIPQueryId,0)
-    AND ISNULL(A.CIP_CustomerType,'') = ISNULL(B.CIP_CustomerType,'')
-    AND ISNULL(A.HRSTemplateId,0) = ISNULL(B.HRSTemplateId,0)
-    AND ISNULL(A.TemplateAnswerType,'') = ISNULL(B.TemplateAnswerType,'')
-    AND ISNULL(A.OptionList,'') = ISNULL(B.OptionList,'')
-    AND ISNULL(A.OptionCode,'') = ISNULL(B.OptionCode,'');
-
-確認數量正確後，再執行刪除：
-
-BEGIN TRAN;
-DELETE A
-FROM HRS_CIP_TemplateMappings A
-INNER JOIN VERIFY..HRS_CIP_TemplateMappings B
-    ON ISNULL(A.HRSQueryId,0) = ISNULL(B.HRSQueryId,0)
-    AND ISNULL(A.CIPQueryId,0) = ISNULL(B.CIPQueryId,0)
-    AND ISNULL(A.CIP_CustomerType,'') = ISNULL(B.CIP_CustomerType,'')
-    AND ISNULL(A.HRSTemplateId,0) = ISNULL(B.HRSTemplateId,0)
-    AND ISNULL(A.TemplateAnswerType,'') = ISNULL(B.TemplateAnswerType,'')
-    AND ISNULL(A.OptionList,'') = ISNULL(B.OptionList,'')
-    AND ISNULL(A.OptionCode,'') = ISNULL(B.OptionCode,'');
--- 先確認刪除筆數
-SELECT @@ROWCOUNT AS DeletedRows;
-ROLLBACK;
-
-如果 DeletedRows 正確：
-
-把最後：
-
-ROLLBACK;
-
-改成：
-
-COMMIT;
-
-就正式刪除完成。
-
-這種做法很像資料庫版的：
-
-🧹「VERIFY 有的，我全部掃出去」
+我這個出來是 470855
