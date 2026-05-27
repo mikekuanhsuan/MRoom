@@ -224,3 +224,40 @@ GROUP BY
 
 
 
+
+
+
+所有欄位如下
+
+ID
+TemplateId
+GroupId
+Parameter1
+Parameter2
+Parameter3
+Parameter4
+Parameter5
+Parameter6
+Parameter7
+Parameter8
+Parameter9
+Parameter10
+Score
+CreatedDate
+CreatedDate_UTC
+LastModifiedDate
+LastModifiedDate_UTC
+CreatedBy
+Enabled
+Deleted
+Repeatable
+Category
+LastModifedBy
+qryId
+
+
+這是所有欄位 你幫我看一下
+但我依樣是要用分類的方式來寫
+因為他有可能是重複資料
+
+
