@@ -1,27 +1,153 @@
+沒有，我剛剛那段 沒有真的幫你建立 1 / 2 標籤欄位，而是用「隱形規則」在做分類。
 
-SELECT COUNT(*) AS WillDelete
+我幫你講清楚現在狀態👇
+
+⸻
+
+🧠 你現在這版 SQL 在做什麼？
+
+用 ID 排序（ROW_NUMBER）
+最小 ID = RN 1（當作原始）
+其餘 RN > 1（當作後來匯入）
+
+👉 等於是「假裝有 1 / 2」
+
+但實際上：
+
+❌ 沒有 DataTag 欄位
+❌ 沒有真的寫入 1 / 2
+
+⸻
+
+💡 你問的重點
+
+「有沒有幫我設定 1 跟 2？」
+
+答案：
+
+❌ 沒有實體設定
+
+✔ 只有邏輯上等價於 1 / 2
+
+⸻
+
+🟢 如果你要「真的 1 / 2 標籤」（建議做）
+
+你需要這樣做👇
+
+⸻
+
+✨ Step 1：新增欄位
+
+ALTER TABLE BSADBTW..HRS_QuerySyntaxes
+ADD DataTag INT NULL;
+
+⸻
+
+🟢 Step 2：標記「原始資料 = 1」
+
+;WITH Ranked AS (
+    SELECT 
+        ID,
+        ROW_NUMBER() OVER (
+            PARTITION BY
+                TemplateId,
+                GroupId,
+                Parameter1,
+                Parameter2,
+                Parameter3,
+                Parameter4,
+                Parameter5,
+                Parameter6,
+                Parameter7,
+                Parameter8,
+                Parameter9,
+                Parameter10,
+                Score,
+                Enabled,
+                Deleted,
+                Repeatable,
+                Category,
+                qryId
+            ORDER BY ID
+        ) AS RN
+    FROM BSADBTW..HRS_QuerySyntaxes
+)
+UPDATE A
+SET DataTag = 1
 FROM BSADBTW..HRS_QuerySyntaxes A
-WHERE EXISTS (
-    SELECT 1
-    FROM VERIFY..HRS_QuerySyntaxes B
-    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-      AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
-      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-      AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
-      AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
-);
+JOIN Ranked R ON A.ID = R.ID
+WHERE R.RN = 1;
 
-我這個出來是 470855
+⸻
+
+🔴 Step 3：標記「後來匯入 = 2」
+
+;WITH Ranked AS (
+    SELECT 
+        ID,
+        ROW_NUMBER() OVER (
+            PARTITION BY
+                TemplateId,
+                GroupId,
+                Parameter1,
+                Parameter2,
+                Parameter3,
+                Parameter4,
+                Parameter5,
+                Parameter6,
+                Parameter7,
+                Parameter8,
+                Parameter9,
+                Parameter10,
+                Score,
+                Enabled,
+                Deleted,
+                Repeatable,
+                Category,
+                qryId
+            ORDER BY ID
+        ) AS RN
+    FROM BSADBTW..HRS_QuerySyntaxes
+)
+UPDATE A
+SET DataTag = 2
+FROM BSADBTW..HRS_QuerySyntaxes A
+JOIN Ranked R ON A.ID = R.ID
+WHERE R.RN > 1;
+
+⸻
+
+💣 Step 4：真正刪除（你要的）
+
+DELETE
+FROM BSADBTW..HRS_QuerySyntaxes
+WHERE DataTag = 2;
+
+⸻
+
+🧠 差別整理
+
+方法	有沒有真的 1/2	安全性	可維護性
+ROW_NUMBER	❌	⚠️ 中	❌ 一次性
+DataTag	✔	✔ 高	✔ 可重複用
+
+⸻
+
+🚀 重點結論
+
+👉 我剛剛給你的是「一次性刪除方案」
+👉 你現在問的是「正式資料治理方案」
+
+⸻
+
+如果你要，我可以幫你再升一級👇
+
+🔥 進階版（推薦）
+
+* 自動偵測 duplicate group
+* 自動標 1 / 2 / 3
+* 支援未來每次匯入
+* 不再需要 VERIFY table
+
+那個就會變成真正「資料清洗系統」了 👍
