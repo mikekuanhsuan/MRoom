@@ -1,25 +1,76 @@
+很好，這個錯誤其實是關鍵突破點 🔍
+
+⸻
+
+❗錯誤原因
+
+你這段：
+
+FROM MatchData
+
+但 MatchData 裡面只有：
+
+A.ID
+
+因為你在 CTE1 做的是：
+
+SELECT A.ID
+FROM HRS_QuerySyntaxes A
+INNER JOIN VERIFY...
+
+👉 所以結果只剩 ID
+
+⸻
+
+但你第二層卻在用：
+
+TemplateId, GroupId, Parameter1...
+
+當然全部報：
+
+無效欄位
+
+⸻
+
+🧠 重點一句話
+
+你把資料「壓扁成 ID」，後面卻想用「完整欄位」分組。
+
+⸻
+
+🎯 正確修法（很重要）
+
+你要把 A. 保留下來*
+
+⸻
+
+✅ 修正版 SQL（可以直接用）
+
 ;WITH MatchData AS (
-    SELECT A.ID
+    SELECT A.*
     FROM HRS_QuerySyntaxes A
-    INNER JOIN VERIFY..HRS_QuerySyntaxes B
-        ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-        AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-        AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-        AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-        AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-        AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-        AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-        AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-        AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-        AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-        AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-        AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-        AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-        AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-        AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
-        AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-        AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
-        AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+    WHERE EXISTS (
+        SELECT 1
+        FROM VERIFY..HRS_QuerySyntaxes B
+        WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+          AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+          AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+          AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+          AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+          AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+          AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+          AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+          AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+          AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+          AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+          AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+          AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+          AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+          AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+          AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+          AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+          AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+    )
 ),
 Ranked AS (
     SELECT *,
@@ -51,40 +102,35 @@ SELECT COUNT(*) AS OnlyOneRowMatch
 FROM Ranked
 WHERE RN = 1;
 
+⸻
 
-訊息 207，層級 16，狀態 1，行 28
-無效的資料行名稱 'TemplateId'。
-訊息 207，層級 16，狀態 1，行 29
-無效的資料行名稱 'GroupId'。
-訊息 207，層級 16，狀態 1，行 30
-無效的資料行名稱 'Parameter1'。
-訊息 207，層級 16，狀態 1，行 31
-無效的資料行名稱 'Parameter2'。
-訊息 207，層級 16，狀態 1，行 32
-無效的資料行名稱 'Parameter3'。
-訊息 207，層級 16，狀態 1，行 33
-無效的資料行名稱 'Parameter4'。
-訊息 207，層級 16，狀態 1，行 34
-無效的資料行名稱 'Parameter5'。
-訊息 207，層級 16，狀態 1，行 35
-無效的資料行名稱 'Parameter6'。
-訊息 207，層級 16，狀態 1，行 36
-無效的資料行名稱 'Parameter7'。
-訊息 207，層級 16，狀態 1，行 37
-無效的資料行名稱 'Parameter8'。
-訊息 207，層級 16，狀態 1，行 38
-無效的資料行名稱 'Parameter9'。
-訊息 207，層級 16，狀態 1，行 39
-無效的資料行名稱 'Parameter10'。
-訊息 207，層級 16，狀態 1，行 40
-無效的資料行名稱 'Score'。
-訊息 207，層級 16，狀態 1，行 41
-無效的資料行名稱 'Enabled'。
-訊息 207，層級 16，狀態 1，行 42
-無效的資料行名稱 'Deleted'。
-訊息 207，層級 16，狀態 1，行 43
-無效的資料行名稱 'Repeatable'。
-訊息 207，層級 16，狀態 1，行 44
-無效的資料行名稱 'Category'。
-訊息 207，層級 16，狀態 1，行 45
-無效的資料行名稱 'qryId'。
+🔥 你剛剛那個錯的本質
+
+你做了這件事：
+
+A → join → 只剩 ID → 想再分組 → 爆炸
+
+⸻
+
+🧭 正確理解（很重要）
+
+你現在三種資料其實是：
+
+① EXISTS match VERIFY      = 236442（全部 match）
+② duplicate rows           = 234413（RN > 1）
+③ unique match rows        = 2029   (RN = 1)
+④ non-match rows           = 8935
+
+⸻
+
+💡 如果你下一步要做「精準刪除 VERIFY 匯入那批」
+
+我可以幫你升級成：
+
+🚀 安全版 delete（不會誤刪唯一資料）
+
+* 先 backup
+* 再 preview
+* 再 delete
+
+因為你現在已經在做「資料清洗級別」操作了，不是普通 query 了。
