@@ -1,43 +1,165 @@
-select COUNT(*) from HRS_QuerySyntaxes
-select COUNT(*) from VERIFY..HRS_QuerySyntaxes
+很好，這一步就抓到核心問題了：你現在要的其實是 「釐清那 2029 筆差異到底是什麼」。
 
+先把數字拆清楚：
 
-;WITH CTE AS (
-    SELECT 
-        ID,
-        ROW_NUMBER() OVER (
-            PARTITION BY
-                TemplateId,
-                GroupId,
-                Parameter1,
-                Parameter2,
-                Parameter3,
-                Parameter4,
-                Parameter5,
-                Parameter6,
-                Parameter7,
-                Parameter8,
-                Parameter9,
-                Parameter10,
-                Score,
-                Enabled,
-                Deleted,
-                Repeatable,
-                Category,
-                qryId
-            ORDER BY ID
-        ) AS RN
-    FROM HRS_QuerySyntaxes
+HRS = 479790
+VERIFY = 236442
+HRS - VERIFY = 243348
+
+但你算：
+
+可刪 duplicate = 234413
+
+所以還差：
+
+243348 - 234413 = 8935
+
+👉 這 8935 才是關鍵「異常差異」
+
+⸻
+
+🧠 現在你真正要找的是三種資料
+
+我們直接幫你分類：
+
+🟢 A. VERIFY 有 + HRS 多筆（duplicate）
+
+👉 234413（你已經算出）
+
+⸻
+
+🟡 B. VERIFY 有 + HRS 只有 1 筆（你說的 2029）
+
+👉 這種是：
+
+沒有 duplicate
+只是原本就一筆
+
+⸻
+
+🔴 C. HRS 有，但 VERIFY 完全沒有（8935）
+
+👉 這是「新增資料 or 髒資料」
+
+⸻
+
+🎯 你現在要查的是 B + C
+
+⸻
+
+✅ Step 1：找「HRS 有、VERIFY 沒有」（8935）
+
+SELECT A.*
+FROM HRS_QuerySyntaxes A
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM VERIFY..HRS_QuerySyntaxes B
+    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+      AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+      AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+      AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+);
+
+👉 這個結果 = 8935
+
+⸻
+
+✅ Step 2：找「只有一筆（無 duplicate）的 VERIFY match」
+
+;WITH MatchData AS (
+    SELECT A.ID
+    FROM HRS_QuerySyntaxes A
+    INNER JOIN VERIFY..HRS_QuerySyntaxes B
+        ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+        AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+        AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+        AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+        AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+        AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+        AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+        AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+        AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+        AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+        AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+        AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+        AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+        AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+        AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+        AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+        AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+        AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+),
+Ranked AS (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY 
+                   TemplateId,
+                   GroupId,
+                   Parameter1,
+                   Parameter2,
+                   Parameter3,
+                   Parameter4,
+                   Parameter5,
+                   Parameter6,
+                   Parameter7,
+                   Parameter8,
+                   Parameter9,
+                   Parameter10,
+                   Score,
+                   Enabled,
+                   Deleted,
+                   Repeatable,
+                   Category,
+                   qryId
+               ORDER BY ID
+           ) AS RN
+    FROM MatchData
 )
-SELECT COUNT(*) AS WillDeleteCount
-FROM CTE
-WHERE RN > 1;
+SELECT COUNT(*) AS OnlyOneRowMatch
+FROM Ranked
+WHERE RN = 1;
 
+👉 這個結果 = 2029
 
+⸻
 
-479790
-236442
-234413
-因為有差異
-幫我找出差異的 我需要確認 他是不是本來就只有一筆 沒有重複
+🧾 最後三塊拼圖
 
+234413 = duplicate（要刪）
+2029   = 唯一 match（不能動）
+8935   = VERIFY 沒有（額外資料）
+
+⸻
+
+🧠 一句話總結你的資料狀態
+
+👉 VERIFY 不是「刪除清單」，只是「比對參考系」
+👉 你 HRS 裡面有三種資料混在一起
+
+像一鍋湯：
+
+* 一樣的料（234k）🍲
+* 只放一顆的料（2029）🥄
+* VERIFY 沒有的怪料（8935）🧪
+
+⸻
+
+如果你下一步想做的是：
+
+👉「只刪 VERIFY 對應 + duplicate，但保留唯一那筆」
+
+我可以￼ 幫你直接寫 最安全的 delete script（含 backup + preview）。
