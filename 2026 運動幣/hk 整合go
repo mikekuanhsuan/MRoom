@@ -1,39 +1,42 @@
-根據您提供的圖片，您目前有兩張表 HRS_QuerySyntaxes 和 VERIFY.HRS_QuerySyntaxes，但它們的資料筆數不一致（分別為 479,790 和 236,442 筆）。
-您想要刪除 HRS_QuerySyntaxes 表中，那些在 VERIFY.HRS_QuerySyntaxes 表也存在的資料。
-### 重要前置提醒
-在執行刪除指令前，請務必先確認：
- 1. **備份資料**：請確保您已經備份了原表，以免誤刪導致無法復原。
- 2. **確認關聯鍵 (Join Key)**：您需要明確知道這兩張表是透過哪個「唯一識別欄位」（例如：ID 或 qryId）來進行比對。如果這兩張表是完全相同的結構，通常會使用主鍵 (Primary Key) 來比對。
-### 操作建議
-建議您使用 DELETE 配合 EXISTS 或 JOIN 語法來進行刪除。以下以 **ID** 為關聯欄位作為範例（請將 ID 替換為實際用來識別唯一資料的欄位名稱）：
-#### 方法一：使用 EXISTS (推薦，效能通常較好且直觀)
-這個語法會將 HRS_QuerySyntaxes 中，ID 與 VERIFY 表中 ID 相符的資料刪除。
+為了安全執行刪除，請務必先執行 **「預覽查詢」**，確認你要刪除的資料範圍是正確的。
+假設這兩張表是透過 ID 欄位來判斷重複，以下是完整的 SQL 操作步驟：
+### 第一步：預覽要刪除的資料
+先確認這些資料真的是你想刪除的。執行這個查詢，若結果筆數符合你的預期，再進行下一步。
 ```sql
+SELECT A.*
+FROM HRS_QuerySyntaxes AS A
+INNER JOIN VERIFY.HRS_QuerySyntaxes AS B ON A.ID = B.ID;
+
+```
+### 第二步：執行刪除 (正式操作)
+確認上述查詢結果無誤後，使用以下指令進行刪除：
+```sql
+-- 使用 CTE (Common Table Expression) 進行刪除，這是一種更安全的寫法
+WITH TargetData AS (
+    SELECT A.ID
+    FROM HRS_QuerySyntaxes AS A
+    INNER JOIN VERIFY.HRS_QuerySyntaxes AS B ON A.ID = B.ID
+)
 DELETE FROM HRS_QuerySyntaxes
-WHERE EXISTS (
-    SELECT 1 
-    FROM VERIFY.HRS_QuerySyntaxes AS V
-    WHERE HRS_QuerySyntaxes.ID = V.ID
-);
+WHERE ID IN (SELECT ID FROM TargetData);
+
+-- 檢查刪除後剩餘的資料筆數
+SELECT COUNT(*) FROM HRS_QuerySyntaxes;
 
 ```
-#### 方法二：使用 JOIN (刪除語法)
-這是另一種常用的方式，透過內部連結來定位要刪除的目標。
+### 重要注意事項：
+ 1. **關於 ID 欄位**：如果你的表並非使用 ID 作為唯一識別碼，而是其他欄位（例如 qryId），請務必將上述語法中的 A.ID = B.ID 修改為該對應欄位。
+ 2. **交易安全 (Transaction)**：若你在正式環境操作，建議加上交易控制，這樣萬一刪錯了還可以復原（Rollback）：
 ```sql
-DELETE T1
-FROM HRS_QuerySyntaxes AS T1
-INNER JOIN VERIFY.HRS_QuerySyntaxes AS T2
-    ON T1.ID = T2.ID;
+BEGIN TRANSACTION;
+
+-- 在這裡放入上面的 DELETE 指令
+
+-- 如果你確認結果正確，請執行此行確認刪除：
+-- COMMIT;
+
+-- 如果結果不如預期，請執行此行取消變更：
+-- ROLLBACK;
 
 ```
-### 進階建議：先進行測試
-在真正執行 DELETE 之前，強烈建議您先執行一次 SELECT 來檢查到底會刪除哪些資料，確保結果如您預期：
-```sql
-SELECT T1.*
-FROM HRS_QuerySyntaxes AS T1
-INNER JOIN VERIFY.HRS_QuerySyntaxes AS T2
-    ON T1.ID = T2.ID;
-
-```
-執行上述 SELECT 後，檢查出來的資料數量應與您預期刪除的筆數一致。確認無誤後，再將語法改為 DELETE 執行即可。
-請問您的這兩張表是否有明確的主鍵欄位（如 ID）可以用來進行比對？
+在正式操作前，你是否確認過兩張表之間是用 ID 這個欄位來識別重複資料的呢？
