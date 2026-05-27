@@ -1,53 +1,50 @@
-很好，這個錯誤其實是關鍵突破點 🔍
+好，這次給你一份「可以直接上線跑、而且不會炸資料庫」的完整安全版。
+
+你的需求已經是：
+
+✔ 刪掉 VERIFY 有的資料
+✔ duplicate 只留 1 筆
+✔ 不動 VERIFY 沒有的 8935
 
 ⸻
 
-❗錯誤原因
+🧨 完整安全刪除腳本（推薦版）
 
-你這段：
+✅ Step 0：先做備份（強烈建議）
 
-FROM MatchData
-
-但 MatchData 裡面只有：
-
-A.ID
-
-因為你在 CTE1 做的是：
-
-SELECT A.ID
-FROM HRS_QuerySyntaxes A
-INNER JOIN VERIFY...
-
-👉 所以結果只剩 ID
+SELECT *
+INTO HRS_QuerySyntaxes_BAK_20260527
+FROM HRS_QuerySyntaxes;
 
 ⸻
 
-但你第二層卻在用：
+🔍 Step 1：先看會刪多少（一定要跑）
 
-TemplateId, GroupId, Parameter1...
-
-當然全部報：
-
-無效欄位
-
-⸻
-
-🧠 重點一句話
-
-你把資料「壓扁成 ID」，後面卻想用「完整欄位」分組。
-
-⸻
-
-🎯 正確修法（很重要）
-
-你要把 A. 保留下來*
-
-⸻
-
-✅ 修正版 SQL（可以直接用）
-
-;WITH MatchData AS (
-    SELECT A.*
+;WITH Ranked AS (
+    SELECT 
+        A.ID,
+        ROW_NUMBER() OVER (
+            PARTITION BY 
+                A.TemplateId,
+                A.GroupId,
+                A.Parameter1,
+                A.Parameter2,
+                A.Parameter3,
+                A.Parameter4,
+                A.Parameter5,
+                A.Parameter6,
+                A.Parameter7,
+                A.Parameter8,
+                A.Parameter9,
+                A.Parameter10,
+                A.Score,
+                A.Enabled,
+                A.Deleted,
+                A.Repeatable,
+                A.Category,
+                A.qryId
+            ORDER BY A.ID
+        ) AS RN
     FROM HRS_QuerySyntaxes A
     WHERE EXISTS (
         SELECT 1
@@ -71,66 +68,99 @@ TemplateId, GroupId, Parameter1...
           AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
           AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
     )
-),
-Ranked AS (
-    SELECT *,
-           ROW_NUMBER() OVER (
-               PARTITION BY 
-                   TemplateId,
-                   GroupId,
-                   Parameter1,
-                   Parameter2,
-                   Parameter3,
-                   Parameter4,
-                   Parameter5,
-                   Parameter6,
-                   Parameter7,
-                   Parameter8,
-                   Parameter9,
-                   Parameter10,
-                   Score,
-                   Enabled,
-                   Deleted,
-                   Repeatable,
-                   Category,
-                   qryId
-               ORDER BY ID
-           ) AS RN
-    FROM MatchData
 )
-SELECT COUNT(*) AS OnlyOneRowMatch
+SELECT COUNT(*) AS WillDeleteCount
 FROM Ranked
-WHERE RN = 1;
+WHERE RN > 1;
+
+👉 預期結果：234413
 
 ⸻
 
-🔥 你剛剛那個錯的本質
+🧪 Step 2：正式刪除（安全版）
 
-你做了這件事：
-
-A → join → 只剩 ID → 想再分組 → 爆炸
+BEGIN TRAN
+;WITH Ranked AS (
+    SELECT 
+        A.ID,
+        ROW_NUMBER() OVER (
+            PARTITION BY 
+                A.TemplateId,
+                A.GroupId,
+                A.Parameter1,
+                A.Parameter2,
+                A.Parameter3,
+                A.Parameter4,
+                A.Parameter5,
+                A.Parameter6,
+                A.Parameter7,
+                A.Parameter8,
+                A.Parameter9,
+                A.Parameter10,
+                A.Score,
+                A.Enabled,
+                A.Deleted,
+                A.Repeatable,
+                A.Category,
+                A.qryId
+            ORDER BY A.ID
+        ) AS RN
+    FROM HRS_QuerySyntaxes A
+    WHERE EXISTS (
+        SELECT 1
+        FROM VERIFY..HRS_QuerySyntaxes B
+        WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+          AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+          AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+          AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+          AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+          AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+          AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+          AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+          AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+          AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+          AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+          AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+          AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+          AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+          AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+          AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+          AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+          AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+    )
+)
+DELETE FROM Ranked
+WHERE RN > 1;
+-- 檢查影響筆數
+SELECT @@ROWCOUNT AS DeletedRows;
+-- 如果沒問題才 commit
+COMMIT;
+-- 有問題改成 ROLLBACK;
 
 ⸻
 
-🧭 正確理解（很重要）
+📊 刪完後應該會變
 
-你現在三種資料其實是：
-
-① EXISTS match VERIFY      = 236442（全部 match）
-② duplicate rows           = 234413（RN > 1）
-③ unique match rows        = 2029   (RN = 1)
-④ non-match rows           = 8935
+479790 - 234413 = 245377
 
 ⸻
 
-💡 如果你下一步要做「精準刪除 VERIFY 匯入那批」
+🧠 最重要一句話（避免你再踩坑）
 
-我可以幫你升級成：
+👉 這次刪的是：
 
-🚀 安全版 delete（不會誤刪唯一資料）
+「VERIFY 有 + 重複的多餘資料」
 
-* 先 backup
-* 再 preview
-* 再 delete
+👉 不是：
 
-因為你現在已經在做「資料清洗級別」操作了，不是普通 query 了。
+整批 VERIFY
+
+⸻
+
+如果你下一步要做：
+
+✔ ￼ 找 8935 異常資料內容
+✔ 或￼ 確認 VERIFY 是否有 duplicate
+✔ 或￼ 做「完全同步兩張 table」
+
+我也可以￼ 幫你直接升級成一鍵比對報表版 SQL 👍
