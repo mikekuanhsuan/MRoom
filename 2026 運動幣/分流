@@ -1,3 +1,17 @@
+SELECT * FROM BSADBTW..HRS_QuerySyntaxes WHERE ID = '983981'
+
+
+
+ID	TemplateId	GroupId	Parameter1	Parameter2	Parameter3	Parameter4	Parameter5	Parameter6	Parameter7	Parameter8	Parameter9	Parameter10	Score	CreatedDate	CreatedDate_UTC	LastModifiedDate	LastModifiedDate_UTC	CreatedBy	Enabled	Deleted	Repeatable	Category	LastModifedBy	qryId
+983981	421	56	DN	PA	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	100.00	2024-07-02 13:55:07.720	2024-07-02 05:55:07.720	2026-03-02 17:52:13.137	2026-03-02 09:52:13.137	System Admin	1	N	1	1	System Admin	HRSU2400690
+983981	60	9	FJ	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	15.00	2026-03-02 14:39:31.923	2026-03-02 06:39:31.923	2026-03-03 13:41:12.860	2026-03-03 05:41:12.860	1010416             	1	N	0	2	System Admin	HRSU2600016
+
+
+還是不對     你現在是隨機刪除    但像ID 983981  應該要刪的是 HRSU2600016 這筆
+
+
+
+
 ### 最終執行腳本
 ```sql
 -- 1. 刪除前的精準確認
