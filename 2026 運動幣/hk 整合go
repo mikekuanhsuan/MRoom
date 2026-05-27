@@ -1,66 +1,6 @@
-我懂你的真正需求了。🌪️
+select COUNT(*) from HRS_QuerySyntaxes
+select COUNT(*) from VERIFY..HRS_QuerySyntaxes
 
-你不是要：
-
-刪除「內容存在 VERIFY」的資料
-
-你是要：
-
-只刪掉「多倒進去的那 236442 筆」
-
-也就是：
-
-HRS_QuerySyntaxes
-原本有 243348 筆
-後來又匯入 VERIFY 的 236442 筆
-變成：
-243348 + 236442 = 479790
-
-所以你其實是要：
-
-保留舊資料
-
-只刪除後來新增的 duplicate
-
-⸻
-
-但問題是：
-
-你的 table 沒有：
-
-* identity
-* import batch id
-* created time 可分辨
-* source flag
-
-所以 SQL 不知道：
-
-哪一筆是原本的
-哪一筆是後來匯入的
-
-它只能看到：
-
-有很多長一樣的資料
-
-⸻
-
-正確解法
-
-你需要：
-
-每組資料保留「最舊的一筆」
-
-多的刪除
-
-這才是：
-
-剛好多刪掉 236442
-
-⸻
-
-正確 SQL
-
-先確認數量：
 
 ;WITH CTE AS (
     SELECT 
@@ -93,66 +33,11 @@ SELECT COUNT(*) AS WillDeleteCount
 FROM CTE
 WHERE RN > 1;
 
-⸻
 
-如果你的推測正確：
 
-這裡應該會接近 236442
+479790
+236442
+234413
+因為有差異
+幫我找出差異的 我需要確認 他是不是本來就只有一筆 沒有重複
 
-⸻
-
-真正刪除
-
-;WITH CTE AS (
-    SELECT 
-        ID,
-        ROW_NUMBER() OVER (
-            PARTITION BY
-                TemplateId,
-                GroupId,
-                Parameter1,
-                Parameter2,
-                Parameter3,
-                Parameter4,
-                Parameter5,
-                Parameter6,
-                Parameter7,
-                Parameter8,
-                Parameter9,
-                Parameter10,
-                Score,
-                Enabled,
-                Deleted,
-                Repeatable,
-                Category,
-                qryId
-            ORDER BY ID
-        ) AS RN
-    FROM HRS_QuerySyntaxes
-)
-DELETE FROM CTE
-WHERE RN > 1;
-
-⸻
-
-刪完後
-
-理論上：
-
-479790 - 236442 = 243348
-
-這才符合你真正的場景。
-
-⸻
-
-你前面一直卡住的原因是：
-
-你以為：
-
-VERIFY = 要刪除的資料
-
-但實際上：
-
-VERIFY 是「後來匯入的來源」
-
-SQL 不知道哪筆是哪次匯入的，只能靠 duplicate 判斷。
