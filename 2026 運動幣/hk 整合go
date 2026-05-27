@@ -1,20 +1,7 @@
-那你就直接用方案 A。
-
-這會：
-
-把 HRS_QuerySyntaxes 中
-所有與 VERIFY..HRS_QuerySyntaxes 相同的資料
-全部刪除
-
-不管：
-
-* 是唯一一筆
-* 還是 duplicate
-* 全部移除
-
-⸻
-
-建議先確認刪除數量
+select COUNT(*) from HRS_QuerySyntaxes
+數量 479790
+select COUNT(*) from VERIFY..HRS_QuerySyntaxes
+數量 236442
 
 SELECT COUNT(*) AS WillDeleteCount
 FROM HRS_QuerySyntaxes A
@@ -38,43 +25,6 @@ INNER JOIN VERIFY..HRS_QuerySyntaxes B
     AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
     AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'');
 
-⸻
+數量 470855
 
-正式刪除
-
-DELETE A
-FROM HRS_QuerySyntaxes A
-INNER JOIN VERIFY..HRS_QuerySyntaxes B
-    ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-    AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-    AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-    AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-    AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-    AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-    AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-    AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-    AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-    AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-    AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-    AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-    AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-    AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-    AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
-    AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-    AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
-    AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'');
-
-⸻
-
-刪完後再確認
-
-SELECT COUNT(*) 
-FROM HRS_QuerySyntaxes;
-
-理論上會接近：
-
-479790 - 236442 = 243348
-
-如果數量不是這個，通常代表：
-
-🧩 VERIFY..HRS_QuerySyntaxes 裡本身也有 duplicate。
+這樣我不是刪除236442 阿 這樣變成刪除470855
