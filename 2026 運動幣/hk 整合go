@@ -1,38 +1,185 @@
-select COUNT(*) from HRS_QuerySyntaxes
-筆數 479790
-select COUNT(*)  from VERIFY..HRS_QuerySyntaxes
-筆數 236442
+那你的需求是：
 
-因為我不小心重複倒檔案進去HRS_QuerySyntaxes
-HRS_QuerySyntaxes 我要怎麼刪除 跟VERIFY..HRS_QuerySyntaxes 相同資料
+只刪除 HRS_QuerySyntaxes 中
+「跟 VERIFY..HRS_QuerySyntaxes 完全相同」的資料
+而且只刪掉多出來的重複筆
+保留一筆正確資料。
 
+這樣就不能直接全刪 JOIN 到的資料。
+要做成：
 
+VERIFY 有 1 筆
+HRS 有 2 筆
+=> 刪掉其中 1 筆
+=> 保留 1 筆
 
+🍵 這才是安全版本。
 
-下面是HRS_QuerySyntaxes 欄位資訊
-Column_name	Type	Computed	Length	Prec	Scale	Nullable	TrimTrailingBlanks	FixedLenNullInSource	Collation
-ID	int	no	4	10   	0    	no	(n/a)	(n/a)	NULL
-TemplateId	int	no	4	10   	0    	no	(n/a)	(n/a)	NULL
-GroupId	int	no	4	10   	0    	no	(n/a)	(n/a)	NULL
-Parameter1	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter2	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter3	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter4	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter5	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter6	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter7	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter8	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter9	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Parameter10	nvarchar	no	200	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Score	decimal	no	5	7    	2    	yes	(n/a)	(n/a)	NULL
-CreatedDate	datetime	no	8	     	     	no	(n/a)	(n/a)	NULL
-CreatedDate_UTC	datetime	no	8	     	     	no	(n/a)	(n/a)	NULL
-LastModifiedDate	datetime	no	8	     	     	yes	(n/a)	(n/a)	NULL
-LastModifiedDate_UTC	datetime	no	8	     	     	yes	(n/a)	(n/a)	NULL
-CreatedBy	nvarchar	no	80	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Enabled	bit	no	1	     	     	no	(n/a)	(n/a)	NULL
-Deleted	nchar	no	2	     	     	no	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-Repeatable	bit	no	1	     	     	no	(n/a)	(n/a)	NULL
-Category	tinyint	no	1	3    	0    	no	(n/a)	(n/a)	NULL
-LastModifedBy	nvarchar	no	80	     	     	yes	(n/a)	(n/a)	Chinese_Taiwan_Stroke_CI_AS
-qryId	varchar	no	15	     	     	yes	no	yes	Chinese_Taiwan_Stroke_CI_AS
+⸻
+
+先確認會刪多少筆
+
+;WITH DupData AS (
+    SELECT 
+        A.ID,
+        ROW_NUMBER() OVER (
+            PARTITION BY 
+                A.TemplateId,
+                A.GroupId,
+                A.Parameter1,
+                A.Parameter2,
+                A.Parameter3,
+                A.Parameter4,
+                A.Parameter5,
+                A.Parameter6,
+                A.Parameter7,
+                A.Parameter8,
+                A.Parameter9,
+                A.Parameter10,
+                A.Score,
+                A.Enabled,
+                A.Deleted,
+                A.Repeatable,
+                A.Category,
+                A.qryId
+            ORDER BY A.ID
+        ) AS RN
+    FROM HRS_QuerySyntaxes A
+    INNER JOIN VERIFY..HRS_QuerySyntaxes B
+        ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+        AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+        AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+        AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+        AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+        AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+        AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+        AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+        AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+        AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+        AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+        AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+        AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+        AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+        AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+        AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+        AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+        AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+)
+SELECT COUNT(*) AS WillDeleteCount
+FROM DupData
+WHERE RN > 1;
+
+⸻
+
+看會刪哪些資料
+
+;WITH DupData AS (
+    SELECT 
+        A.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY 
+                A.TemplateId,
+                A.GroupId,
+                A.Parameter1,
+                A.Parameter2,
+                A.Parameter3,
+                A.Parameter4,
+                A.Parameter5,
+                A.Parameter6,
+                A.Parameter7,
+                A.Parameter8,
+                A.Parameter9,
+                A.Parameter10,
+                A.Score,
+                A.Enabled,
+                A.Deleted,
+                A.Repeatable,
+                A.Category,
+                A.qryId
+            ORDER BY A.ID
+        ) AS RN
+    FROM HRS_QuerySyntaxes A
+    INNER JOIN VERIFY..HRS_QuerySyntaxes B
+        ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+        AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+        AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+        AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+        AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+        AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+        AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+        AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+        AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+        AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+        AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+        AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+        AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+        AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+        AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+        AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+        AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+        AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+)
+SELECT *
+FROM DupData
+WHERE RN > 1
+ORDER BY ID;
+
+⸻
+
+最後正式刪除
+
+;WITH DupData AS (
+    SELECT 
+        A.ID,
+        ROW_NUMBER() OVER (
+            PARTITION BY 
+                A.TemplateId,
+                A.GroupId,
+                A.Parameter1,
+                A.Parameter2,
+                A.Parameter3,
+                A.Parameter4,
+                A.Parameter5,
+                A.Parameter6,
+                A.Parameter7,
+                A.Parameter8,
+                A.Parameter9,
+                A.Parameter10,
+                A.Score,
+                A.Enabled,
+                A.Deleted,
+                A.Repeatable,
+                A.Category,
+                A.qryId
+            ORDER BY A.ID
+        ) AS RN
+    FROM HRS_QuerySyntaxes A
+    INNER JOIN VERIFY..HRS_QuerySyntaxes B
+        ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+        AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+        AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+        AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+        AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+        AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+        AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+        AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+        AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+        AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+        AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+        AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+        AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+        AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+        AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+        AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+        AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+        AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+)
+DELETE FROM DupData
+WHERE RN > 1;
+
+這樣會像資料庫版的「消消樂」🧩
+
+* VERIFY 有的資料才處理
+* 每組保留 1 筆
+* 多餘重複的才刪掉
+* 不會整批消失
