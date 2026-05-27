@@ -1,175 +1,80 @@
-那你的需求其實是：
+那你就直接用方案 A。
 
-如果資料存在 VERIFY
-→ 整組刪掉
-但如果是重複倒入造成的 duplicate
-→ 保留 1 筆
+這會：
 
-也就是：
+把 HRS_QuerySyntaxes 中
+所有與 VERIFY..HRS_QuerySyntaxes 相同的資料
+全部刪除
 
-最終結果應該要變成
+不管：
 
-HRS_QuerySyntaxes
-只留下：
-1. VERIFY 不存在的資料
-2. 每組 duplicate 保留 1 筆
+* 是唯一一筆
+* 還是 duplicate
+* 全部移除
 
 ⸻
 
-你目前的問題是：
+建議先確認刪除數量
 
-INNER JOIN VERIFY
-
-會讓：
-
-原本唯一的一筆 VERIFY 資料
-也被列進來
-
-但你其實只想刪：
-
-「多出來的 duplicate」
-
-⸻
-
-正確做法
-
-用 EXISTS + ROW_NUMBER()
-
-邏輯：
-
-同樣內容：
-RN = 1  → 保留
-RN > 1  → 刪除
-
-而且：
-
-只針對 VERIFY 有的資料處理
-
-⸻
-
-先確認數量
-
-;WITH DupData AS (
-    SELECT 
-        A.ID,
-        ROW_NUMBER() OVER (
-            PARTITION BY 
-                A.TemplateId,
-                A.GroupId,
-                A.Parameter1,
-                A.Parameter2,
-                A.Parameter3,
-                A.Parameter4,
-                A.Parameter5,
-                A.Parameter6,
-                A.Parameter7,
-                A.Parameter8,
-                A.Parameter9,
-                A.Parameter10,
-                A.Score,
-                A.Enabled,
-                A.Deleted,
-                A.Repeatable,
-                A.Category,
-                A.qryId
-            ORDER BY A.ID
-        ) AS RN
-    FROM HRS_QuerySyntaxes A
-    WHERE EXISTS (
-        SELECT 1
-        FROM VERIFY..HRS_QuerySyntaxes B
-        WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-          AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-          AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-          AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-          AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-          AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-          AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-          AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-          AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-          AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-          AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-          AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-          AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-          AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-          AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
-          AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-          AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
-          AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
-    )
-)
 SELECT COUNT(*) AS WillDeleteCount
-FROM DupData
-WHERE RN > 1;
+FROM HRS_QuerySyntaxes A
+INNER JOIN VERIFY..HRS_QuerySyntaxes B
+    ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+    AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+    AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+    AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+    AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+    AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+    AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+    AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+    AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+    AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+    AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+    AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+    AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+    AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+    AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+    AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+    AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+    AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'');
 
 ⸻
 
-真正刪除
+正式刪除
 
-;WITH DupData AS (
-    SELECT 
-        A.ID,
-        ROW_NUMBER() OVER (
-            PARTITION BY 
-                A.TemplateId,
-                A.GroupId,
-                A.Parameter1,
-                A.Parameter2,
-                A.Parameter3,
-                A.Parameter4,
-                A.Parameter5,
-                A.Parameter6,
-                A.Parameter7,
-                A.Parameter8,
-                A.Parameter9,
-                A.Parameter10,
-                A.Score,
-                A.Enabled,
-                A.Deleted,
-                A.Repeatable,
-                A.Category,
-                A.qryId
-            ORDER BY A.ID
-        ) AS RN
-    FROM HRS_QuerySyntaxes A
-    WHERE EXISTS (
-        SELECT 1
-        FROM VERIFY..HRS_QuerySyntaxes B
-        WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-          AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-          AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-          AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-          AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-          AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-          AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-          AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-          AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-          AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-          AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-          AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-          AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-          AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-          AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
-          AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-          AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
-          AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
-    )
-)
 DELETE A
 FROM HRS_QuerySyntaxes A
-INNER JOIN DupData D
-    ON A.ID = D.ID
-WHERE D.RN > 1;
+INNER JOIN VERIFY..HRS_QuerySyntaxes B
+    ON ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
+    AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
+    AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
+    AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
+    AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
+    AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
+    AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
+    AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
+    AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
+    AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
+    AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
+    AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
+    AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
+    AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
+    AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
+    AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
+    AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
+    AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'');
 
 ⸻
 
-刪完後理論上
+刪完後再確認
 
-479790 - 234413 = 245377
+SELECT COUNT(*) 
+FROM HRS_QuerySyntaxes;
 
-也就是：
+理論上會接近：
 
-* VERIFY 的每組資料保留 1 筆
-* 額外 8935 筆也保留
+479790 - 236442 = 243348
 
-🌱 資料庫像被修枝過的盆栽。重複葉子剪掉，但主幹還活著。
+如果數量不是這個，通常代表：
+
+🧩 VERIFY..HRS_QuerySyntaxes 裡本身也有 duplicate。
