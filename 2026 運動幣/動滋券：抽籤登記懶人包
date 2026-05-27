@@ -1,61 +1,60 @@
-沒問題，我已經根據你提供的測試個案（移除 FTP 拋檔 TASK）內容，將其轉化為正式的**需求規格書**格式。我保留了你原本的所有架構與章節，僅針對相關內容進行填寫與勾選。
-### **需求規格書**
-**填寫提醒：需求規格書之各項內容皆必須填寫，若經評估不適用請填寫N/A，不可直接刪除章節。**
-#### **1. 需求概述與目的 (  NA )**
-配合 2026 年度 AML 系統日常維運優化，需**移除原 FTP 拋檔 TASK (COMMAND TYPE)** 功能，停止執行特定之拋檔作業（如：Command_PUT_HOLDING_TITAN），以減少不必要的批次執行紀錄並符合現行維運現況。
-#### **2. 需求效益分析 (  NA )**
-#### **3. 帳務相關需求 (  NA )**
- 新增會計科子目 (會計系統需設定相關參數，以利會計帳自動入F1總帳系統)
-| 會科子目代號 | 說明 |
-|---|---|
-| XXXX-XXX | XXXXXXX |
-|  其它 (說明如下) |  |
-#### **4. 業務流程/作業流程 (  NA )**
-*(註：本次為系統後台 TASK 狀態調整，不涉及業務流程變更)*
-#### **5. 需求功能說明 (  NA )**
-**5.1 需求清單 (  NA )**
-**5.2 入口網站地圖/功能擺放路徑 (  NA )**
-**5.3 需求功能之上中下游相關系統 (  NA )**
-**5.4 需求功能 (  NA )**
-**5.4.1 需求功能-1：WORK FLOW 移除/禁用作業**
- * **調整對象：** AML 系統中之原 FTP 拋檔 TASK (COMMAND TYPE)。
- * **詳細說明：**
-   1. 於 Workflow 設定中，尋找原負責拋檔之 TASK（例如：Command_PUT_HOLDING_TITAN）。
-   2. 將該 TASK 狀態由 **Enable** 調整為 **Disable**。
-   3. 確保變更後，Workflow 執行時將跳過此 TASK，不再執行相關拋轉指令。
-#### **5.5 非功能性需求 (  NA )**
-#### **6. 使用者介面說明(UI) (  NA )**
-**6.1 輸入說明(操作介面) (  NA )**
-**6.2 輸出說明-交易畫面 (  NA )**
-**6.3 輸出說明-傳票認證 (  NA )**
-**6.4 輸出說明 - 輸出檔案 (  NA )**
-**6.5 報表需求 (  NA )**
-#### **7. 需求共用規劃評估**
-(1) 本需求是否要佈署至以下任一通路? □ 是  否
-(2) 本需求是否僅為 UI/UX 優化調整? □ 是  否
-(3) 本需求是否為因應合規議題? □ 是  否
-(4) 本次預計佈署的通路：NA
-(5) 未來預計佈署共用的通路：NA
-(6) 資料來源：NA
-#### **8. 權限及安控需求 (  NA )**
-#### **9. 測試需求 (  NA )**
- * **測試範圍：** AML 系統 Workflow 任務調度管理。
- * **測試項目：**
-   1. 驗證 Workflow 設定中 TASK 狀態切換之正確性。
-   2. 驗證 Workflow 執行後，Monitor 顯示該 TASK 狀態為 **Disabled**。
-   3. 驗證 Log 紀錄中完全無執行該拋轉命令（Running Command）之蹤跡。
- * **測試天數：** 依維運時程排定。
-#### **10. 系統上線後驗證與監控 (  NA )**
-**10.1 業務單位上線生效後於正式環境針對相關業務立即驗證與回報：**
-□ 可立即驗證，驗證與回報方法如下：確認對應之資料接收端未收到重複或不必要之檔案。
-**10.2 資訊單位相關人員上線生效後於正式環境立即檢視相關系統運作情況：**
- 可立即檢視，檢視與回報方法如下：檢核正式環境 Workflow Monitor 之 TASK 狀態是否已確實改為 Disabled。
-**10.3 業務單位針對系統上線後監控機制：**
-□ 監控方法：N/A
-**10.4 資訊單位相關人員針對系統串接上線後運作的監控機制：**
- 監控方法：檢視批次執行 Log 紀錄，確保無異常執行報錯。
-**10.5 異常通報與處理機制**
- 有，依現行 AML 系統異常通報流程辦理。
-#### **11. 參考資料 (  NA )**
-#### **12. 其它 (  NA )**
-**針對這份修改過的規格書，是否還有其他特定的維運 TASK 需要併入這次的說明中？**
+學長會挑出 ID = 983237，代表他上次看到這筆資料「該留的被刪了，該刪的反而留下來了」。
+為了確保這次我們去闖關 **絕對不會被退貨**，我們不要用猜的，**直接寫一段「驗證腳本」把 983237 攤開來給你看**。
+你把下面這段語法拿去你的 SSMS 執行，它不會刪除資料，而是會把「準備保留的」、「準備刪除的」以及「VERIFY 標準答案」並排印出來，你可以親眼比對：
+### 闖關前必備：模擬檢驗腳本
+```sql
+-- 1. 看看我們新邏輯對 983237 的處理結果
+WITH CleanCTE AS (
+    SELECT 
+        B.*,
+        ROW_NUMBER() OVER(
+            PARTITION BY B.ID 
+            ORDER BY 
+                CASE 
+                    WHEN EXISTS (
+                        SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
+                        WHERE V.ID = B.ID 
+                          AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
+                          -- 下面這兩個是你覺得最重要的欄位，可以自行增減
+                          AND ISNULL(V.TemplateId, -1) = ISNULL(B.TemplateId, -1)
+                          AND ISNULL(V.GroupId, -1) = ISNULL(B.GroupId, -1)
+                    ) THEN 1 
+                    WHEN EXISTS (
+                        SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
+                        WHERE V.ID = B.ID 
+                          AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
+                    ) THEN 2 
+                    ELSE 3 
+                END ASC,
+                B.LastModifiedDate DESC -- 最後的保命符：同分的話留最新的
+        ) AS rn
+    FROM BSADBTW..HRS_QuerySyntaxes B
+    WHERE B.ID = 983237 -- 🎯 直接鎖定學長說有問題的這筆！
+)
+SELECT '1. 我們準備保留的 (rn=1)' AS Action, * FROM CleanCTE WHERE rn = 1
+UNION ALL
+SELECT '2. 我們準備刪除的 (rn>1)' AS Action, * FROM CleanCTE WHERE rn > 1;
+
+-- 2. 把 VERIFY 的正牌資料叫出來對比
+SELECT '3. VERIFY 的標準答案' AS Action, * FROM VERIFY..HRS_QuerySyntaxes WHERE ID = 983237;
+
+```
+### 你執行完後，請檢查這件事：
+對照產出的結果，看看 **「1. 我們準備保留的」** 跟 **「3. VERIFY 的標準答案」** 欄位是不是長得一模一樣？
+ * **如果是：** 代表這次的邏輯完美命中，你可以大膽把這個寫法交給學長了。
+ * **如果不是：** 代表 983237 的兩筆重複資料，在 qryId, TemplateId, GroupId 這幾個欄位都一樣，但在 **別的欄位** (例如 Score, Parameter1 等) 有差異，導致 LastModifiedDate DESC 抓到了錯的那筆。
+**如果真的還是抓錯筆，最暴力的終極解法，就是把「所有欄位」都放進優先度 1 的比對裡面：**
+```sql
+-- 把這個塞進 CASE WHEN 的優先度 1：
+WHEN EXISTS (
+    SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
+    WHERE V.ID = B.ID 
+      AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
+      AND ISNULL(V.TemplateId, -1) = ISNULL(B.TemplateId, -1)
+      AND ISNULL(V.GroupId, -1) = ISNULL(B.GroupId, -1)
+      AND ISNULL(V.Parameter1, '') = ISNULL(B.Parameter1, '')
+      AND ISNULL(V.Score, -1) = ISNULL(B.Score, -1)
+      -- 依此類推，把重要欄位全寫上
+) THEN 1 
+
+```
