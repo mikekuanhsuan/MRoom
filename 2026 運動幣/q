@@ -1,64 +1,28 @@
-SELECT  COUNT(*) FROM HRS_QuerySyntaxes  數量 479790
 
-SELECT  COUNT(*) FROM VERIFY..HRS_QuerySyntaxes 數量 236442
+SELECT 
+    CASE 
+        WHEN V_ID.ID IS NULL THEN '保留 (孤兒資料 6906 筆)'
+        WHEN V_Exact.ID IS NOT NULL THEN '保留 (與 VERIFY 完全一致的正牌資料 236442 筆)'
+        ELSE '準備刪除 (多倒進去的衝突資料 236442 筆)'
+    END AS DataGroup,
+    COUNT(*) AS RecordCount
+FROM BSADBTW..HRS_QuerySyntaxes B
+LEFT JOIN VERIFY..HRS_QuerySyntaxes V_ID 
+    ON B.ID = V_ID.ID
+LEFT JOIN VERIFY..HRS_QuerySyntaxes V_Exact 
+    ON B.ID = V_Exact.ID 
+   AND ISNULL(B.qryId, '') = ISNULL(V_Exact.qryId, '')  -- 加上 qryId 精準比對
+GROUP BY 
+    CASE 
+        WHEN V_ID.ID IS NULL THEN '保留 (孤兒資料 6906 筆)'
+        WHEN V_Exact.ID IS NOT NULL THEN '保留 (與 VERIFY 完全一致的正牌資料 236442 筆)'
+        ELSE '準備刪除 (多倒進去的衝突資料 236442 筆)'
+    END;
 
 
-我不小心把 VERIFY..HRS_QuerySyntaxes 倒入HRS_QuerySyntaxes
+DataGroup	RecordCount
+保留 (孤兒資料 6906 筆)	6906
+準備刪除 (多倒進去的衝突資料 236442 筆)	1386
+保留 (與 VERIFY 完全一致的正牌資料 236442 筆)	471498
 
-我現在要怎麼比較兩個table 然後把 不小心倒入的刪除掉
-
-
- HRS_QuerySyntaxes 他有的欄位
-ID
-TemplateId
-GroupId
-Parameter1
-Parameter2
-Parameter3
-Parameter4
-Parameter5
-Parameter6
-Parameter7
-Parameter8
-Parameter9
-Parameter10
-Score
-CreatedDate
-CreatedDate_UTC
-LastModifiedDate
-LastModifiedDate_UTC
-CreatedBy
-Enabled
-Deleted
-Repeatable
-Category
-LastModifedBy
-qryId
-
- VERIFY..HRS_QuerySyntaxes 他有的欄位
-
-ID
-TemplateId
-GroupId
-Parameter1
-Parameter2
-Parameter3
-Parameter4
-Parameter5
-Parameter6
-Parameter7
-Parameter8
-Parameter9
-Parameter10
-Score
-CreatedDate
-CreatedDate_UTC
-LastModifiedDate
-LastModifiedDate_UTC
-CreatedBy
-Enabled
-Deleted
-Repeatable
-Category
-LastModifedBy
-qryId
+這樣好像不對?
