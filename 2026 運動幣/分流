@@ -1,140 +1,64 @@
-很好，這次你講得非常清楚了：你要的是👇
+了解！因為多匯入了檔案，我們現在需要以 VERIFY..HRS_QuerySyntaxes 為基準，把 BSADBTW..HRS_QuerySyntaxes 中多出來的資料（你定義的 Group 1）挑出來並刪除，只保留兩邊都有的資料（Group 2）。
+這裡我們使用 LEFT JOIN 與 NOT EXISTS 的概念來進行邏輯標記與刪除。這樣不需要真正在資料庫新增一個實體欄位去寫入 1 或 2，可以讓操作更快且更安全。
+> **⚠️ 重要前提（比對基準）：**
+> 下方的 Code 預設使用 ID 作為兩張表的比對基準（B.ID = V.ID）。
+> 如果你當初「多倒檔案」時，ID 欄位有重新跳號（導致同一筆資料在兩邊的 ID 不同），請務必將 ON B.ID = V.ID 改成你實際的 Unique Key（例如：ON B.qryId = V.qryId 或其他能辨識唯一性的組合鍵）。
+> 
+### 第一步：刪除前的筆數與群組確認 (Preview & Count)
+在執行刪除前，請先執行以下語法。這會幫你確認總筆數，以及你定義的 Group 1 (即將刪除) 與 Group 2 (保留) 各有幾筆，確保計算無誤。
+```sql
+-- 1. 確認 BSADBTW 總筆數 (應為 479790)
+SELECT COUNT(*) AS Total_BSADBTW FROM BSADBTW..HRS_QuerySyntaxes;
 
-🔥 直接從 BSADBTW..HRS_QuerySyntaxes 刪掉所有「在 VERIFY 中存在的 236442 筆」
+-- 2. 確認 VERIFY 總筆數 (應為 236442)
+SELECT COUNT(*) AS Total_VERIFY FROM VERIFY..HRS_QuerySyntaxes;
 
-而且：
+-- 3. 標記與統計 Group 1 (沒重複/多出來的) 與 Group 2 (重複/要保留的)
+SELECT 
+    CASE 
+        WHEN V.ID IS NOT NULL THEN 'Group 2 (重複，保留)' 
+        ELSE 'Group 1 (沒重複，準備刪除)' 
+    END AS DataGroup,
+    COUNT(*) AS RecordCount
+FROM BSADBTW..HRS_QuerySyntaxes B
+LEFT JOIN VERIFY..HRS_QuerySyntaxes V ON B.ID = V.ID  -- 若 ID 會變，請改成 B.qryId = V.qryId 等唯一鍵
+GROUP BY 
+    CASE 
+        WHEN V.ID IS NOT NULL THEN 'Group 2 (重複，保留)' 
+        ELSE 'Group 1 (沒重複，準備刪除)' 
+    END;
 
-* ❌ 不管 duplicate
-* ❌ 不保留 1 筆
-* ✔ VERIFY 有就全刪
+```
+*預期結果：Group 2 的數量應該會是 236,442 筆，而 Group 1 的數量應該會是多出來的 243,348 筆 (479,790 - 236,442)。*
+### 第二步：執行刪除 (Delete Group 1)
+確認上面的筆數符合預期後，就可以執行刪除。為了避免意外，我幫你加上了 BEGIN TRAN (交易控制)，刪除後你可以先看影響的資料列數，確認沒問題再手動執行 COMMIT。
+```sql
+BEGIN TRAN;
 
-⸻
-
-🧠 先幫你釐清你現在 SQL 的問題
-
-你目前這段：
-
-MatchData + ROW_NUMBER()
-
-其實是「找 duplicate 用的」
-
-但你現在要的是：
-
-完全刪除 match VERIFY 的資料
-不做 RN、不做保留
-
-⸻
-
-⚠️ 所以你現在這段 SQL 是「錯用工具」
-
-ROW_NUMBER() = 用來保留一筆
-
-但你現在：
-
-👉 要「全部刪」
-
-⸻
-
-✅ 正確 SQL（你真正要的）
-
-💣 一次刪掉 236442（完全 match VERIFY）
-
-DELETE A
-FROM BSADBTW..HRS_QuerySyntaxes A
-WHERE EXISTS (
-    SELECT 1
-    FROM VERIFY..HRS_QuerySyntaxes B
-    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-      AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
-      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-      AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
-      AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
+-- 刪除 BSADBTW 中，不存在於 VERIFY 的資料 (即 Group 1)
+DELETE B
+FROM BSADBTW..HRS_QuerySyntaxes B
+WHERE NOT EXISTS (
+    SELECT 1 
+    FROM VERIFY..HRS_QuerySyntaxes V 
+    WHERE B.ID = V.ID  -- 同樣的，若比對鍵不同請在此替換
 );
 
-⸻
+-- 執行完上面的 DELETE 後，看一下 SSMS 下方的「訊息」頁籤，
+-- 如果顯示「(受影響的 243348 個資料列)」，代表正確刪除了多出來的筆數。
 
-🔍 刪除前一定要先確認數量
+-- 若數量正確，請將下方的 COMMIT 反解開並執行：
+-- COMMIT;
 
-SELECT COUNT(*) AS WillDelete
-FROM BSADBTW..HRS_QuerySyntaxes A
-WHERE EXISTS (
-    SELECT 1
-    FROM VERIFY..HRS_QuerySyntaxes B
-    WHERE ISNULL(A.TemplateId,0) = ISNULL(B.TemplateId,0)
-      AND ISNULL(A.GroupId,0) = ISNULL(B.GroupId,0)
-      AND ISNULL(A.Parameter1,'') = ISNULL(B.Parameter1,'')
-      AND ISNULL(A.Parameter2,'') = ISNULL(B.Parameter2,'')
-      AND ISNULL(A.Parameter3,'') = ISNULL(B.Parameter3,'')
-      AND ISNULL(A.Parameter4,'') = ISNULL(B.Parameter4,'')
-      AND ISNULL(A.Parameter5,'') = ISNULL(B.Parameter5,'')
-      AND ISNULL(A.Parameter6,'') = ISNULL(B.Parameter6,'')
-      AND ISNULL(A.Parameter7,'') = ISNULL(B.Parameter7,'')
-      AND ISNULL(A.Parameter8,'') = ISNULL(B.Parameter8,'')
-      AND ISNULL(A.Parameter9,'') = ISNULL(B.Parameter9,'')
-      AND ISNULL(A.Parameter10,'') = ISNULL(B.Parameter10,'')
-      AND ISNULL(A.Score,0) = ISNULL(B.Score,0)
-      AND ISNULL(A.Enabled,0) = ISNULL(B.Enabled,0)
-      AND ISNULL(A.Deleted,'') = ISNULL(B.Deleted,'')
-      AND ISNULL(A.Repeatable,0) = ISNULL(B.Repeatable,0)
-      AND ISNULL(A.Category,0) = ISNULL(B.Category,0)
-      AND ISNULL(A.qryId,'') = ISNULL(B.qryId,'')
-);
+-- 若數量不對 (例如刪了 0 筆或全刪了)，請立刻執行 ROLLBACK 復原：
+-- ROLLBACK;
 
-👉 正常應該 = 236442
+```
+### 第三步：刪除後的最終確認
+執行完 COMMIT 之後，你可以再次查詢 BSADBTW 的總數，確認是否已經與 VERIFY 一致：
+```sql
+SELECT COUNT(*) AS Final_BSADBTW_Count 
+FROM BSADBTW..HRS_QuerySyntaxes;
+-- 數量應該要回到 236442
 
-⸻
-
-🧾 刪完後會發生什麼
-
-BSADBTW 原本:
-479790
-刪掉:
-236442
-剩下:
-243348
-
-⸻
-
-🧠 一句話幫你定義這次操作
-
-👉 這次不是「去重」
-👉 是「做 VERIFY 同步刪除」
-
-⸻
-
-⚠️ 重要提醒（真的要注意）
-
-你這種操作屬於：
-
-跨 table schema cleanup（生產級刪除）
-
-建議你至少做：
-
-BEGIN TRAN
--- DELETE ...
--- SELECT @@ROWCOUNT
--- 確認 OK 才 COMMIT
--- 不對就 ROLLBACK
-
-⸻
-
-如果你下一步要做「驗證刪完是否一致」，我可以幫你做：
-
-✔ ￼ HRS vs VERIFY diff report
-✔ ￼ missing / extra / duplicate 三分類報表
-✔ ￼ 一鍵對帳 SQL
-
-這種已經是 data reconciliation 等級了 👍
+```
