@@ -1,3 +1,58 @@
+### 最終執行腳本
+```sql
+-- 1. 刪除前的精準確認
+WITH CheckCTE AS (
+    SELECT 
+        ID,
+        ROW_NUMBER() OVER(PARTITION BY ID ORDER BY ID) AS rn
+    FROM BSADBTW..HRS_QuerySyntaxes
+)
+SELECT 
+    CASE 
+        WHEN rn > 1 THEN '準備刪除 (重複多餘的資料)'
+        ELSE '保留 (VERIFY 對應資料 + 6906 筆孤兒資料)'
+    END AS DataGroup,
+    COUNT(*) AS RecordCount
+FROM CheckCTE
+GROUP BY 
+    CASE 
+        WHEN rn > 1 THEN '準備刪除 (重複多餘的資料)'
+        ELSE '保留 (VERIFY 對應資料 + 6906 筆孤兒資料)'
+    END;
+
+-- 預期確認結果：
+-- 保留：243,348 筆 (236,442 + 6,906)
+-- 刪除：236,442 筆
+
+--------------------------------------------------
+
+-- 2. 執行刪除
+BEGIN TRAN;
+
+WITH DeleteCTE AS (
+    SELECT 
+        ID,
+        ROW_NUMBER() OVER(PARTITION BY ID ORDER BY ID) AS rn
+    FROM BSADBTW..HRS_QuerySyntaxes
+)
+DELETE FROM DeleteCTE
+WHERE rn > 1;
+
+-- 執行完後檢查 SSMS 訊息，若受影響的資料列為 236442，即可執行下方程式碼：
+-- COMMIT;
+
+-- 若數字不符，請立刻執行：
+-- ROLLBACK;
+
+```
+### 邏輯摘要
+初始比對邏輯與筆數狀態已驗證。針對保留 6,906 筆孤兒資料的最終需求，直接省略與 VERIFY 表的外部關聯。透過 ROW_NUMBER() 函數進行內部轉換，強制標記並清除 BSADBTW 中因重複匯入產生的多餘資料（rn > 1），以達到去重且不刪減未匹配資料的目的。
+
+
+
+
+
+
 DataGroup	RecordCount
 Group 1 (沒重複，準備刪除)	6906
 Group 2 (重複，保留)	472884
