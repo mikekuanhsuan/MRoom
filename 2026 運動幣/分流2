@@ -1,184 +1,20 @@
-對，你的直覺是對的 👍
+select COUNT(*) from BSADBTW..HRS_QuerySyntaxes 數量479790
+select COUNT(*) from VERIFY..HRS_QuerySyntaxes 數量236442
 
-⸻
+因為我多倒檔案
+因為我需要刪除BSADBTW..HRS_QuerySyntaxes 多出來的236442筆資料
 
-🧠 ALTER TABLE 會不會改原本 table？
 
-❗會
+但我需要標記BSADBTW..HRS_QuerySyntaxes 跟 VERIFY..HRS_QuerySyntaxes 比對資料
 
-ALTER TABLE = 永久修改 schema
+因為不是全部重複
+我需要
+group 1 跟 2
+重複的資料設定2 沒重複的設定1
+然後最後可能會剩下一些1 的資料
 
-會真的改：
+我最後要刪除1 的資料
 
-* 加欄位
-* 改結構
-* 寫進 metadata
 
-👉 之後所有 system / query / ETL 都會看到這個欄位
-
-⸻
-
-🚫 你的需求
-
-你說：
-
-❌ 不要改原本 table
-✔ 可以臨時用
-
-那就完全不要用 ALTER
-
-⸻
-
-🟢 正確做法（臨時標籤）
-
-我們用：
-
-👉 CTE / Temp Table（不動原表）
-
-⸻
-
-💡 方案 1（推薦）：CTE 標籤版
-
-✔ 不改 table
-
-✔ 可重複跑
-
-✔ 安全
-
-;WITH Ranked AS (
-    SELECT 
-        *,
-        ROW_NUMBER() OVER (
-            PARTITION BY
-                TemplateId,
-                GroupId,
-                Parameter1,
-                Parameter2,
-                Parameter3,
-                Parameter4,
-                Parameter5,
-                Parameter6,
-                Parameter7,
-                Parameter8,
-                Parameter9,
-                Parameter10,
-                Score,
-                Enabled,
-                Deleted,
-                Repeatable,
-                Category,
-                qryId
-            ORDER BY ID
-        ) AS RN
-    FROM BSADBTW..HRS_QuerySyntaxes
-)
-SELECT COUNT(*) AS WillDeleteCount
-FROM Ranked
-WHERE RN > 1;
-
-⸻
-
-💣 真正刪除（臨時版本）
-
-;WITH Ranked AS (
-    SELECT 
-        ID,
-        ROW_NUMBER() OVER (
-            PARTITION BY
-                TemplateId,
-                GroupId,
-                Parameter1,
-                Parameter2,
-                Parameter3,
-                Parameter4,
-                Parameter5,
-                Parameter6,
-                Parameter7,
-                Parameter8,
-                Parameter9,
-                Parameter10,
-                Score,
-                Enabled,
-                Deleted,
-                Repeatable,
-                Category,
-                qryId
-            ORDER BY ID
-        ) AS RN
-    FROM BSADBTW..HRS_QuerySyntaxes
-)
-DELETE FROM Ranked
-WHERE RN > 1;
-
-⸻
-
-🟡 方案 2（更安全）：先丟 temp table
-
-如果你想「像 1 / 2 標籤但不污染原表」：
-
-SELECT *,
-       ROW_NUMBER() OVER (
-            PARTITION BY
-                TemplateId,
-                GroupId,
-                Parameter1,
-                Parameter2,
-                Parameter3,
-                Parameter4,
-                Parameter5,
-                Parameter6,
-                Parameter7,
-                Parameter8,
-                Parameter9,
-                Parameter10,
-                Score,
-                Enabled,
-                Deleted,
-                Repeatable,
-                Category,
-                qryId
-            ORDER BY ID
-       ) AS RN
-INTO #tmp
-FROM BSADBTW..HRS_QuerySyntaxes;
-
-然後：
-
-DELETE A
-FROM BSADBTW..HRS_QuerySyntaxes A
-JOIN #tmp T ON A.ID = T.ID
-WHERE T.RN > 1;
-
-⸻
-
-🧠 重點幫你整理
-
-方法	會改 table？	推薦度
-ALTER TABLE	❌會（永久）	❌
-CTE	❌不會	✔✔✔
-#temp table	❌不會	✔✔✔✔
-
-⸻
-
-🚀 給你的最佳解（建議用）
-
-👉 用這個：
-
-#tmp + RN + delete join
-
-因為：
-
-* 可 debug
-* 可查 RN 分布
-* 不會誤刪
-* 可 rollback 重跑
-
-⸻
-
-如果你下一步要，我可以幫你做👇
-
-🔥「￼ 先列出 236442 明細 + 分組 + 哪些會被刪」
-🔥「￼ 做成報表（Excel ready）」
-🔥「￼ 確認 100% safe 再 delete」
-
-這個已經是資料清洗 pipeline 等級了 👍
+給我刪除前確認筆數
+跟刪除的code
