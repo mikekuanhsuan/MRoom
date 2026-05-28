@@ -1,263 +1,29 @@
-
-DEAR 信達
-
-把qryId 加上去，設定優先度，在幫我看一下感謝
-
-
-WITH CheckCTE AS (
-    SELECT 
-        B.ID,
-        -- 判斷這筆 ID 是否為孤兒
-        CASE WHEN EXISTS (SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V WHERE V.ID = B.ID) THEN 1 ELSE 0 END AS HasVerify,
-        
-        -- 強制給重複資料排號碼 (1號保留，2號以上刪除)
-        ROW_NUMBER() OVER(
-            PARTITION BY B.ID 
-            ORDER BY 
-                -- 優先度 1：能跟 VERIFY 的 qryId 完美對上的，給 1 分排最前面
-                CASE WHEN EXISTS (
-                    SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
-                    WHERE V.ID = B.ID AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
-                ) THEN 1 ELSE 2 END
-        ) AS rn
-    FROM BSADBTW..HRS_QuerySyntaxes B
-)
-SELECT 
-    CASE 
-        WHEN HasVerify = 0 THEN '保留 (孤兒資料 6906 筆)'
-        WHEN rn = 1 THEN '保留 (與 VERIFY 最吻合的正牌資料 236442 筆)'
-        ELSE '準備刪除 (多倒進去的衝突與完全重複資料 236442 筆)'
-    END AS DataGroup,
-    COUNT(*) AS RecordCount
-FROM CheckCTE
-GROUP BY 
-    CASE 
-        WHEN HasVerify = 0 THEN '保留 (孤兒資料 6906 筆)'
-        WHEN rn = 1 THEN '保留 (與 VERIFY 最吻合的正牌資料 236442 筆)'
-        ELSE '準備刪除 (多倒進去的衝突與完全重複資料 236442 筆)'
-    END;
-
-
-
-        -------------------
-
-
-
---     BEGIN TRAN;
-
---WITH DeleteCTE AS (
---    SELECT 
---        B.ID,
---        ROW_NUMBER() OVER(
---            PARTITION BY B.ID 
---            ORDER BY 
---                CASE WHEN EXISTS (
---                    SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
---                    WHERE V.ID = B.ID AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
---                ) THEN 1 ELSE 2 END
---        ) AS rn
---    FROM BSADBTW..HRS_QuerySyntaxes B
---)
----- 直接刪除排名第 2 筆以後的資料
----- (這會精準殺掉：完全一模一樣的雙胞胎第2筆，以及 qryId 不同的冒牌貨。孤兒資料因為只有 1 筆，不會被刪到)
---DELETE FROM DeleteCTE
---WHERE rn > 1;
+--SAR Load Trxn用到的帳號都要轉入，並排除APPL代碼為「LNA」的帳戶，但是
+-- 僅轉入不在mapping table內的客戶帳號
 
 
 
 
+-- 1113668
+SELECT COUNT(*)
+FROM Customer_Migrate_buffer a
+JOIN LoadTrxn_Migrate_buffer f     ON a.CIF_KEY = f.CIF_KEY
+LEFT JOIN BANCS_SK_CUST_INFO b     ON a.CustomerNo = b.SK_CUST_ID
+WHERE b.SK_CUST_ID IS NULL
+  AND f.APPL <> 'LNA';
 
-
-我這樣寄信給學長
-
-然後他回我
-
-
-
-不對，還是會刪錯筆
-
-WITH DeleteCTE AS (
-    SELECT 
-        B.ID AS ROWID,
-        ROW_NUMBER() OVER(
-            PARTITION BY B.ID 
-            ORDER BY 
-                CASE WHEN EXISTS (
-                    SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
-                    WHERE V.ID = B.ID AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
-                ) THEN 1 ELSE 2 END
-        ) AS rn
-         ,*
-    FROM BSADBTW..HRS_QuerySyntaxes B
-)
--- 直接刪除排名第 2 筆以後的資料
--- (這會精準殺掉：完全一模一樣的雙胞胎第2筆，以及 qryId 不同的冒牌貨。孤兒資料因為只有 1 筆，不會被刪到)
-SELECT * FROM DeleteCTE
-WHERE rn > 1 AND ID = 983237;
-
-SELECT * FROM VERIFY..HRS_QuerySyntaxes WHERE ID = 983237
-SELECT * FROM HRS_QuerySyntaxes WHERE ID = 983237
+-- 1113657
+SELECT COUNT(*) FROM BSA_SUB_CUST_FACT a
+JOIN CIF_Migrate_Mapping_TEMP n on  a.CIF_KEY = n.NEW_CIF_KEY
+JOIN Customer_Migrate_buffer j on  j.CIF_KEY = n.SOURCE_CIF_KEY
+JOIN LoadTrxn_Migrate_buffer c on  c.CIF_KEY = j.CIF_KEY
+LEFT JOIN BANCS_SK_CUST_INFO b     ON j.CustomerNo = b.SK_CUST_ID
+WHERE b.SK_CUST_ID IS NULL
+  AND c.APPL <> 'LNA';
 
 
 
-
-為什麼?
-
-
-然後我這樣改對?
-
-
-
-WITH CleanCTE AS (
-    SELECT 
-        B.*,
-        CASE 
-            WHEN EXISTS (
-                SELECT 1 
-                FROM VERIFY..HRS_QuerySyntaxes V 
-                WHERE V.ID = B.ID
-            ) THEN 1 ELSE 0 
-        END AS HasVerify,
-        
-        ROW_NUMBER() OVER(
-            PARTITION BY B.ID 
-            ORDER BY 
-                CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM VERIFY..HRS_QuerySyntaxes V 
-                        WHERE V.ID = B.ID 
-                          AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
-                    ) THEN 1 ELSE 2 
-                END
-        ) AS rn
-    FROM BSADBTW..HRS_QuerySyntaxes B
-)
-
-SELECT *
-FROM CleanCTE
-WHERE HasVerify = 1
-  AND rn > 1;
-
-
-  ---------
-
-
-  BEGIN TRAN
-
-WITH CleanCTE AS (
-    SELECT 
-        B.*,
-        CASE 
-            WHEN EXISTS (
-                SELECT 1 
-                FROM VERIFY..HRS_QuerySyntaxes V 
-                WHERE V.ID = B.ID
-            ) THEN 1 ELSE 0 
-        END AS HasVerify,
-        
-        ROW_NUMBER() OVER(
-            PARTITION BY B.ID 
-            ORDER BY 
-                CASE 
-                    WHEN EXISTS (
-                        SELECT 1 
-                        FROM VERIFY..HRS_QuerySyntaxes V 
-                        WHERE V.ID = B.ID 
-                          AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
-                    ) THEN 1 ELSE 2 
-                END
-        ) AS rn
-    FROM BSADBTW..HRS_QuerySyntaxes B
-)
-
-DELETE FROM CleanCTE
-WHERE HasVerify = 1
-  AND rn > 1;
-
--- 確認刪除筆數
-SELECT @@ROWCOUNT AS DeletedCount;
-
--- 確認無誤後再執行
--- COMMIT
-
--- 如需回復
--- ROLLBACK
-
-
-
-
-
-WITH CheckCTE AS (
-    SELECT 
-        B.ID,
-        -- 判斷這筆 ID 是否為孤兒
-        CASE WHEN EXISTS (SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V WHERE V.ID = B.ID) THEN 1 ELSE 0 END AS HasVerify,
-        
-        -- 強制給重複資料排號碼 (1號保留，2號以上刪除)
-        ROW_NUMBER() OVER(
-            PARTITION BY B.ID 
-            ORDER BY 
-                -- 優先度 1：能跟 VERIFY 的 qryId 完美對上的，給 1 分排最前面
-                CASE WHEN EXISTS (
-                    SELECT 1 FROM VERIFY..HRS_QuerySyntaxes V 
-                    WHERE V.ID = B.ID AND ISNULL(V.qryId, '') = ISNULL(B.qryId, '')
-                ) THEN 1 ELSE 2 END
-        ) AS rn
-    FROM BSADBTW..HRS_QuerySyntaxes B
-)
-SELECT 
-    CASE 
-        WHEN HasVerify = 0 THEN '保留 (孤兒資料 6906 筆)'
-        WHEN rn = 1 THEN '保留 (與 VERIFY 最吻合的正牌資料 236442 筆)'
-        ELSE '準備刪除 (多倒進去的衝突與完全重複資料 236442 筆)'
-    END AS DataGroup,
-    COUNT(*) AS RecordCount
-FROM CheckCTE
-GROUP BY 
-    CASE 
-        WHEN HasVerify = 0 THEN '保留 (孤兒資料 6906 筆)'
-        WHEN rn = 1 THEN '保留 (與 VERIFY 最吻合的正牌資料 236442 筆)'
-        ELSE '準備刪除 (多倒進去的衝突
-
-
-
-
-
-
-
-
-所有欄位如下
-
-ID
-TemplateId
-GroupId
-Parameter1
-Parameter2
-Parameter3
-Parameter4
-Parameter5
-Parameter6
-Parameter7
-Parameter8
-Parameter9
-Parameter10
-Score
-CreatedDate
-CreatedDate_UTC
-LastModifiedDate
-LastModifiedDate_UTC
-CreatedBy
-Enabled
-Deleted
-Repeatable
-Category
-LastModifedBy
-qryId
-
-
-這是所有欄位 你幫我看一下
-但我依樣是要用分類的方式來寫
-因為他有可能是重複資料
-
+因為筆數有差異 
+我要看看是哪11筆資料沒有寫進去
+要怎麼查
 
