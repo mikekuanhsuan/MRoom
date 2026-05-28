@@ -1,21 +1,21 @@
-你現在是要找：
+我會把這個需求拆成「規則驗證」＋「漏轉驗證」兩大塊。
+像在機場安檢一樣，一層一層刷資料 ✈️
 
-* 第一段有抓到
-* 第二段沒抓到
-* 差異的 11 筆資料
+需求其實有三個條件：
 
-這種情況最適合用 EXCEPT 🔍
+1. SAR Load Trxn 有用到的帳號要轉
+2. 排除 APPL = ‘LNA’
+3. 已經在 mapping table 的不要再轉
 
-你可以先把兩邊的 key 拉出來比對。
+所以驗測時，我會先建立一個「理論上應該被轉入的名單」，再去跟實際結果比對。
 
-通常建議比：
+⸻
 
-* CIF_KEY
-* CustomerNo
+一、先建立 Expected Data（應轉資料）
 
-如果怕重複，可以一起帶。
+這是核心。
 
--- 第一段有、第二段沒有的 11 筆
+-- 理論上應該要轉入的資料
 SELECT DISTINCT
     a.CIF_KEY,
     a.CustomerNo
@@ -24,8 +24,60 @@ JOIN LoadTrxn_Migrate_buffer f
     ON a.CIF_KEY = f.CIF_KEY
 LEFT JOIN BANCS_SK_CUST_INFO b
     ON a.CustomerNo = b.SK_CUST_ID
-WHERE b.SK_CUST_ID IS NULL
-  AND f.APPL <> 'LNA'
+WHERE f.APPL <> 'LNA'
+  AND b.SK_CUST_ID IS NULL;
+
+這份就是：
+
+🧾 SAR 有用到
+🚫 不是 LNA
+🚫 mapping table 不存在
+
+⸻
+
+二、驗證實際轉入結果
+
+你的實際轉入邏輯目前是：
+
+BSA_SUB_CUST_FACT
+JOIN CIF_Migrate_Mapping_TEMP
+
+所以我會拉出實際轉入名單：
+
+SELECT DISTINCT
+    j.CIF_KEY,
+    j.CustomerNo
+FROM BSA_SUB_CUST_FACT a
+JOIN CIF_Migrate_Mapping_TEMP n
+    ON a.CIF_KEY = n.NEW_CIF_KEY
+JOIN Customer_Migrate_buffer j
+    ON j.CIF_KEY = n.SOURCE_CIF_KEY
+JOIN LoadTrxn_Migrate_buffer c
+    ON c.CIF_KEY = j.CIF_KEY
+LEFT JOIN BANCS_SK_CUST_INFO b
+    ON j.CustomerNo = b.SK_CUST_ID
+WHERE c.APPL <> 'LNA'
+  AND b.SK_CUST_ID IS NULL;
+
+⸻
+
+三、驗「少轉」
+
+最重要 🔥
+
+理論上應轉，但實際沒轉到。
+
+-- 漏轉資料
+SELECT DISTINCT
+    a.CIF_KEY,
+    a.CustomerNo
+FROM Customer_Migrate_buffer a
+JOIN LoadTrxn_Migrate_buffer f
+    ON a.CIF_KEY = f.CIF_KEY
+LEFT JOIN BANCS_SK_CUST_INFO b
+    ON a.CustomerNo = b.SK_CUST_ID
+WHERE f.APPL <> 'LNA'
+  AND b.SK_CUST_ID IS NULL
 EXCEPT
 SELECT DISTINCT
     j.CIF_KEY,
@@ -39,65 +91,73 @@ JOIN LoadTrxn_Migrate_buffer c
     ON c.CIF_KEY = j.CIF_KEY
 LEFT JOIN BANCS_SK_CUST_INFO b
     ON j.CustomerNo = b.SK_CUST_ID
-WHERE b.SK_CUST_ID IS NULL
-  AND c.APPL <> 'LNA';
+WHERE c.APPL <> 'LNA'
+  AND b.SK_CUST_ID IS NULL;
 
-這樣就會直接吐出少掉的 11 筆 🎯
+這就是你現在那 11 筆。
 
-如果你想看更完整資訊，可以再包一層：
+⸻
 
-WITH MissingData AS (
-    SELECT DISTINCT
-        a.CIF_KEY,
-        a.CustomerNo
-    FROM Customer_Migrate_buffer a
-    JOIN LoadTrxn_Migrate_buffer f
-        ON a.CIF_KEY = f.CIF_KEY
-    LEFT JOIN BANCS_SK_CUST_INFO b
-        ON a.CustomerNo = b.SK_CUST_ID
-    WHERE b.SK_CUST_ID IS NULL
-      AND f.APPL <> 'LNA'
-    EXCEPT
-    SELECT DISTINCT
-        j.CIF_KEY,
-        j.CustomerNo
-    FROM BSA_SUB_CUST_FACT a
-    JOIN CIF_Migrate_Mapping_TEMP n
-        ON a.CIF_KEY = n.NEW_CIF_KEY
-    JOIN Customer_Migrate_buffer j
-        ON j.CIF_KEY = n.SOURCE_CIF_KEY
-    JOIN LoadTrxn_Migrate_buffer c
-        ON c.CIF_KEY = j.CIF_KEY
-    LEFT JOIN BANCS_SK_CUST_INFO b
-        ON j.CustomerNo = b.SK_CUST_ID
-    WHERE b.SK_CUST_ID IS NULL
-      AND c.APPL <> 'LNA'
-)
-SELECT 
-    m.*,
-    c.*
-FROM MissingData m
-LEFT JOIN Customer_Migrate_buffer c
-    ON m.CIF_KEY = c.CIF_KEY;
+四、驗「多轉」
 
-這版比較像開偵探模式 🕵️
-可以直接看：
+有時 ETL 最可怕的不是少轉，是偷偷多轉 👻
 
-* 哪些 CIF_KEY 沒進去
-* CustomerNo 是誰
-* 該筆完整資料內容
+例如：
 
-通常差這種 11 筆，常見原因有：
+* LNA 被轉進去
+* 已存在 mapping 的又被轉一次
+* 根本沒在 SAR 出現的帳號
 
-* mapping table 沒 mapping 到
-* NEW_CIF_KEY / SOURCE_CIF_KEY 對不上
-* BSA_SUB_CUST_FACT 沒資料
-* join 被吃掉
-* LoadTrxn 有重複造成 DISTINCT 差異
-* APPL 有 NULL 值（<> 'LNA' 不會抓到 NULL）
+所以我一定會反查：
 
-你之後如果要，我也可以幫你進一步拆：
+-- 不該轉卻被轉入的資料
+SELECT DISTINCT
+    j.CIF_KEY,
+    j.CustomerNo
+FROM BSA_SUB_CUST_FACT a
+JOIN CIF_Migrate_Mapping_TEMP n
+    ON a.CIF_KEY = n.NEW_CIF_KEY
+JOIN Customer_Migrate_buffer j
+    ON j.CIF_KEY = n.SOURCE_CIF_KEY
+JOIN LoadTrxn_Migrate_buffer c
+    ON c.CIF_KEY = j.CIF_KEY
+LEFT JOIN BANCS_SK_CUST_INFO b
+    ON j.CustomerNo = b.SK_CUST_ID
+WHERE c.APPL <> 'LNA'
+  AND b.SK_CUST_ID IS NULL
+EXCEPT
+SELECT DISTINCT
+    a.CIF_KEY,
+    a.CustomerNo
+FROM Customer_Migrate_buffer a
+JOIN LoadTrxn_Migrate_buffer f
+    ON a.CIF_KEY = f.CIF_KEY
+LEFT JOIN BANCS_SK_CUST_INFO b
+    ON a.CustomerNo = b.SK_CUST_ID
+WHERE f.APPL <> 'LNA'
+  AND b.SK_CUST_ID IS NULL;
 
-* 是哪個 JOIN 把資料吃掉
-* 哪一步開始少 11 筆
-* 幫你做 step by step reconciliation SQL 🚦
+⸻
+
+五、我最後會做的 validation checklist
+
+我通常會做這種驗測表：
+
+驗證項目	SQL	預期
+應轉筆數	Expected Count	1113668
+實際轉入筆數	Actual Count	1113668
+少轉	EXCEPT	0
+多轉	EXCEPT	0
+LNA 是否被轉	APPL=‘LNA’	0
+已存在 mapping 是否重轉	mapping exists	0
+duplicate CIF	GROUP BY HAVING >1	0
+
+這種驗法很像在資料倉庫裡拿手電筒巡邏 🔦
+不是只看 count 一樣，而是確認：
+
+* 沒少
+* 沒多
+* 沒重
+* 沒髒資料
+
+這才算真的 reconcile 完。
