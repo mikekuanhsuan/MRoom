@@ -1,29 +1,103 @@
---SAR Load Trxn用到的帳號都要轉入，並排除APPL代碼為「LNA」的帳戶，但是
--- 僅轉入不在mapping table內的客戶帳號
+你現在是要找：
 
+* 第一段有抓到
+* 第二段沒抓到
+* 差異的 11 筆資料
 
+這種情況最適合用 EXCEPT 🔍
 
+你可以先把兩邊的 key 拉出來比對。
 
--- 1113668
-SELECT COUNT(*)
+通常建議比：
+
+* CIF_KEY
+* CustomerNo
+
+如果怕重複，可以一起帶。
+
+-- 第一段有、第二段沒有的 11 筆
+SELECT DISTINCT
+    a.CIF_KEY,
+    a.CustomerNo
 FROM Customer_Migrate_buffer a
-JOIN LoadTrxn_Migrate_buffer f     ON a.CIF_KEY = f.CIF_KEY
-LEFT JOIN BANCS_SK_CUST_INFO b     ON a.CustomerNo = b.SK_CUST_ID
+JOIN LoadTrxn_Migrate_buffer f
+    ON a.CIF_KEY = f.CIF_KEY
+LEFT JOIN BANCS_SK_CUST_INFO b
+    ON a.CustomerNo = b.SK_CUST_ID
 WHERE b.SK_CUST_ID IS NULL
-  AND f.APPL <> 'LNA';
-
--- 1113657
-SELECT COUNT(*) FROM BSA_SUB_CUST_FACT a
-JOIN CIF_Migrate_Mapping_TEMP n on  a.CIF_KEY = n.NEW_CIF_KEY
-JOIN Customer_Migrate_buffer j on  j.CIF_KEY = n.SOURCE_CIF_KEY
-JOIN LoadTrxn_Migrate_buffer c on  c.CIF_KEY = j.CIF_KEY
-LEFT JOIN BANCS_SK_CUST_INFO b     ON j.CustomerNo = b.SK_CUST_ID
+  AND f.APPL <> 'LNA'
+EXCEPT
+SELECT DISTINCT
+    j.CIF_KEY,
+    j.CustomerNo
+FROM BSA_SUB_CUST_FACT a
+JOIN CIF_Migrate_Mapping_TEMP n
+    ON a.CIF_KEY = n.NEW_CIF_KEY
+JOIN Customer_Migrate_buffer j
+    ON j.CIF_KEY = n.SOURCE_CIF_KEY
+JOIN LoadTrxn_Migrate_buffer c
+    ON c.CIF_KEY = j.CIF_KEY
+LEFT JOIN BANCS_SK_CUST_INFO b
+    ON j.CustomerNo = b.SK_CUST_ID
 WHERE b.SK_CUST_ID IS NULL
   AND c.APPL <> 'LNA';
 
+這樣就會直接吐出少掉的 11 筆 🎯
 
+如果你想看更完整資訊，可以再包一層：
 
-因為筆數有差異 
-我要看看是哪11筆資料沒有寫進去
-要怎麼查
+WITH MissingData AS (
+    SELECT DISTINCT
+        a.CIF_KEY,
+        a.CustomerNo
+    FROM Customer_Migrate_buffer a
+    JOIN LoadTrxn_Migrate_buffer f
+        ON a.CIF_KEY = f.CIF_KEY
+    LEFT JOIN BANCS_SK_CUST_INFO b
+        ON a.CustomerNo = b.SK_CUST_ID
+    WHERE b.SK_CUST_ID IS NULL
+      AND f.APPL <> 'LNA'
+    EXCEPT
+    SELECT DISTINCT
+        j.CIF_KEY,
+        j.CustomerNo
+    FROM BSA_SUB_CUST_FACT a
+    JOIN CIF_Migrate_Mapping_TEMP n
+        ON a.CIF_KEY = n.NEW_CIF_KEY
+    JOIN Customer_Migrate_buffer j
+        ON j.CIF_KEY = n.SOURCE_CIF_KEY
+    JOIN LoadTrxn_Migrate_buffer c
+        ON c.CIF_KEY = j.CIF_KEY
+    LEFT JOIN BANCS_SK_CUST_INFO b
+        ON j.CustomerNo = b.SK_CUST_ID
+    WHERE b.SK_CUST_ID IS NULL
+      AND c.APPL <> 'LNA'
+)
+SELECT 
+    m.*,
+    c.*
+FROM MissingData m
+LEFT JOIN Customer_Migrate_buffer c
+    ON m.CIF_KEY = c.CIF_KEY;
 
+這版比較像開偵探模式 🕵️
+可以直接看：
+
+* 哪些 CIF_KEY 沒進去
+* CustomerNo 是誰
+* 該筆完整資料內容
+
+通常差這種 11 筆，常見原因有：
+
+* mapping table 沒 mapping 到
+* NEW_CIF_KEY / SOURCE_CIF_KEY 對不上
+* BSA_SUB_CUST_FACT 沒資料
+* join 被吃掉
+* LoadTrxn 有重複造成 DISTINCT 差異
+* APPL 有 NULL 值（<> 'LNA' 不會抓到 NULL）
+
+你之後如果要，我也可以幫你進一步拆：
+
+* 是哪個 JOIN 把資料吃掉
+* 哪一步開始少 11 筆
+* 幫你做 step by step reconciliation SQL 🚦
