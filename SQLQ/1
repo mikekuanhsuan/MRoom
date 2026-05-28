@@ -1,125 +1,107 @@
-# ============================================
-# Config
-# ============================================
-$configPath = ".\SKcheck_config.ini"
+這個其實可以直接查，不用猜 👍
+在 MSSQL 裡，「自己生出來的序號」通常是：
 
-if (!(Test-Path $configPath)) {
-    Write-Host "找不到 config 檔"
-    exit 1
-}
+* IDENTITY
+* Primary Key
+* auto increment
 
-$config = @{}
+你可以直接查 table 哪個欄位是 identity。
 
-Get-Content $configPath | ForEach-Object {
-    if ($_ -match "=") {
-        $key, $value = $_ -split "=", 2
-        $config[$key.Trim()] = $value.Trim()
-    }
-}
+⸻
 
-# ============================================
-# 取得參數
-# ============================================
-$folderPath   = $config["INPUT_PATH"]
-$outputFolder = $config["OUTPUT_PATH"]
+先跑這個：
 
-if ([string]::IsNullOrWhiteSpace($folderPath)) {
-    Write-Host "INPUT_PATH 未設定"
-    exit 1
-}
+SELECT 
+    COLUMN_NAME,
+    DATA_TYPE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'HRS_QuerySyntaxes'
 
-if ([string]::IsNullOrWhiteSpace($outputFolder)) {
-    Write-Host "OUTPUT_PATH 未設定"
-    exit 1
-}
+先看有哪些欄位。
 
-# ============================================
-# 檔名（避免覆蓋）
-# ============================================
-$dateString = Get-Date -Format "yyyyMMdd_HHmmss"
-$outputFile = Join-Path $outputFolder "result_$dateString.txt"
+⸻
 
-# ============================================
-# 檢查路徑
-# ============================================
-if (!(Test-Path $folderPath)) {
-    Write-Host "找不到資料夾：$folderPath"
-    exit 1
-}
+再跑這個，直接找 identity：
 
-if (!(Test-Path $outputFolder)) {
-    New-Item -ItemType Directory -Path $outputFolder | Out-Null
-}
+SELECT 
+    c.name AS ColumnName,
+    ic.seed_value,
+    ic.increment_value
+FROM sys.identity_columns ic
+JOIN sys.columns c 
+    ON ic.object_id = c.object_id
+    AND ic.column_id = c.column_id
+WHERE OBJECT_NAME(ic.object_id) = 'HRS_QuerySyntaxes'
 
-# ============================================
-# 取得檔案（CSV + SQL）
-# ============================================
-$files = Get-ChildItem -Path $folderPath -Include *.csv,*.sql -Recurse -File |
-         Sort-Object Name
+如果有結果，例如：
 
-if ($files.Count -eq 0) {
-    Write-Host "找不到 CSV / SQL 檔案"
-    exit 1
-}
+ColumnName	seed_value
+qryId	1
 
-# ============================================
-# 暫存結果
-# ============================================
-$resultList = @()
+那就是它。
 
-$hasError = $false
+⸻
 
-# ============================================
-# 處理檔案
-# ============================================
-foreach ($file in $files) {
+再確認 Primary Key：
 
-    try {
+SELECT 
+    KU.COLUMN_NAME
+FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS TC
+JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KU
+    ON TC.CONSTRAINT_NAME = KU.CONSTRAINT_NAME
+WHERE TC.TABLE_NAME = 'HRS_QuerySyntaxes'
+AND TC.CONSTRAINT_TYPE = 'PRIMARY KEY'
 
-        # 筆數（含 header / SQL 就是行數）
-        $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines
+⸻
 
-        if ($lineCount -lt 0) {
-            $lineCount = 0
-        }
+很多時候會是：
 
-        # MD5
-        $md5 = Get-FileHash $file.FullName -Algorithm MD5
-        $md5Hash = $md5.Hash.ToLower()
+欄位	用途
+qryId	identity PK
+TemplateId	業務邏輯
+GroupId	分組
+Parameter1~N	真正內容
 
-        # 組結果
-        $result = "$($file.Name);$lineCount;$md5Hash"
+如果是這種：
 
-        $resultList += $result
+那你後來重 insert 時：
 
-        Write-Host $result
-    }
-    catch {
+* TemplateId 還在
+* Parameter 還在
+* 但 qryId 重編
 
-        Write-Host "處理失敗：$($file.FullName)"
-        Write-Host $_.Exception.Message
+所以系統可能「看起來正常」。
 
-        $hasError = $true
-    }
-}
+⸻
 
-# ============================================
-# 輸出檔案（一次寫入）
-# ============================================
-$resultList | Out-File -FilePath $outputFile -Encoding utf8
+真正要怕的是：
 
-# ============================================
-# 結果
-# ============================================
-Write-Host ""
-Write-Host "完成"
-Write-Host "輸出檔案：$outputFile"
+其他 table 有存：
 
-# ============================================
-# Control-M Return Code
-# ============================================
-if ($hasError) {
-    exit 1
-} else {
-    exit 0
-}
+HRSQueryId
+qryId
+CIPQueryId
+
+這些如果還指向舊 ID。
+
+就會變：
+
+🪦 孤兒 reference。
+
+⸻
+
+你現在先別 panic。
+
+先確認：
+
+1. 哪個是 identity
+2. 哪個是 PK
+3. 有沒有其他 table reference 它
+
+這三件事。
+
+你貼結果給我，我可以幫你判斷：
+
+* 現在是輕傷
+* 中傷
+* 還是「其實只是嚇到自己」😅
