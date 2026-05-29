@@ -1,107 +1,18 @@
-這個其實可以直接查，不用猜 👍
-在 MSSQL 裡，「自己生出來的序號」通常是：
+Dear coco
 
-* IDENTITY
-* Primary Key
-* auto increment
+SK 預計下週會在提供一次資轉文字檔案，
+針對 修正
+1.	廠商給SK的交易資料數量不對
+2.	開戶目的 按照 mapping 表 代號寫入BSA_SUB_CUST_FACT 
 
-你可以直接查 table 哪個欄位是 identity。
+需協助告知SK 需要連 AML_CCR_CHECK_SUM.CSV 一起提供，來做測試
 
-⸻
 
-先跑這個：
+Best regards,
 
-SELECT 
-    COLUMN_NAME,
-    DATA_TYPE
-FROM INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_NAME = 'HRS_QuerySyntaxes'
+高貫軒
+資訊服務處 核心系統部 風險管理系統組
+台北市內湖區舊宗路二段207號8樓
+Tel : 02-8798-9999 Ext : 6297
 
-先看有哪些欄位。
-
-⸻
-
-再跑這個，直接找 identity：
-
-SELECT 
-    c.name AS ColumnName,
-    ic.seed_value,
-    ic.increment_value
-FROM sys.identity_columns ic
-JOIN sys.columns c 
-    ON ic.object_id = c.object_id
-    AND ic.column_id = c.column_id
-WHERE OBJECT_NAME(ic.object_id) = 'HRS_QuerySyntaxes'
-
-如果有結果，例如：
-
-ColumnName	seed_value
-qryId	1
-
-那就是它。
-
-⸻
-
-再確認 Primary Key：
-
-SELECT 
-    KU.COLUMN_NAME
-FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS TC
-JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS KU
-    ON TC.CONSTRAINT_NAME = KU.CONSTRAINT_NAME
-WHERE TC.TABLE_NAME = 'HRS_QuerySyntaxes'
-AND TC.CONSTRAINT_TYPE = 'PRIMARY KEY'
-
-⸻
-
-很多時候會是：
-
-欄位	用途
-qryId	identity PK
-TemplateId	業務邏輯
-GroupId	分組
-Parameter1~N	真正內容
-
-如果是這種：
-
-那你後來重 insert 時：
-
-* TemplateId 還在
-* Parameter 還在
-* 但 qryId 重編
-
-所以系統可能「看起來正常」。
-
-⸻
-
-真正要怕的是：
-
-其他 table 有存：
-
-HRSQueryId
-qryId
-CIPQueryId
-
-這些如果還指向舊 ID。
-
-就會變：
-
-🪦 孤兒 reference。
-
-⸻
-
-你現在先別 panic。
-
-先確認：
-
-1. 哪個是 identity
-2. 哪個是 PK
-3. 有沒有其他 table reference 它
-
-這三件事。
-
-你貼結果給我，我可以幫你判斷：
-
-* 現在是輕傷
-* 中傷
-* 還是「其實只是嚇到自己」😅
+幫我口語寫好一點
