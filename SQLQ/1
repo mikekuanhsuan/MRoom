@@ -1,18 +1,16 @@
-Dear coco
+Dear Coco，
 
-SK 預計下週會在提供一次資轉文字檔案，
-針對 修正
-1.	廠商給SK的交易資料數量不對
-2.	開戶目的 按照 mapping 表 代號寫入BSA_SUB_CUST_FACT 
+SK 預計於下週再次提供資轉文字檔案，主要針對以下兩項修正進行驗證：
 
-需協助告知SK 需要連 AML_CCR_CHECK_SUM.CSV 一起提供，來做測試
+1. 廠商提供給 SK 的交易資料筆數有誤。
+2. 開戶目的需依 Mapping Table 對應代碼寫入 BSA_SUB_CUST_FACT。
 
+另請協助通知 SK，於提供資轉檔案時，一併提供 AML_CCR_CHECK_SUM.CSV，以利後續測試作業進行。
+
+謝謝。
 
 Best regards,
 
 高貫軒
 資訊服務處 核心系統部 風險管理系統組
-台北市內湖區舊宗路二段207號8樓
-Tel : 02-8798-9999 Ext : 6297
-
-幫我口語寫好一點
+Tel：02-8798-9999 Ext. 6297
