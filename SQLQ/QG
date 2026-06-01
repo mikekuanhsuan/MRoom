@@ -1,132 +1,63 @@
-# ============================================
-# Config
-# ============================================
-$configPath = ".\SKcheck_config.ini"
+好的，沒問題！這裡為你提供兩種「複製即可直接執行」的完整 SQL 程式碼。
+因為你的資料庫看起來是 SQL Server（SSMS 介面），我會使用最適合該環境的 **WITH (CTE)** 語法，這樣可以把你原本那段長長的巢狀查詢只寫一次，乾淨又好維護。
+### 方案一：列出「完整明細」（推薦 👍）
+這個版本會把符合條件的 RefNo 的所有資料列（包含 isDeleted 為 0 和 1 的行）通通秀出來，方便你比對。
+```sql
+-- 1. 先將你原本的查詢結果包成一個虛擬暫存表 (叫作 BaseData)
+WITH BaseData AS (
+    SELECT * FROM RP_NP_Migrate_buffer 
+    WHERE CIFKEY IN (
+        SELECT CIF_KEY 
+        FROM Customer_Migrate_buffer 
+        WHERE customerNo IN (
+            SELECT SK_CUST_ID 
+            FROM BANCS_SK_CUST_INFO 
+            WHERE TS_CUST_ID IN (
+                SELECT TS_CUST_ID 
+                FROM BANCS_SK_CUST_INFO 
+                WHERE TS_CUST_ID = '73229501'
+            )
+        )
+    ) 
+    AND RP = 'BOD'
+)
+-- 2. 從中篩選出：同一個 RefNo 卻同時擁有不同 isDeleted 值的資料
+SELECT * FROM BaseData A
+WHERE EXISTS (
+    SELECT 1 
+    FROM BaseData B 
+    WHERE A.RefNo = B.RefNo 
+      AND A.isDeleted <> B.isDeleted
+)
+ORDER BY RefNo, isDeleted;
 
-if (!(Test-Path $configPath)) {
-    Write-Host "找不到 config 檔"
-    exit 1
-}
+```
+### 方案二：只列出「有哪些 RefNo」（乾淨清單）
+如果你不想要看密密麻麻的明細，只想知道到底是哪幾個 RefNo 有這個狀況，用這個版本會直接幫你做群組統計。
+```sql
+-- 1. 同樣先包成 BaseData
+WITH BaseData AS (
+    SELECT * FROM RP_NP_Migrate_buffer 
+    WHERE CIFKEY IN (
+        SELECT CIF_KEY 
+        FROM Customer_Migrate_buffer 
+        WHERE customerNo IN (
+            SELECT SK_CUST_ID 
+            FROM BANCS_SK_CUST_INFO 
+            WHERE TS_CUST_ID IN (
+                SELECT TS_CUST_ID 
+                FROM BANCS_SK_CUST_INFO 
+                WHERE TS_CUST_ID = '73229501'
+            )
+        )
+    ) 
+    AND RP = 'BOD'
+)
+-- 2. 依照 RefNo 分組，並篩選出 isDeleted 相異種類數量等於 2 (代表 0 和 1 都存在) 的單號
+SELECT RefNo
+FROM BaseData
+GROUP BY RefNo
+HAVING COUNT(DISTINCT isDeleted) = 2
+ORDER BY RefNo;
 
-$config = @{}
-
-Get-Content $configPath | ForEach-Object {
-    if ($_ -match "=") {
-        $key, $value = $_ -split "=", 2
-        $config[$key.Trim()] = $value.Trim()
-    }
-}
-
-# ============================================
-# 參數
-# ============================================
-$folderPath = $config["INPUT_PATH"]
-
-if ([string]::IsNullOrWhiteSpace($folderPath)) {
-    Write-Host "INPUT_PATH 未設定"
-    exit 1
-}
-
-# ============================================
-# 執行目錄（output/log 都在這）
-# ============================================
-$basePath = Get-Location
-
-$dateString = Get-Date -Format "yyyyMMdd_HHmmss"
-
-$outputFile = Join-Path $basePath "result_$dateString.txt"
-$logFile    = Join-Path $basePath "SKcheck.log"
-
-# ============================================
-# 清除舊 log
-# ============================================
-if (Test-Path $logFile) {
-    Remove-Item $logFile -Force
-}
-
-# ============================================
-# Log function
-# ============================================
-function Write-Log {
-    param([string]$msg)
-
-    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path $logFile -Value "[$time] $msg"
-}
-
-# ============================================
-# Start log
-# ============================================
-Write-Log "===== JOB START ====="
-Write-Log "Input Path: $folderPath"
-Write-Log "Output File: $outputFile"
-
-# ============================================
-# 檢查資料夾
-# ============================================
-if (!(Test-Path $folderPath)) {
-    Write-Log "ERROR: 找不到資料夾 $folderPath"
-    exit 1
-}
-
-# ============================================
-# 取得檔案
-# ============================================
-$files = Get-ChildItem -Path $folderPath -Include *.csv,*.sql -Recurse -File |
-         Sort-Object Name
-
-if ($files.Count -eq 0) {
-    Write-Log "ERROR: 找不到 CSV / SQL"
-    exit 1
-}
-
-# ============================================
-# 處理結果
-# ============================================
-$resultList = @()
-$hasError = $false
-
-foreach ($file in $files) {
-
-    try {
-
-        $lineCount = (Get-Content $file.FullName | Measure-Object -Line).Lines
-
-        if ($lineCount -lt 0) { $lineCount = 0 }
-
-        $md5 = Get-FileHash $file.FullName -Algorithm MD5
-        $md5Hash = $md5.Hash.ToLower()
-
-        $result = "$($file.Name);$lineCount;$md5Hash"
-        $resultList += $result
-
-        Write-Log "OK: $result"
-    }
-    catch {
-        Write-Log "FAIL: $($file.FullName) | $($_.Exception.Message)"
-        $hasError = $true
-    }
-}
-
-# ============================================
-# 輸出 result
-# ============================================
-$resultList | Out-File -FilePath $outputFile -Encoding utf8
-
-# ============================================
-# END log
-# ============================================
-Write-Log "===== JOB END ====="
-
-Write-Host "完成"
-Write-Host "Result: $outputFile"
-Write-Host "Log: $logFile"
-
-# ============================================
-# Control-M Return Code
-# ============================================
-if ($hasError) {
-    exit 1
-} else {
-    exit 0
-}
+```
