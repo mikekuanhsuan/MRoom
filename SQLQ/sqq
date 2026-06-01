@@ -1,177 +1,310 @@
-依照你貼的 SQL，我幫你整理出 實際有用到的 Table，並依功能分類。
-
-一、Trade 主檔 (Import)
-
-Loan
-
-* WBS_LON_INFO
-
-Import Collection (I/C)
-
-* WBS_IMP_IC
-
-Import Bill (I/B)
-
-* WBS_IMP_IB
-
-Letter of Credit (L/C)
-
-* WBS_IMP_LC
-
-Shipping Guarantee / Export Delivery (SG/ED)
-
-* WBS_IMP_SGED
-
-SGED 與 LC 關聯
-
-* WBS_IMP_SGED_LC
-
-Bank Guarantee
-
-* WBS_IMP_BG
-
-⸻
-
-二、Trade 主檔 (Export)
-
-Loan Against (L/A)
-
-* WBS_EXP_LA_INFO
-
-Loan Trust Receipt (L/T)
-
-* WBS_EXP_LT_INFO
-
-Negotiation
-
-* WBS_EXP_NEGO_INFO
-
-Re-Negotiation
-
-* WBS_EXP_RE_NEGO_INFO
-
-Open Account Collection (O/C)
-
-* WBS_EXP_OC_INFO
-
-LT History
-
-* EXP_LT_INFO_HS
-
-⸻
-
-三、Export Item 明細
-
-Negotiation Item
-
-* WBS_EXP_NEGO_ITEM
-
-Factoring Item
-
-* WBS_EXP_FA_ITEM
-
-⸻
-
-四、AML 相關
-
-AML Header
-
-* AML_INFO
-* HKWBS.AML_INFO
-
-AML Detail
-
-* AML_DETAIL
-* HKWBS.AML_DETAIL
-
-AML Detail (WBS)
-
-* WBS_AML_DETAIL
-
-⸻
-
-五、客戶資料
-
-Customer Master
-
-* WBS_CIF_CUST_INFO
-
-⸻
-
-六、Function Mapping
-
-AML Function Mapping
-
-* WBS_RAA_FUNC_INFO
-
-⸻
-
-七、所有用到的 Table 清單（去重複）
-
-WBS_LON_INFO
-WBS_IMP_IB
-WBS_IMP_BG
-WBS_IMP_IC
-WBS_IMP_LC
-WBS_IMP_SGED
-WBS_IMP_SGED_LC
-WBS_EXP_LA_INFO
-WBS_EXP_LT_INFO
-WBS_EXP_NEGO_INFO
-WBS_EXP_RE_NEGO_INFO
-WBS_EXP_OC_INFO
-WBS_EXP_NEGO_ITEM
-WBS_EXP_FA_ITEM
-EXP_LT_INFO_HS
-AML_INFO
-AML_DETAIL
-HKWBS.AML_INFO
-HKWBS.AML_DETAIL
-WBS_AML_DETAIL
-WBS_CIF_CUST_INFO
-WBS_RAA_FUNC_INFO
-
-⸻
-
-八、如果是做 AML Red Flag 驗證，核心 Table 只有這些
-
-交易來源表
-
-WBS_IMP_IB
-WBS_IMP_BG
-WBS_IMP_IC
-WBS_IMP_LC
-WBS_IMP_SGED
-WBS_EXP_LA_INFO
-WBS_EXP_LT_INFO
-WBS_EXP_NEGO_INFO
-WBS_EXP_RE_NEGO_INFO
-WBS_EXP_OC_INFO
-
-AML
-
-WBS_AML_DETAIL
-
-Customer
-
-WBS_CIF_CUST_INFO
-
-Function Name
-
-WBS_RAA_FUNC_INFO
-
-特殊明細
-
-WBS_EXP_NEGO_ITEM
-WBS_EXP_FA_ITEM
-WBS_IMP_SGED_LC
-
-如果你是要寫 SIT/UAT 驗證 SOP，我也可以幫你整理成：
-
-1. Source Table
-2. Join Key
-3. AML_INFO_SEQ 傳遞路徑
-4. 驗證 SQL
-5. 預期結果
-
-直接變成測試案例文件格式。
+WITH Combined_list AS (
+    -- LOAN CREATION
+    SELECT 
+        'LOAN' AS SOURCE_TYPE,
+        LON_NO AS DOC_NO,
+        LON_CCY AS CURRENCY,
+        LON_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_LON_INFO
+
+    UNION ALL
+
+    -- L/C CREATION
+    SELECT 
+        'LC_CREATE' AS SOURCE_TYPE,
+        LC_NO AS DOC_NO,
+        LC_NO_CCY AS CURRENCY,
+        LC_NO_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_IMP_LC
+
+    UNION ALL
+
+    -- L/C AMENDMENT
+    SELECT 
+        'LC_AMEND' AS SOURCE_TYPE,
+        LC_NO AS DOC_NO,
+        LC_NO_CCY AS CURRENCY,
+        NEW_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_IMP_LC
+
+    UNION ALL
+
+    -- SG/ED CREATION
+    SELECT 
+        'SGED' AS SOURCE_TYPE,
+        SGED_NO AS DOC_NO,
+        SGED_CCY AS CURRENCY,
+        SGED_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_IMP_SGED
+
+    UNION ALL
+
+    -- I/B CREATION
+    SELECT 
+        'IB' AS SOURCE_TYPE,
+        IB_NO AS DOC_NO,
+        BILL_CCY AS CURRENCY,
+        BILL_AMT1 AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_IMP_IB
+
+    UNION ALL
+
+    -- I/C CREATION 
+    SELECT 
+        'IC' AS SOURCE_TYPE,
+        IC_NO AS DOC_NO,
+        BILL_CCY AS CURRENCY,
+        BILL_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_IMP_IC
+
+    UNION ALL
+
+    -- L/A CREATION/AMENDMENT
+    SELECT 
+        'LA' AS SOURCE_TYPE,
+        LA_NO AS DOC_NO,
+        LC_CCY AS CURRENCY,
+        LC_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_Exp_La_Info
+
+    UNION ALL
+
+    -- L/T CREATION/amendment
+    SELECT 
+        'LT' AS SOURCE_TYPE,
+        LT_NO AS DOC_NO,
+        LC_CCY AS CURRENCY,
+        LT_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_EXP_LT_INFO
+
+    UNION ALL
+
+    -- NEGO CREATION/AMENDMENT
+    SELECT 
+        'NEGO' AS SOURCE_TYPE,
+        NEGO_NO AS DOC_NO,
+        BILL_CCY AS CURRENCY,
+        BILL_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_EXP_NEGO_INFO
+
+    UNION ALL
+
+    -- RENEGO CREATION
+    SELECT 
+        'RENEGO' AS SOURCE_TYPE,
+        REF_NO AS DOC_NO,
+        BILL_CCY AS CURRENCY,
+        BILL_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_EXP_RE_NEGO_INFO
+
+    UNION ALL
+
+    -- O/C CREATION/AMENDMENT
+    SELECT 
+        'OC' AS SOURCE_TYPE,
+        OC_NO AS DOC_NO,
+        BILL_CCY AS CURRENCY,
+        BILL_AMT AS AMOUNT,
+        CIF_CUST_INFO_SEQ,
+        AML_INFO_SEQ,
+        TRADE_DATE
+    FROM WBS_EXP_OC_INFO
+)
+SELECT
+    E.SOURCE_TYPE,
+    E.DOC_NO,
+    E.CURRENCY,
+    E.AMOUNT,
+    E.TRADE_DATE,
+    '_' + C.CUSTOMER_ID AS CUSTOMER_ID,
+    F.FUNC_NAME,
+    aml.FLAG,
+    aml.CONTENT,
+    goodscode.CONTENT AS GOODSCODE,
+    merchandise.CONTENT AS MERCHANDISE,
+    TAG44A_CONTENT.CONTENT AS PORT_OF_LOADING,
+    TAG44E_CONTENT.CONTENT AS PORT_OF_DISCHARGE,
+    TAG44F_CONTENT.CONTENT AS PORT_OF_TRANSSHIPMENT,
+    TAG44B_CONTENT.CONTENT AS FINAL_DESTINATION
+FROM Combined_list E
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'VESSEL_NAME') VESSEL_NAME
+    ON E.AML_INFO_SEQ = VESSEL_NAME.AML_INFO_SEQ
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'FLAG_VESSEL') FLAG_VESSEL
+    ON E.AML_INFO_SEQ = FLAG_VESSEL.AML_INFO_SEQ
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'RED_FLAG') aml
+    ON E.AML_INFO_SEQ = aml.AML_INFO_SEQ
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'REMARK') REMARK
+    ON E.AML_INFO_SEQ = REMARK.AML_INFO_SEQ
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'GOODSCODE') goodscode
+    ON E.AML_INFO_SEQ = goodscode.AML_INFO_SEQ
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'MERCHANDISE') merchandise
+    ON E.AML_INFO_SEQ = merchandise.AML_INFO_SEQ
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'TAG44A_CONTENT') TAG44A_CONTENT
+    ON E.AML_INFO_SEQ = TAG44A_CONTENT.AML_INFO_SEQ
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'TAG44E_CONTENT') TAG44E_CONTENT
+    ON E.AML_INFO_SEQ = TAG44E_CONTENT.AML_INFO_SEQ
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'TAG44F_CONTENT') TAG44F_CONTENT
+    ON E.AML_INFO_SEQ = TAG44F_CONTENT.AML_INFO_SEQ
+LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'TAG44B_CONTENT') TAG44B_CONTENT
+    ON E.AML_INFO_SEQ = TAG44B_CONTENT.AML_INFO_SEQ
+LEFT JOIN WBS_CIF_CUST_INFO C
+    ON E.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
+LEFT JOIN WBS_RAA_FUNC_INFO F
+    ON aml.FUN_CODE = F.FUNC_CODE
+WHERE
+    E.TRADE_DATE BETWEEN '20251101' AND '20251130'
+    AND aml.FLAG = 'Y'
+ORDER BY E.TRADE_DATE
+
+
+
+
+我現在報表是做好了
+
+那我TC 要怎麼做
+
+TC測試報告(範本)修訂紀錄
+版本	日期	部門	修改人	覆核人	修改內容
+V1.1	2025/4	專案暨管理部	王思懿	陳哲弘	針對自查常見錯誤，增加提示
+V1.2	2025/8/8	專案暨管理部	洪宏雄	陳哲弘	強化報告上中下游關聯測試案例
+
+ 
+※填寫時請注意紅字提示，此範本內容僅提供填寫範例供參考，請自行依實際測案填寫適當內容。
+XX系統(系統代號)測試報告(TC)
+提案單號(必填)	IT202025OOOOOOOO	測試日期(必填)	YYYY/MM/DD  
+(應在程式佈版到測試環境後)
+開發人員(必填)	OOO	測試人員(必填)	XXX
+(不可為開發人員)
+需求概述
+	
+該需求有進行資料傳輸之上中下游系統 
+(必填，若無請填N/A)	1.	
+提醒：
+1.	請依SC-007系統開發與維護管理要點之整合測試及測試人員測試內容與類型說明，準備測試案例。
+2.	若提案需求涉及跨系統資料傳輸或該需求會影響其他系統時，則應於測試個案中針對會傳輸的資訊內容進行逐一驗證。
+3.	請同步考量反向測試案例，若無上述案例請說明原因
+4.	應提供input及output的測試驗証畫面，若為批次調整應附before及after的資料驗証
+
+
+ 
+測試個案 
+項目	交易功能	案例說明	預期結果	包含之相關系統代號	驗證結果
+1.			1.		1.			
+
+ 
+測試結果
+項目	交易功能	案例說明	預期結果	驗證結果
+		1.		1.		
+
+
+
+這邊是他的需求規格
+5.	需求功能說明(  NA )
+5.1 需求清單: 如有多項功能需求時填寫：與貿易金融相關(Trade Finance)(TF) transaction若有“紅旗”/Red flags, 希望能把WBS這一頁一些相關聯及主要的資訊都extract進這一份月報。
+由於貿易金融紅旗等相關交易包括貿易金融貸款 (Loan)，但目前 Trade Finance 紅旗交易中，涉及貿易金融貸款 (Loan) 之交易，其 AML_INFO_SEQ 僅存在於 HKWBS (LON_INFO)，未下送至 HKODS，導致 OBODS 產製 AML 報表時無法取得該欄位資料，影響報表完整性。
+本次改善目的
+補齊 AML_INFO_SEQ 於 HKWBS → HKODS → OBODS 之資料流，並於 AML 月報中新增該欄位呈現，以利 AML 組後續資料比對與整合分析。
+
+5.2	入口網站地圖/功能擺放路徑(  NA )
+(如：http://dssweb決策支援系統
+http://intranet --->應用系統  
+http://sfa 銷售管理系統
+http://Discovery-->分析系統與報表
+
+5.3	需求功能之上中下游相關系統 (偕同IT填寫) (  NA )
+	因應該需求可能需要配合驗測之上中下游系統
+有關放款主檔資料上中下游：
+上游系統：HKWBS
+中游系統：HKODS
+下游系統：OBODS
+
+	上述上中下游系統影響評估說明
+本需求涉及跨系統資料串接調整：
+上游系統：HKWBS 
+	需新增並下送 AML_INFO_SEQ 欄位資料至 HKODS。 
+
+中游系統：HKODS
+	新增 AML_INFO_SEQ 欄位；
+	並提供下遊OBODS查詢使用。
+
+下游系統：OBODS
+	自 HKODS 取得AML_INFO_SEQ 資料；
+	於既有AML月報新增欄位呈現；
+	既有報表邏輯維持不變。
+
+屬跨系統欄位新增與報表調整需求。
+
+	案例說明
+當 HKWBS 產生資料時，同步傳送 AML_INFO_SEQ 至 HKODS；OBODS 產製 AML 報表時，向 HKODS 取得該欄位資料並呈現於報表中。  
+
+5.4	需求功能(  NA )
+5.4.1	   需求功能-1
+	業務規則與限制： 
+•	不變動既有紅旗判斷邏輯；
+•	不新增篩選條件；
+•	僅新增欄位呈現。
+
+	處理說明: 
+•	針對當月 Trade Finance 紅旗交易資料；
+•	新增 AML_INFO_SEQ 欄位於報表中顯示；
+•	出表頻率維持每月第一天產出前月底資料，在FAM下載。
+
+	案例說明 
+案例見以上説明。
+
+5.4.2	需求功能-2
+	業務規則與限制
+	處理說明: 如資料來源、運算公式(若有牽涉到匯率，需詳細說明匯率幣別、匯率類別、匯率基準日、以及計算前先執行匯率換算或匯率換算後在進行計算等) 、記帳方式、編碼原則……
+	案例說明 
+
+5.5	非功能性需求(  NA )
+	可測試性
+	可維護性
+	可觀察性
+	例如:程式需留存完整的操作軌跡
+	例如:系統需適度揭露即時資訊，整合監控機制，即時監控保留系統運行資訊，當交易異常時系統需能即時發送告警通知。
+	可擴充性
+	例如:因應臨時性需求，系統需俱備依據需求臨時調整系統擴充的能力
+	可用性需求
+	例如:系統需俱備HA高可用模式，異常發生時，需於5分鐘內完成切換
+	例如:業務流量每日約5000筆交易，交易記錄線上查詢需提供半年以上記錄查詢，歷史記錄需留存5年
+	性能需求描述
+	例如:一般時段，在系統流量在TPS(每秒事務處理量) 1000狀況下，80%的用戶可以在5秒內完成此功能任務，且執行失敗比率不超過1/10000。
+	安全性
+	例如: 系統處理業務流量時同一筆ID需比對近5分鐘內的交易時使用的IP紀錄，如IP記錄不一致，發送異常紀錄進警示報表。
+	帳號有效性
+	例如: 系統運作需使用之特殊帳號，如簡訊發送帳號、批次執行帳號等，且相關帳號需確保符合命名規則並可有效執行使用。
+
+
+
+現在只是在測試區階段 還沒上正式  但我要先做 測試區的TC
