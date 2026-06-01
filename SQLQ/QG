@@ -1,132 +1,54 @@
-如果你的目標是：
 
-找出 RP_NP_Migrate_buffer 中，RP='BOD' 且屬於重複 TS_CUST_ID 客戶的資料，並找出同一個 RefNo 同時存在 IsDeleted=0 與 IsDeleted=1 的情況。
-
-可以直接用下面這版：
-
-;WITH DupTSCust AS
-(
-    -- 找出重複的 TS_CUST_ID
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY TS_CUST_ID
-    HAVING COUNT(*) > 1
-),
-TargetCust AS
-(
-    -- 取得這些 TS_CUST_ID 對應的 SK_CUST_ID
-    SELECT DISTINCT B.SK_CUST_ID
-    FROM BANCS_SK_CUST_INFO B
-    INNER JOIN DupTSCust D
-        ON B.TS_CUST_ID = D.TS_CUST_ID
-),
-TargetCIF AS
-(
-    -- 取得對應 CIF_KEY
-    SELECT DISTINCT C.CIF_KEY
-    FROM Customer_Migrate_buffer C
-    INNER JOIN TargetCust T
-        ON C.CustomerNo = T.SK_CUST_ID
-),
-BaseData AS
-(
-    -- BOD 資料
-    SELECT *
-    FROM RP_NP_Migrate_buffer
-    WHERE RP = 'BOD'
-      AND CIFKEY IN
-      (
-          SELECT CIF_KEY
-          FROM TargetCIF
-      )
-),
-BadRefNo AS
-(
-    -- 找出同一 RefNo 有不同 IsDeleted 的情況
-    SELECT RefNo
-    FROM BaseData
-    GROUP BY RefNo
-    HAVING COUNT(DISTINCT IsDeleted) > 1
+-- 確認有沒有重複的 refNo 然後有不同的 isdeled
+WITH BaseData AS (
+    SELECT * FROM RP_NP_Migrate_buffer 
+    WHERE CIFKEY IN (
+        SELECT CIF_KEY 
+        FROM Customer_Migrate_buffer 
+        WHERE customerNo IN (
+            SELECT SK_CUST_ID 
+            FROM BANCS_SK_CUST_INFO 
+            WHERE TS_CUST_ID IN (
+                SELECT TS_CUST_ID 
+                FROM BANCS_SK_CUST_INFO 
+            )
+        )
+    ) 
+    AND RP = 'BOD'
 )
-SELECT
-    A.RP,
-    A.RelatedPartyType,
-    A.RefNo,
-    A.CIFKEY,
-    A.PEPBitwiseCode,
-    A.IsDeleted
-FROM BaseData A
-INNER JOIN BadRefNo B
-    ON A.RefNo = B.RefNo
-ORDER BY
-    A.RefNo,
-    A.IsDeleted,
-    A.CIFKEY;
-
-⸻
-
-如果你想直接看到是哪個客戶造成的，再用這支：
-
-;WITH DupTSCust AS
-(
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY TS_CUST_ID
-    HAVING COUNT(*) > 1
-),
-TargetData AS
-(
-    SELECT
-        R.RefNo,
-        R.CIFKEY,
-        R.IsDeleted,
-        R.PEPBitwiseCode,
-        C.CustomerNo,
-        B.SK_CUST_ID,
-        B.TS_CUST_ID
-    FROM RP_NP_Migrate_buffer R
-    INNER JOIN Customer_Migrate_buffer C
-        ON R.CIFKEY = C.CIF_KEY
-    INNER JOIN BANCS_SK_CUST_INFO B
-        ON C.CustomerNo = B.SK_CUST_ID
-    WHERE R.RP = 'BOD'
-      AND B.TS_CUST_ID IN
-      (
-          SELECT TS_CUST_ID
-          FROM DupTSCust
-      )
-),
-BadRefNo AS
-(
-    SELECT RefNo
-    FROM TargetData
-    GROUP BY RefNo
-    HAVING COUNT(DISTINCT IsDeleted) > 1
+-- 2. 從中篩選出：同一個 RefNo 卻同時擁有不同 isDeleted 值的資料
+SELECT * FROM BaseData A
+WHERE EXISTS (
+    SELECT 1 
+    FROM BaseData B 
+    WHERE A.RefNo = B.RefNo 
+      AND A.isDeleted <> B.isDeleted
 )
-SELECT *
-FROM TargetData
-WHERE RefNo IN
-(
-    SELECT RefNo
-    FROM BadRefNo
-)
-ORDER BY
-    RefNo,
-    TS_CUST_ID,
-    IsDeleted;
+ORDER BY RefNo, isDeleted;
 
-這支查出來會像：
 
-RefNo              IsDeleted   SK_CUST_ID   TS_CUST_ID
------------------  ---------   ----------   ----------
-110101195804164546     0       GOXXE08HK    123456
-110101195804164546     1       GOXXE09HK    123456
 
-這樣你就能直接證明：
+-- RP	RelatedPartyType	RefNo	CIFKey	PEPBitwiseCode	isDeleted
+-- BOD	NULL	110101195804164546	5de499d3-2beb-e511-80c8-0050568c710a	0	0
+-- BOD	NULL	110101195804164546	63e499d3-2beb-e511-80c8-0050568c710a	0	1
 
-* 同一個 TS_CUST_ID
-* 被拆成兩個 SK_CUST_ID
-* 同一個董事 (RefNo)
-* 一筆刪除、一筆未刪除
 
-如果你後面要驗證 PB_boardofdirector_fact 是否因此產生重複資料，我也可以幫你再寫一支直接比對 RP_NP_Migrate_buffer 與 PB_boardofdirector_fact 的驗測 SQL。
+
+	SELECT * FROM BANCS_SK_CUST_INFO WHERE SK_CUST_ID in
+	(
+		SELECT CustomerNo FROM Customer_Migrate_buffer WHERE CIF_KEY =  '5de499d3-2beb-e511-80c8-0050568c710a'
+	)
+
+	SELECT PEPBitwiseCode,IsDeleted,* FROM PB_boardofdirector_fact WHERE CIFKEY 
+	in
+	(
+		SELECT CIF_KEY FROM BSA_SUB_CUST_FACT WHERE customerNo = 'GOXXE08HK'
+	)  AND RefNo = '110101195804164546'
+
+
+
+--針對我的case 
+我是要找出不同的isDeleted 然後最後看寫入的BSA_SUB_CUST_FACT 有沒有取嚴  
+像這case  相同的refno  但有0跟1 取嚴的話是0
+有沒有比較好的寫法
+
