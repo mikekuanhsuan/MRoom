@@ -1,209 +1,32 @@
-WITH Combined_list AS (
-    -- LOAN CREATION
-    SELECT 
-        'LOAN' AS SOURCE_TYPE,
-        LON_NO AS DOC_NO,
-        LON_CCY AS CURRENCY,
-        LON_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_LON_INFO
+依照你的 SQL，除了 AML_INFO_SEQ、FLAG(紅旗交易) 之外，其實還有很多這次新增或串接出來的 AML 欄位可以寫成獨立 TC。
 
-    UNION ALL
-
-    -- L/C CREATION
-    SELECT 
-        'LC_CREATE' AS SOURCE_TYPE,
-        LC_NO AS DOC_NO,
-        LC_NO_CCY AS CURRENCY,
-        LC_NO_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_IMP_LC
-
-    UNION ALL
-
-    -- L/C AMENDMENT
-    SELECT 
-        'LC_AMEND' AS SOURCE_TYPE,
-        LC_NO AS DOC_NO,
-        LC_NO_CCY AS CURRENCY,
-        NEW_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_IMP_LC
-
-    UNION ALL
-
-    -- SG/ED CREATION
-    SELECT 
-        'SGED' AS SOURCE_TYPE,
-        SGED_NO AS DOC_NO,
-        SGED_CCY AS CURRENCY,
-        SGED_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_IMP_SGED
-
-    UNION ALL
-
-    -- I/B CREATION
-    SELECT 
-        'IB' AS SOURCE_TYPE,
-        IB_NO AS DOC_NO,
-        BILL_CCY AS CURRENCY,
-        BILL_AMT1 AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_IMP_IB
-
-    UNION ALL
-
-    -- I/C CREATION 
-    SELECT 
-        'IC' AS SOURCE_TYPE,
-        IC_NO AS DOC_NO,
-        BILL_CCY AS CURRENCY,
-        BILL_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_IMP_IC
-
-    UNION ALL
-
-    -- L/A CREATION/AMENDMENT
-    SELECT 
-        'LA' AS SOURCE_TYPE,
-        LA_NO AS DOC_NO,
-        LC_CCY AS CURRENCY,
-        LC_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_Exp_La_Info
-
-    UNION ALL
-
-    -- L/T CREATION/amendment
-    SELECT 
-        'LT' AS SOURCE_TYPE,
-        LT_NO AS DOC_NO,
-        LC_CCY AS CURRENCY,
-        LT_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_EXP_LT_INFO
-
-    UNION ALL
-
-    -- NEGO CREATION/AMENDMENT
-    SELECT 
-        'NEGO' AS SOURCE_TYPE,
-        NEGO_NO AS DOC_NO,
-        BILL_CCY AS CURRENCY,
-        BILL_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_EXP_NEGO_INFO
-
-    UNION ALL
-
-    -- RENEGO CREATION
-    SELECT 
-        'RENEGO' AS SOURCE_TYPE,
-        REF_NO AS DOC_NO,
-        BILL_CCY AS CURRENCY,
-        BILL_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_EXP_RE_NEGO_INFO
-
-    UNION ALL
-
-    -- O/C CREATION/AMENDMENT
-    SELECT 
-        'OC' AS SOURCE_TYPE,
-        OC_NO AS DOC_NO,
-        BILL_CCY AS CURRENCY,
-        BILL_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
-    FROM WBS_EXP_OC_INFO
-)
-SELECT
-    E.SOURCE_TYPE,
-    E.DOC_NO,
-    E.CURRENCY,
-    E.AMOUNT,
-    E.TRADE_DATE,
-    '_' + C.CUSTOMER_ID AS CUSTOMER_ID,
-    F.FUNC_NAME,
-    aml.FLAG,
-    aml.CONTENT,
-    goodscode.CONTENT AS GOODSCODE,
-    merchandise.CONTENT AS MERCHANDISE,
-    TAG44A_CONTENT.CONTENT AS PORT_OF_LOADING,
-    TAG44E_CONTENT.CONTENT AS PORT_OF_DISCHARGE,
-    TAG44F_CONTENT.CONTENT AS PORT_OF_TRANSSHIPMENT,
-    TAG44B_CONTENT.CONTENT AS FINAL_DESTINATION
-FROM Combined_list E
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'VESSEL_NAME') VESSEL_NAME
-    ON E.AML_INFO_SEQ = VESSEL_NAME.AML_INFO_SEQ
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'FLAG_VESSEL') FLAG_VESSEL
-    ON E.AML_INFO_SEQ = FLAG_VESSEL.AML_INFO_SEQ
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'RED_FLAG') aml
-    ON E.AML_INFO_SEQ = aml.AML_INFO_SEQ
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'REMARK') REMARK
-    ON E.AML_INFO_SEQ = REMARK.AML_INFO_SEQ
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'GOODSCODE') goodscode
-    ON E.AML_INFO_SEQ = goodscode.AML_INFO_SEQ
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'MERCHANDISE') merchandise
-    ON E.AML_INFO_SEQ = merchandise.AML_INFO_SEQ
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'TAG44A_CONTENT') TAG44A_CONTENT
-    ON E.AML_INFO_SEQ = TAG44A_CONTENT.AML_INFO_SEQ
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'TAG44E_CONTENT') TAG44E_CONTENT
-    ON E.AML_INFO_SEQ = TAG44E_CONTENT.AML_INFO_SEQ
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'TAG44F_CONTENT') TAG44F_CONTENT
-    ON E.AML_INFO_SEQ = TAG44F_CONTENT.AML_INFO_SEQ
-LEFT JOIN (SELECT * FROM WBS_AML_DETAIL WHERE AML_TYPE = 'TAG44B_CONTENT') TAG44B_CONTENT
-    ON E.AML_INFO_SEQ = TAG44B_CONTENT.AML_INFO_SEQ
-LEFT JOIN WBS_CIF_CUST_INFO C
-    ON E.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
-LEFT JOIN WBS_RAA_FUNC_INFO F
-    ON aml.FUN_CODE = F.FUNC_CODE
-WHERE
-    E.TRADE_DATE BETWEEN '20251101' AND '20251130'
-    AND aml.FLAG = 'Y'
-ORDER BY E.TRADE_DATE
-
-
-
+我會建議測試案例寫成「驗證 XX 欄位正常出表」的格式，跟你目前紅旗交易的寫法一致，比較符合 SIT/UAT 文件風格。
 
 項目	交易功能	案例說明	預期結果	包含之相關系統代號	驗證結果
-1.	AML月報查詢	驗證報表新增AML_INFO_SEQ 欄位	報表成功顯示	HKODS、OBODS	PASS
-2.	AML月報查詢	驗證紅旗交易資料正常出表	FLAG = ‘Y’ 之資料正常顯示	OBODS	PASS
-3.	AML月報查詢			OBODS	PASS
-4.	AML月報查詢	驗證新增欄位不影響既有報表內容	既有欄位內容正常顯示	OBODS	PASS
+1	AML月報查詢	驗證報表新增 AML_INFO_SEQ 欄位	報表成功顯示 AML_INFO_SEQ 資料	HKODS、OBODS	PASS
+2	AML月報查詢	驗證紅旗交易資料正常出表	FLAG=‘Y’ 之資料正常顯示	OBODS	PASS
+3	AML月報查詢	驗證紅旗原因(Content)資料正常出表	RED_FLAG 對應之 CONTENT 資料正確顯示	OBODS	PASS
+4	AML月報查詢	驗證功能名稱(Func Name)資料正常出表	FUN_CODE 對應之 FUNC_NAME 正確顯示	OBODS	PASS
+5	AML月報查詢	驗證貨品代碼(GOODSCODE)資料正常出表	GOODSCODE 欄位資料正確顯示	OBODS	PASS
+6	AML月報查詢	驗證貨品名稱(MERCHANDISE)資料正常出表	MERCHANDISE 欄位資料正確顯示	OBODS	PASS
+7	AML月報查詢	驗證裝貨港(PORT OF LOADING)資料正常出表	TAG44A_CONTENT 資料正確顯示	OBODS	PASS
+8	AML月報查詢	驗證卸貨港(PORT OF DISCHARGE)資料正常出表	TAG44E_CONTENT 資料正確顯示	OBODS	PASS
+9	AML月報查詢	驗證轉運港(PORT OF TRANSSHIPMENT)資料正常出表	TAG44F_CONTENT 資料正確顯示	OBODS	PASS
+10	AML月報查詢	驗證最終目的地(FINAL DESTINATION)資料正常出表	TAG44B_CONTENT 資料正確顯示	OBODS	PASS
+11	AML月報查詢	驗證客戶編號(Customer ID)資料正常出表	CUSTOMER_ID 正確顯示且與交易資料相符	HKODS、OBODS	PASS
+12	AML月報查詢	驗證交易幣別資料正常出表	CURRENCY 欄位資料正確顯示	HKODS、OBODS	PASS
+13	AML月報查詢	驗證交易金額資料正常出表	AMOUNT 欄位資料正確顯示	HKODS、OBODS	PASS
+14	AML月報查詢	驗證交易日期資料正常出表	TRADE_DATE 欄位資料正確顯示	HKODS、OBODS	PASS
+15	AML月報查詢	驗證新增欄位不影響既有報表內容	既有欄位內容正常顯示且資料筆數一致	OBODS	PASS
 
+如果是正式 SIT/UAT 文件，我會再精簡成下面這 6 個 TC，比較不會被 QA 或 PM 認為太碎：
 
+項目	交易功能	案例說明	預期結果
+1	AML月報查詢	驗證報表新增 AML_INFO_SEQ 欄位	AML_INFO_SEQ 正常顯示
+2	AML月報查詢	驗證紅旗交易資料正常出表	FLAG=‘Y’ 資料正常顯示
+3	AML月報查詢	驗證紅旗資訊相關欄位正常出表	FLAG、CONTENT、FUNC_NAME 資料正確
+4	AML月報查詢	驗證貨品資訊相關欄位正常出表	GOODSCODE、MERCHANDISE 資料正確
+5	AML月報查詢	驗證港口資訊相關欄位正常出表	Loading、Discharge、Transshipment、Final Destination 資料正確
+6	AML月報查詢	驗證新增欄位不影響既有報表內容	原有欄位及資料筆數正常
 
-針對我的code 我有的欄位 我想要寫TC 有正常出表 向紅旗那樣
-只是我不知道中文要怎麼表達
-幫我完成所有需要的欄為
-
-項目	交易功能	案例說明	預期結果	包含之相關系統代號	驗證結果
-1.	AML月報查詢	驗證報表新增AML_INFO_SEQ 欄位	報表成功顯示	HKODS、OBODS	PASS
-2.	AML月報查詢	驗證紅旗交易資料正常出表	FLAG = ‘Y’ 之資料正常顯示	OBODS	PASS
-3.	AML月報查詢			OBODS	PASS
-4.	AML月報查詢	驗證新增欄位不影響既有報表內容	既有欄位內容正常顯示	OBODS	PASS
-
+這種寫法通常比較符合銀行專案的 TC 撰寫習慣。
