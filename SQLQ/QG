@@ -1,54 +1,183 @@
+如果你是要寫 測試 SOP / 驗證步驟，我會這樣寫，比較符合 SIT/UAT 或資轉驗證文件格式。
 
--- 確認有沒有重複的 refNo 然後有不同的 isdeled
-WITH BaseData AS (
-    SELECT * FROM RP_NP_Migrate_buffer 
-    WHERE CIFKEY IN (
-        SELECT CIF_KEY 
-        FROM Customer_Migrate_buffer 
-        WHERE customerNo IN (
-            SELECT SK_CUST_ID 
-            FROM BANCS_SK_CUST_INFO 
-            WHERE TS_CUST_ID IN (
-                SELECT TS_CUST_ID 
-                FROM BANCS_SK_CUST_INFO 
-            )
-        )
-    ) 
-    AND RP = 'BOD'
+測試項目
+
+PB_boardofdirector_fact IsDeleted 取嚴邏輯驗證
+
+⸻
+
+測試目的
+
+確認來源資料 RP_NP_Migrate_buffer 中，
+
+同一個 RefNo 若同時存在不同的 IsDeleted 狀態：
+
+RefNo = A
+IsDeleted = 0
+RefNo = A
+IsDeleted = 1
+
+系統於轉入 PB_boardofdirector_fact 時，是否依照取嚴原則寫入。
+
+⸻
+
+取嚴規則
+
+來源 IsDeleted 組合	預期結果
+0	0
+1	1
+0 + 1	0
+
+驗證邏輯：
+
+最終 IsDeleted = MIN(IsDeleted)
+
+⸻
+
+驗證步驟一
+
+找出來源資料存在不同 IsDeleted 的 RefNo
+
+WITH SourceData AS
+(
+    SELECT
+        RefNo,
+        MIN(CAST(IsDeleted AS INT)) AS ExpectedIsDeleted,
+        COUNT(*) AS TotalCount
+    FROM RP_NP_Migrate_buffer
+    WHERE RP = 'BOD'
+    GROUP BY RefNo
+    HAVING COUNT(DISTINCT CAST(IsDeleted AS INT)) > 1
 )
--- 2. 從中篩選出：同一個 RefNo 卻同時擁有不同 isDeleted 值的資料
-SELECT * FROM BaseData A
-WHERE EXISTS (
-    SELECT 1 
-    FROM BaseData B 
-    WHERE A.RefNo = B.RefNo 
-      AND A.isDeleted <> B.isDeleted
-)
-ORDER BY RefNo, isDeleted;
+SELECT *
+FROM SourceData
+ORDER BY RefNo;
 
+預期結果
 
+取得所有同時存在：
 
--- RP	RelatedPartyType	RefNo	CIFKey	PEPBitwiseCode	isDeleted
--- BOD	NULL	110101195804164546	5de499d3-2beb-e511-80c8-0050568c710a	0	0
--- BOD	NULL	110101195804164546	63e499d3-2beb-e511-80c8-0050568c710a	0	1
+IsDeleted = 0
+IsDeleted = 1
 
+之 RefNo。
 
+例如：
 
-	SELECT * FROM BANCS_SK_CUST_INFO WHERE SK_CUST_ID in
-	(
-		SELECT CustomerNo FROM Customer_Migrate_buffer WHERE CIF_KEY =  '5de499d3-2beb-e511-80c8-0050568c710a'
-	)
+RefNo	ExpectedIsDeleted
+110101195804164546	0
 
-	SELECT PEPBitwiseCode,IsDeleted,* FROM PB_boardofdirector_fact WHERE CIFKEY 
-	in
-	(
-		SELECT CIF_KEY FROM BSA_SUB_CUST_FACT WHERE customerNo = 'GOXXE08HK'
-	)  AND RefNo = '110101195804164546'
+⸻
 
+驗證步驟二
 
+檢查來源資料明細
 
---針對我的case 
-我是要找出不同的isDeleted 然後最後看寫入的BSA_SUB_CUST_FACT 有沒有取嚴  
-像這case  相同的refno  但有0跟1 取嚴的話是0
-有沒有比較好的寫法
+以查出的 RefNo 為例：
 
+SELECT
+    RefNo,
+    CIFKEY,
+    IsDeleted
+FROM RP_NP_Migrate_buffer
+WHERE RefNo = '110101195804164546'
+AND RP = 'BOD'
+ORDER BY IsDeleted;
+
+預期結果
+
+RefNo                 IsDeleted
+110101195804164546    0
+110101195804164546    1
+
+確認來源資料確實存在不同狀態。
+
+⸻
+
+驗證步驟三
+
+找出對應 CustomerNo
+
+SELECT *
+FROM BANCS_SK_CUST_INFO
+WHERE SK_CUST_ID IN
+(
+    SELECT CustomerNo
+    FROM Customer_Migrate_buffer
+    WHERE CIF_KEY =
+    '5de499d3-2beb-e511-80c8-0050568c710a'
+);
+
+目的
+
+取得該 CIFKEY 對應之 CustomerNo。
+
+例如：
+
+CustomerNo = GOXXE08HK
+
+⸻
+
+驗證步驟四
+
+檢查目標表寫入結果
+
+SELECT
+    RefNo,
+    CIFKEY,
+    IsDeleted,
+    PEPBitwiseCode
+FROM PB_boardofdirector_fact
+WHERE RefNo = '110101195804164546'
+AND CIFKEY IN
+(
+    SELECT CIF_KEY
+    FROM BSA_SUB_CUST_FACT
+    WHERE CustomerNo = 'GOXXE08HK'
+);
+
+⸻
+
+驗證步驟五
+
+比對預期值與實際值
+
+預期
+
+來源資料：
+
+RefNo
+110101195804164546
+IsDeleted
+0
+1
+
+取嚴後：
+
+MIN(IsDeleted)=0
+
+目標表應寫入：
+
+IsDeleted=0
+
+⸻
+
+驗證結果判定
+
+條件	結果
+目標表 IsDeleted = MIN(來源 IsDeleted)	PASS
+目標表 IsDeleted ≠ MIN(來源 IsDeleted)	FAIL
+
+⸻
+
+測試案例範例
+
+RefNo	來源 IsDeleted	預期	實際	結果
+110101195804164546	0、1	0	0	PASS
+A123456789	0、1	0	1	FAIL
+
+⸻
+
+如果是我要交給 PM、SA 或廠商的測試文件，我會再加一句：
+
+驗證原則：同一 RefNo 若存在多筆資料且 IsDeleted 狀態不一致，系統應採用最嚴格狀態(MIN IsDeleted)寫入 PB_boardofdirector_fact，以避免有效資料被誤判為刪除資料。
