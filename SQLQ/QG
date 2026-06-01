@@ -1,9 +1,5 @@
-好的，沒問題！這裡為你提供兩種「複製即可直接執行」的完整 SQL 程式碼。
-因為你的資料庫看起來是 SQL Server（SSMS 介面），我會使用最適合該環境的 **WITH (CTE)** 語法，這樣可以把你原本那段長長的巢狀查詢只寫一次，乾淨又好維護。
-### 方案一：列出「完整明細」（推薦 👍）
-這個版本會把符合條件的 RefNo 的所有資料列（包含 isDeleted 為 0 和 1 的行）通通秀出來，方便你比對。
-```sql
--- 1. 先將你原本的查詢結果包成一個虛擬暫存表 (叫作 BaseData)
+
+-- 確認有沒有重複的 refNo 然後有不同的 isdeled
 WITH BaseData AS (
     SELECT * FROM RP_NP_Migrate_buffer 
     WHERE CIFKEY IN (
@@ -15,7 +11,6 @@ WITH BaseData AS (
             WHERE TS_CUST_ID IN (
                 SELECT TS_CUST_ID 
                 FROM BANCS_SK_CUST_INFO 
-                WHERE TS_CUST_ID = '73229501'
             )
         )
     ) 
@@ -31,33 +26,25 @@ WHERE EXISTS (
 )
 ORDER BY RefNo, isDeleted;
 
-```
-### 方案二：只列出「有哪些 RefNo」（乾淨清單）
-如果你不想要看密密麻麻的明細，只想知道到底是哪幾個 RefNo 有這個狀況，用這個版本會直接幫你做群組統計。
-```sql
--- 1. 同樣先包成 BaseData
-WITH BaseData AS (
-    SELECT * FROM RP_NP_Migrate_buffer 
-    WHERE CIFKEY IN (
-        SELECT CIF_KEY 
-        FROM Customer_Migrate_buffer 
-        WHERE customerNo IN (
-            SELECT SK_CUST_ID 
-            FROM BANCS_SK_CUST_INFO 
-            WHERE TS_CUST_ID IN (
-                SELECT TS_CUST_ID 
-                FROM BANCS_SK_CUST_INFO 
-                WHERE TS_CUST_ID = '73229501'
-            )
-        )
-    ) 
-    AND RP = 'BOD'
-)
--- 2. 依照 RefNo 分組，並篩選出 isDeleted 相異種類數量等於 2 (代表 0 和 1 都存在) 的單號
-SELECT RefNo
-FROM BaseData
-GROUP BY RefNo
-HAVING COUNT(DISTINCT isDeleted) = 2
-ORDER BY RefNo;
 
-```
+
+-- RP	RelatedPartyType	RefNo	CIFKey	PEPBitwiseCode	isDeleted
+-- BOD	NULL	110101195804164546	5de499d3-2beb-e511-80c8-0050568c710a	0	0
+-- BOD	NULL	110101195804164546	63e499d3-2beb-e511-80c8-0050568c710a	0	1
+
+
+
+	SELECT * FROM BANCS_SK_CUST_INFO WHERE SK_CUST_ID in
+	(
+		SELECT CustomerNo FROM Customer_Migrate_buffer WHERE CIF_KEY =  '5de499d3-2beb-e511-80c8-0050568c710a'
+	)
+
+	SELECT PEPBitwiseCode,IsDeleted,* FROM PB_boardofdirector_fact WHERE CIFKEY 
+	in
+	(
+		SELECT CIF_KEY FROM BSA_SUB_CUST_FACT WHERE customerNo = 'GOXXE08HK'
+	)  AND RefNo = '110101195804164546'
+
+
+
+針對我的case 有沒有比較好的寫法，給我完整的code 跟做法說明
