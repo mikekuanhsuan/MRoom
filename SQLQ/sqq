@@ -1,32 +1,238 @@
-依照你的 SQL，除了 AML_INFO_SEQ、FLAG(紅旗交易) 之外，其實還有很多這次新增或串接出來的 AML 欄位可以寫成獨立 TC。
+如果你要交 SIT/UAT 測試證據，通常每個 TC 都要有：
 
-我會建議測試案例寫成「驗證 XX 欄位正常出表」的格式，跟你目前紅旗交易的寫法一致，比較符合 SIT/UAT 文件風格。
+1. 執行 SQL
+2. 查詢結果截圖
+3. 報表截圖
+4. 比對結果說明
 
-項目	交易功能	案例說明	預期結果	包含之相關系統代號	驗證結果
-1	AML月報查詢	驗證報表新增 AML_INFO_SEQ 欄位	報表成功顯示 AML_INFO_SEQ 資料	HKODS、OBODS	PASS
-2	AML月報查詢	驗證紅旗交易資料正常出表	FLAG=‘Y’ 之資料正常顯示	OBODS	PASS
-3	AML月報查詢	驗證紅旗原因(Content)資料正常出表	RED_FLAG 對應之 CONTENT 資料正確顯示	OBODS	PASS
-4	AML月報查詢	驗證功能名稱(Func Name)資料正常出表	FUN_CODE 對應之 FUNC_NAME 正確顯示	OBODS	PASS
-5	AML月報查詢	驗證貨品代碼(GOODSCODE)資料正常出表	GOODSCODE 欄位資料正確顯示	OBODS	PASS
-6	AML月報查詢	驗證貨品名稱(MERCHANDISE)資料正常出表	MERCHANDISE 欄位資料正確顯示	OBODS	PASS
-7	AML月報查詢	驗證裝貨港(PORT OF LOADING)資料正常出表	TAG44A_CONTENT 資料正確顯示	OBODS	PASS
-8	AML月報查詢	驗證卸貨港(PORT OF DISCHARGE)資料正常出表	TAG44E_CONTENT 資料正確顯示	OBODS	PASS
-9	AML月報查詢	驗證轉運港(PORT OF TRANSSHIPMENT)資料正常出表	TAG44F_CONTENT 資料正確顯示	OBODS	PASS
-10	AML月報查詢	驗證最終目的地(FINAL DESTINATION)資料正常出表	TAG44B_CONTENT 資料正確顯示	OBODS	PASS
-11	AML月報查詢	驗證客戶編號(Customer ID)資料正常出表	CUSTOMER_ID 正確顯示且與交易資料相符	HKODS、OBODS	PASS
-12	AML月報查詢	驗證交易幣別資料正常出表	CURRENCY 欄位資料正確顯示	HKODS、OBODS	PASS
-13	AML月報查詢	驗證交易金額資料正常出表	AMOUNT 欄位資料正確顯示	HKODS、OBODS	PASS
-14	AML月報查詢	驗證交易日期資料正常出表	TRADE_DATE 欄位資料正確顯示	HKODS、OBODS	PASS
-15	AML月報查詢	驗證新增欄位不影響既有報表內容	既有欄位內容正常顯示且資料筆數一致	OBODS	PASS
+我幫你整理成可以直接貼到 TC 的格式。
 
-如果是正式 SIT/UAT 文件，我會再精簡成下面這 6 個 TC，比較不會被 QA 或 PM 認為太碎：
+⸻
 
-項目	交易功能	案例說明	預期結果
-1	AML月報查詢	驗證報表新增 AML_INFO_SEQ 欄位	AML_INFO_SEQ 正常顯示
-2	AML月報查詢	驗證紅旗交易資料正常出表	FLAG=‘Y’ 資料正常顯示
-3	AML月報查詢	驗證紅旗資訊相關欄位正常出表	FLAG、CONTENT、FUNC_NAME 資料正確
-4	AML月報查詢	驗證貨品資訊相關欄位正常出表	GOODSCODE、MERCHANDISE 資料正確
-5	AML月報查詢	驗證港口資訊相關欄位正常出表	Loading、Discharge、Transshipment、Final Destination 資料正確
-6	AML月報查詢	驗證新增欄位不影響既有報表內容	原有欄位及資料筆數正常
+TC01 驗證報表新增 AML_INFO_SEQ 欄位
 
-這種寫法通常比較符合銀行專案的 TC 撰寫習慣。
+SQL
+
+SELECT TOP 20
+    AML_INFO_SEQ,
+    TRADE_DATE
+FROM (
+    -- 貼 Combined_list CTE
+) A
+WHERE AML_INFO_SEQ IS NOT NULL
+
+測試步驟
+
+1. 執行 SQL 查詢 AML_INFO_SEQ。
+2. 執行 AML 月報。
+3. 比對報表 AML_INFO_SEQ 欄位。
+
+預期結果
+
+報表成功顯示 AML_INFO_SEQ，且與資料庫查詢結果一致。
+
+證據
+
+📷 SQL查詢結果截圖
+
+📷 AML月報截圖
+
+⸻
+
+TC02 驗證紅旗交易資料正常出表
+
+SQL
+
+SELECT
+    AML_INFO_SEQ,
+    FLAG,
+    CONTENT
+FROM WBS_AML_DETAIL
+WHERE AML_TYPE='RED_FLAG'
+AND FLAG='Y'
+
+測試步驟
+
+1. 查詢 FLAG=‘Y’ 資料。
+2. 執行 AML 月報。
+3. 確認報表有顯示該筆交易。
+
+預期結果
+
+FLAG=‘Y’ 交易正常出表。
+
+證據
+
+📷 SQL結果
+
+📷 報表結果
+
+⸻
+
+TC03 驗證紅旗資訊相關欄位正常出表
+
+驗證欄位：
+
+* FLAG
+* CONTENT
+* FUNC_NAME
+
+SQL
+
+SELECT
+    aml.AML_INFO_SEQ,
+    aml.FLAG,
+    aml.CONTENT,
+    F.FUNC_NAME
+FROM WBS_AML_DETAIL aml
+LEFT JOIN WBS_RAA_FUNC_INFO F
+ON aml.FUN_CODE = F.FUNC_CODE
+WHERE aml.AML_TYPE='RED_FLAG'
+
+測試步驟
+
+1. 查詢紅旗資料。
+2. 執行 AML 月報。
+3. 比對 FLAG、CONTENT、FUNC_NAME。
+
+預期結果
+
+紅旗資訊與資料庫內容一致。
+
+證據
+
+📷 SQL結果
+
+📷 報表結果
+
+⸻
+
+TC04 驗證貨品資訊相關欄位正常出表
+
+驗證欄位：
+
+* GOODSCODE
+* MERCHANDISE
+
+SQL
+
+SELECT
+    AML_INFO_SEQ,
+    AML_TYPE,
+    CONTENT
+FROM WBS_AML_DETAIL
+WHERE AML_TYPE IN
+(
+'GOODSCODE',
+'MERCHANDISE'
+)
+
+測試步驟
+
+1. 查詢貨品資訊。
+2. 執行 AML 月報。
+3. 比對欄位內容。
+
+預期結果
+
+貨品代碼及貨品名稱正確顯示。
+
+證據
+
+📷 SQL結果
+
+📷 報表結果
+
+⸻
+
+TC05 驗證港口資訊相關欄位正常出表
+
+驗證欄位：
+
+* PORT_OF_LOADING
+* PORT_OF_DISCHARGE
+* PORT_OF_TRANSSHIPMENT
+* FINAL_DESTINATION
+
+SQL
+
+SELECT
+    AML_INFO_SEQ,
+    AML_TYPE,
+    CONTENT
+FROM WBS_AML_DETAIL
+WHERE AML_TYPE IN
+(
+'TAG44A_CONTENT',
+'TAG44E_CONTENT',
+'TAG44F_CONTENT',
+'TAG44B_CONTENT'
+)
+
+測試步驟
+
+1. 查詢港口資料。
+2. 執行 AML 月報。
+3. 比對港口資訊。
+
+預期結果
+
+港口資訊正確顯示。
+
+證據
+
+📷 SQL結果
+
+📷 報表結果
+
+⸻
+
+TC06 驗證新增欄位不影響既有報表內容
+
+驗證欄位：
+
+* CUSTOMER_ID
+* DOC_NO
+* CURRENCY
+* AMOUNT
+* TRADE_DATE
+
+SQL
+
+直接使用你的完整 SQL：
+
+-- 貼你的完整 AML 月報 SQL
+
+測試步驟
+
+1. 執行完整 SQL。
+2. 執行 AML 月報。
+3. 抽樣比對既有欄位。
+
+預期結果
+
+既有欄位資料正確。
+
+新增 AML 欄位不影響原報表內容。
+
+證據
+
+📷 SQL結果
+
+📷 AML月報結果
+
+📷 比對畫面
+
+⸻
+
+最後 TC 表格可直接貼文件
+
+項目	交易功能	案例說明	預期結果	系統	結果
+1	AML月報查詢	驗證報表新增AML_INFO_SEQ欄位	AML_INFO_SEQ正常顯示	HKODS、OBODS	PASS
+2	AML月報查詢	驗證紅旗交易資料正常出表	FLAG=‘Y’資料正常顯示	OBODS	PASS
+3	AML月報查詢	驗證紅旗資訊相關欄位正常出表	FLAG、CONTENT、FUNC_NAME資料正確	OBODS	PASS
+4	AML月報查詢	驗證貨品資訊相關欄位正常出表	GOODSCODE、MERCHANDISE資料正確	OBODS	PASS
+5	AML月報查詢	驗證港口資訊相關欄位正常出表	港口資訊資料正確	OBODS	PASS
+6	AML月報查詢	驗證新增欄位不影響既有報表內容	原有欄位及資料筆數正常	HKODS、OBODS	PASS
+
+這樣 QA、SA、PM 看起來會是很標準的銀行 SIT/UAT 測試案例格式。
