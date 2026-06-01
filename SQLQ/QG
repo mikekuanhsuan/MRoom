@@ -1,50 +1,195 @@
+你的 SQL 可以查出 同一個 RefNo 有不同 IsDeleted 的情況，但效能不太好，因為：
 
--- 確認有沒有重複的 refNo 然後有不同的 isdeled
-WITH BaseData AS (
-    SELECT * FROM RP_NP_Migrate_buffer 
-    WHERE CIFKEY IN (
-        SELECT CIF_KEY 
-        FROM Customer_Migrate_buffer 
-        WHERE customerNo IN (
-            SELECT SK_CUST_ID 
-            FROM BANCS_SK_CUST_INFO 
-            WHERE TS_CUST_ID IN (
-                SELECT TS_CUST_ID 
-                FROM BANCS_SK_CUST_INFO 
-            )
-        )
-    ) 
-    AND RP = 'BOD'
+1. EXISTS 會自己跟自己比對一次。
+2. IN (SELECT...) 巢狀很多層。
+3. 你最後其實只想找：
+    * 同一個 RefNo
+    * 同時存在 IsDeleted=0 和 IsDeleted=1
+    * 且這些資料屬於重複 TS_CUST_ID 的客戶
+
+建議改成先把客戶範圍抓出來，再直接用 GROUP BY 找異常。
+
+⸻
+
+Step1. 找出異常 RefNo
+
+;WITH DupCust AS
+(
+    SELECT DISTINCT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE TS_CUST_ID IN
+    (
+        SELECT TS_CUST_ID
+        FROM BANCS_SK_CUST_INFO
+        GROUP BY TS_CUST_ID
+        HAVING COUNT(*) > 1
+    )
+),
+TargetCIF AS
+(
+    SELECT DISTINCT CIF_KEY
+    FROM Customer_Migrate_buffer
+    WHERE CustomerNo IN
+    (
+        SELECT SK_CUST_ID
+        FROM DupCust
+    )
+),
+BaseData AS
+(
+    SELECT *
+    FROM RP_NP_Migrate_buffer
+    WHERE RP = 'BOD'
+      AND CIFKEY IN
+      (
+          SELECT CIF_KEY
+          FROM TargetCIF
+      )
 )
--- 2. 從中篩選出：同一個 RefNo 卻同時擁有不同 isDeleted 值的資料
-SELECT * FROM BaseData A
-WHERE EXISTS (
-    SELECT 1 
-    FROM BaseData B 
-    WHERE A.RefNo = B.RefNo 
-      AND A.isDeleted <> B.isDeleted
+SELECT
+    RefNo,
+    COUNT(*) AS TotalCnt,
+    MIN(IsDeleted) AS MinDeleted,
+    MAX(IsDeleted) AS MaxDeleted
+FROM BaseData
+GROUP BY RefNo
+HAVING MIN(IsDeleted) <> MAX(IsDeleted);
+
+這樣可以快速看到：
+
+RefNo	TotalCnt	MinDeleted	MaxDeleted
+110101195804164546	2	0	1
+
+代表同一個 RefNo 同時存在有效及刪除資料。
+
+⸻
+
+Step2. 把異常明細撈出來
+
+找到 RefNo 後再看明細：
+
+;WITH DupCust AS
+(
+    SELECT DISTINCT SK_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE TS_CUST_ID IN
+    (
+        SELECT TS_CUST_ID
+        FROM BANCS_SK_CUST_INFO
+        GROUP BY TS_CUST_ID
+        HAVING COUNT(*) > 1
+    )
+),
+TargetCIF AS
+(
+    SELECT DISTINCT CIF_KEY
+    FROM Customer_Migrate_buffer
+    WHERE CustomerNo IN
+    (
+        SELECT SK_CUST_ID
+        FROM DupCust
+    )
+),
+BaseData AS
+(
+    SELECT *
+    FROM RP_NP_Migrate_buffer
+    WHERE RP = 'BOD'
+      AND CIFKEY IN
+      (
+          SELECT CIF_KEY
+          FROM TargetCIF
+      )
+),
+BadRefNo AS
+(
+    SELECT RefNo
+    FROM BaseData
+    GROUP BY RefNo
+    HAVING MIN(IsDeleted) <> MAX(IsDeleted)
 )
-ORDER BY RefNo, isDeleted;
+SELECT *
+FROM BaseData
+WHERE RefNo IN
+(
+    SELECT RefNo
+    FROM BadRefNo
+)
+ORDER BY RefNo, IsDeleted;
 
+結果會像：
 
+RefNo              CIFKEY                                  IsDeleted
+------------------ -------------------------------------- ----------
+110101195804164546 5de499d3-2beb-e511-80c8-0050568c710a   0
+110101195804164546 63e499d3-2beb-e511-80c8-0050568c710a   1
 
--- RP	RelatedPartyType	RefNo	CIFKey	PEPBitwiseCode	isDeleted
--- BOD	NULL	110101195804164546	5de499d3-2beb-e511-80c8-0050568c710a	0	0
--- BOD	NULL	110101195804164546	63e499d3-2beb-e511-80c8-0050568c710a	0	1
+⸻
 
+Step3. 找出哪個 TS_CUST_ID 造成的
 
+通常根因分析我會直接這樣查：
 
-	SELECT * FROM BANCS_SK_CUST_INFO WHERE SK_CUST_ID in
-	(
-		SELECT CustomerNo FROM Customer_Migrate_buffer WHERE CIF_KEY =  '5de499d3-2beb-e511-80c8-0050568c710a'
-	)
+SELECT
+    A.RefNo,
+    A.CIFKEY,
+    A.IsDeleted,
+    B.CustomerNo,
+    C.SK_CUST_ID,
+    C.TS_CUST_ID
+FROM RP_NP_Migrate_buffer A
+INNER JOIN Customer_Migrate_buffer B
+    ON A.CIFKEY = B.CIF_KEY
+INNER JOIN BANCS_SK_CUST_INFO C
+    ON B.CustomerNo = C.SK_CUST_ID
+WHERE A.RefNo = '110101195804164546'
+ORDER BY C.TS_CUST_ID,A.IsDeleted;
 
-	SELECT PEPBitwiseCode,IsDeleted,* FROM PB_boardofdirector_fact WHERE CIFKEY 
-	in
-	(
-		SELECT CIF_KEY FROM BSA_SUB_CUST_FACT WHERE customerNo = 'GOXXE08HK'
-	)  AND RefNo = '110101195804164546'
+這樣可以直接看到：
 
+RefNo             IsDeleted  SK_CUST_ID   TS_CUST_ID
+110101195804164546    0      GOXXE08HK    123456
+110101195804164546    1      GOXXE09HK    123456
 
+如果兩筆對應到同一個 TS_CUST_ID，就幾乎可以確定：
 
-針對我的case 有沒有比較好的寫法，給我完整的code 跟做法說明
+* 同一個客戶被拆成兩個 SK_CUST_ID
+* 一筆被標記刪除
+* 一筆保留
+* Migration 時兩筆都被帶進來
+
+⸻
+
+我會怎麼驗證
+
+再做一支統計：
+
+;WITH BaseData AS
+(
+    SELECT
+        RefNo,
+        COUNT(DISTINCT IsDeleted) AS DeletedTypeCnt
+    FROM RP_NP_Migrate_buffer
+    WHERE RP = 'BOD'
+    GROUP BY RefNo
+)
+SELECT COUNT(*)
+FROM BaseData
+WHERE DeletedTypeCnt > 1;
+
+如果結果不是 0，就代表 Migration Source 本身就有矛盾資料。
+
+接著再比對：
+
+SELECT
+    RefNo,
+    COUNT(DISTINCT CIFKEY) AS CIFCnt,
+    COUNT(DISTINCT IsDeleted) AS DeletedCnt
+FROM RP_NP_Migrate_buffer
+WHERE RP='BOD'
+GROUP BY RefNo
+HAVING COUNT(DISTINCT IsDeleted) > 1;
+
+這支最容易向 SA 或 SK 說明：
+
+同一個 RefNo 被掛在不同 CIF 下，而且 IsDeleted 狀態不一致，因此造成 PB_boardofdirector_fact 出現重複或衝突資料。
