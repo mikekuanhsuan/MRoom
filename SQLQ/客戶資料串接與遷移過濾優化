@@ -1,42 +1,188 @@
--- 1
-SELECT COUNT(*) FROM WBS_AML_DETAIL
-WHERE AML_TYPE='RED_FLAG'
-AND FLAG='Y'
+很好，現在已經找到一個很重要的風險點。
 
-(沒有資料行名稱)
-3630
+結論
 
+你的報表目前有機率產生：
 
--- 2
-把上面主查詢改成
+1筆交易
+變成
+2筆~13筆交易
+
+因為：
+
+WBS_AML_DETAIL
+
+不是每個 AML_TYPE 都只有一筆。
+
+例如：
+
+AML_INFO_SEQ = 21995
+AML_TYPE = INSURANCE_COMPANY
+COUNT = 13
+
+代表：
+
+同一個 AML_INFO_SEQ
+有13筆 INSURANCE_COMPANY
+
+⸻
+
+但你的報表目前使用：
+
+LEFT JOIN
+(
+    SELECT *
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE='VESSEL_NAME'
+) VESSEL_NAME
+
+如果：
+
+AML_INFO_SEQ=30449
+VESSEL_NAME 有3筆
+
+那一筆交易會被 JOIN 成：
+
+第1筆
+第2筆
+第3筆
+
+筆數直接膨脹。
+
+⸻
+
+好消息
+
+你這次報表使用的 AML_TYPE：
+
+RED_FLAG
+GOODSCODE
+MERCHANDISE
+VESSEL_NAME
+FLAG_VESSEL
+REMARK
+TAG44A_CONTENT
+TAG44E_CONTENT
+TAG44F_CONTENT
+TAG44B_CONTENT
+
+我們先檢查是不是這些類型也有重複。
+
+請直接跑：
+
+SELECT
+    AML_TYPE,
+    COUNT(*) DUP_CNT
+FROM
+(
+    SELECT
+        AML_INFO_SEQ,
+        AML_TYPE,
+        COUNT(*) CNT
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE IN
+    (
+        'RED_FLAG',
+        'GOODSCODE',
+        'MERCHANDISE',
+        'VESSEL_NAME',
+        'FLAG_VESSEL',
+        'REMARK',
+        'TAG44A_CONTENT',
+        'TAG44E_CONTENT',
+        'TAG44F_CONTENT',
+        'TAG44B_CONTENT'
+    )
+    GROUP BY AML_INFO_SEQ, AML_TYPE
+    HAVING COUNT(*) > 1
+) A
+GROUP BY AML_TYPE
+ORDER BY AML_TYPE;
+
+⸻
+
+再跑一個最重要的
+
+驗證主查詢是否被放大。
+
+先算 Red Flag 筆數：
+
+;WITH Combined_List AS
+(
+    -- 你的 Combined_List
+)
 SELECT COUNT(*)
+FROM Combined_List E
+JOIN WBS_AML_DETAIL AML
+    ON E.AML_INFO_SEQ = AML.AML_INFO_SEQ
+WHERE AML.AML_TYPE='RED_FLAG'
+AND AML.FLAG='Y'
 
-確認有資料。
+記下結果。
 
--- 3
-SELECT TOP 20 *
-FROM WBS_RAA_FUNC_INFO
+例如：
 
-確認 FUNC_NAME 有帶出。
+3500
 
-有
+⸻
 
--- 4
-看看有沒有重複筆數
-SELECT AML_INFO_SEQ, AML_TYPE, COUNT(*)
-FROM WBS_AML_DETAIL
-GROUP BY AML_INFO_SEQ, AML_TYPE
-HAVING COUNT(*) > 1
+再跑你的完整查詢：
 
-AML_INFO_SEQ	AML_TYPE	(沒有資料行名稱)
-30449	VESSEL_NAME	3
-28935	OTHERS_PARTY	2
-21892	VESSEL_NAME	2
-21995	INSURANCE_COMPANY	13
-23228	VESSEL_NAME	2
-15369	CARRIER	2
-16239	VESSEL_NAME	2
-9785	NOTI_PARTY	2
-11806	CARRIER	2
-24393	OTHERS_PARTY	4
-24166	INSURANCE_COMPANY	2
+SELECT COUNT(*)
+FROM
+(
+    你的完整主查詢
+) A
+
+如果：
+
+3500
+
+=
+
+3500
+
+代表安全。
+
+⸻
+
+如果：
+
+3500
+
+變：
+
+3720
+
+甚至：
+
+4200
+
+代表 JOIN 被放大了。
+
+⸻
+
+我目前的判斷
+
+依你提供的結果：
+
+VESSEL_NAME 重複
+
+已經存在。
+
+所以我懷疑最後你正式版 SP 要改成：
+
+LEFT JOIN
+(
+    SELECT AML_INFO_SEQ,
+           MAX(CONTENT) CONTENT
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE='VESSEL_NAME'
+    GROUP BY AML_INFO_SEQ
+) VESSEL_NAME
+
+這種聚合寫法。
+
+不然 Informatica 匯出的筆數很可能比實際 Red Flag 筆數多。
+
+先把上面兩支 COUNT 的結果貼給我，我就能判斷最終版 SP 要不要加防重複邏輯。
