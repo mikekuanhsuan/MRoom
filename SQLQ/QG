@@ -1,183 +1,288 @@
-如果你是要寫 測試 SOP / 驗證步驟，我會這樣寫，比較符合 SIT/UAT 或資轉驗證文件格式。
+對，這支 SP 的設計就是 每月排程跑一次的香港交易統計報表。
 
-測試項目
+從註解也看得出來：
 
-PB_boardofdirector_fact IsDeleted 取嚴邏輯驗證
+20210222 香港交易統計表
 
-⸻
+而且它抓的是：
 
-測試目的
+DATEADD(MONTH,-1,GETDATE())
 
-確認來源資料 RP_NP_Migrate_buffer 中，
+也就是：
 
-同一個 RefNo 若同時存在不同的 IsDeleted 狀態：
-
-RefNo = A
-IsDeleted = 0
-RefNo = A
-IsDeleted = 1
-
-系統於轉入 PB_boardofdirector_fact 時，是否依照取嚴原則寫入。
+執行當下日期的「上個月資料」
 
 ⸻
 
-取嚴規則
+日期條件在哪裡？
 
-來源 IsDeleted 組合	預期結果
-0	0
-1	1
-0 + 1	0
+在這段：
 
-驗證邏輯：
-
-最終 IsDeleted = MIN(IsDeleted)
-
-⸻
-
-驗證步驟一
-
-找出來源資料存在不同 IsDeleted 的 RefNo
-
-WITH SourceData AS
-(
-    SELECT
-        RefNo,
-        MIN(CAST(IsDeleted AS INT)) AS ExpectedIsDeleted,
-        COUNT(*) AS TotalCount
-    FROM RP_NP_Migrate_buffer
-    WHERE RP = 'BOD'
-    GROUP BY RefNo
-    HAVING COUNT(DISTINCT CAST(IsDeleted AS INT)) > 1
+WHERE (
+       (LEFT(TXN.TRADE_DATE,6)
+          = CONVERT(VARCHAR(6),
+                    DATEADD(MONTH,-1,GETDATE()),
+                    112)
+       )
+       OR @@SERVERNAME='OBODS_TEST'
 )
-SELECT *
-FROM SourceData
-ORDER BY RefNo;
 
-預期結果
+拆開看：
 
-取得所有同時存在：
+假設今天：
 
-IsDeleted = 0
-IsDeleted = 1
+GETDATE()
+= 2026-06-02
 
-之 RefNo。
+那：
+
+DATEADD(MONTH,-1,GETDATE())
+=
+2026-05-02
+
+再轉：
+
+CONVERT(VARCHAR(6), ...,112)
+=
+202605
+
+所以實際條件變成：
+
+LEFT(TXN.TRADE_DATE,6)='202605'
+
+也就是：
+
+正式區
+
+抓
+
+20260501
+20260502
+...
+20260531
+
+全部五月資料
+
+⸻
+
+測試區
+
+因為有：
+
+OR @@SERVERNAME='OBODS_TEST'
+
+如果 Server Name 是：
+
+OBODS_TEST
+
+則直接略過月份限制。
+
+所以測試區會撈：
+
+全部資料
+
+方便測試。
+
+⸻
+
+這支SP有哪些變數？
+
+其實沒有報表參數。
+
+只有：
+
+DECLARE @SQL NVARCHAR(MAX)
+
+⸻
+
+@SQL 是幹嘛的？
+
+它不是查資料條件。
+
+它只是最後把結果轉成：
+
+TAB格式
+
+輸出給報表檔。
+
+⸻
 
 例如：
 
-RefNo	ExpectedIsDeleted
-110101195804164546	0
+原資料
+
+TRADE_OPERATION	CUST_ID	REF_NO
+LA開狀	C001	LC001
+
+最後變成：
+
+TRADE_OPERATION    CUST_ID    REF_NO
+LA開狀             C001       LC001
+
+用：
+
+CHAR(9)
+
+(Tab)
+
+串起來。
+
+所以：
+
+DECLARE @SQL NVARCHAR(MAX)
+
+只是組字串。
+
+跟查詢邏輯沒關係。
 
 ⸻
 
-驗證步驟二
+真正的交易資料來源
 
-檢查來源資料明細
+這段：
 
-以查出的 RefNo 為例：
-
-SELECT
-    RefNo,
-    CIFKEY,
-    IsDeleted
-FROM RP_NP_Migrate_buffer
-WHERE RefNo = '110101195804164546'
-AND RP = 'BOD'
-ORDER BY IsDeleted;
-
-預期結果
-
-RefNo                 IsDeleted
-110101195804164546    0
-110101195804164546    1
-
-確認來源資料確實存在不同狀態。
+FROM WBS_EXP_LA_INFO TXN
 
 ⸻
 
-驗證步驟三
+抓的是：
 
-找出對應 CustomerNo
+WBS_EXP_LA_INFO
 
-SELECT *
-FROM BANCS_SK_CUST_INFO
-WHERE SK_CUST_ID IN
+Export Letter of Credit Advise
+
+資料。
+
+⸻
+
+交易功能代碼哪裡來？
+
+固定寫死：
+
+'077005' AS FUNC_CODE
+
+再去：
+
+WBS_RAA_FUNC_INFO
+
+找名稱
+
+077005：XXX
+
+組成：
+
+TRADE_OPERATION
+
+⸻
+
+金額換匯邏輯
+
+這段：
+
+TXN.AMT * ISNULL(BKRT.BOOK_RATE,1)
+
+意思：
+
+LC原幣金額
+*
+最新DBU匯率
+
+全部換成 HKD 基準統計。
+
+匯率來源：
+
+WBS_CTB_BOOK_RATE
+
+取：
+
+MAX(UPDATE_DATE)
+
+最新匯率。
+
+⸻
+
+GROUPING SETS 是什麼？
+
+這段最重要：
+
+GROUP BY GROUPING SETS
 (
-    SELECT CustomerNo
-    FROM Customer_Migrate_buffer
-    WHERE CIF_KEY =
-    '5de499d3-2beb-e511-80c8-0050568c710a'
-);
+    (
+      TRADE_DATE,
+      TRADE_OPERATION,
+      CUST_ID,
+      REF_NO,
+      ADV_BANK,
+      ADV_BANK_NAME
+    ),
+    (
+      ADV_BANK
+    )
+)
 
-目的
+會同時產出：
 
-取得該 CIFKEY 對應之 CustomerNo。
+明細
 
-例如：
-
-CustomerNo = GOXXE08HK
+銀行A
+ ├ 客戶1
+ ├ 客戶2
+ └ 客戶3
 
 ⸻
 
-驗證步驟四
+銀行總計
 
-檢查目標表寫入結果
+銀行A
+TOTAL=10筆
+AMT=1000000
 
-SELECT
-    RefNo,
-    CIFKEY,
-    IsDeleted,
-    PEPBitwiseCode
-FROM PB_boardofdirector_fact
-WHERE RefNo = '110101195804164546'
-AND CIFKEY IN
+所以後面才有：
+
+IIF(GRPCT.REF_NO IS NULL,
+    CAST(GRPCT.CNT AS VARCHAR),
+    '')
+AS TOTAL
+
+意思：
+
+REF_NO IS NULL
+=
+總計列
+
+才顯示筆數。
+
+⸻
+
+如果你要改成可帶日期參數
+
+目前是固定抓：
+
+上個月
+
+你可以改成：
+
+ALTER PROCEDURE SP_AMLM005_ADV_BANK_TXN_HK
 (
-    SELECT CIF_KEY
-    FROM BSA_SUB_CUST_FACT
-    WHERE CustomerNo = 'GOXXE08HK'
-);
+    @YM VARCHAR(6)
+)
 
-⸻
+然後：
 
-驗證步驟五
+WHERE LEFT(TXN.TRADE_DATE,6)=@YM
 
-比對預期值與實際值
+執行：
 
-預期
+EXEC SP_AMLM005_ADV_BANK_TXN_HK '202605'
 
-來源資料：
+這樣就能自由重跑歷史月份，而不用一直改程式。
 
-RefNo
-110101195804164546
-IsDeleted
-0
-1
+以目前這支來看，它就是典型的 月底批次報表 SP，日期控制點只有這一段：
 
-取嚴後：
+LEFT(TXN.TRADE_DATE,6)
+=
+CONVERT(VARCHAR(6),
+        DATEADD(MONTH,-1,GETDATE()),
+        112)
 
-MIN(IsDeleted)=0
-
-目標表應寫入：
-
-IsDeleted=0
-
-⸻
-
-驗證結果判定
-
-條件	結果
-目標表 IsDeleted = MIN(來源 IsDeleted)	PASS
-目標表 IsDeleted ≠ MIN(來源 IsDeleted)	FAIL
-
-⸻
-
-測試案例範例
-
-RefNo	來源 IsDeleted	預期	實際	結果
-110101195804164546	0、1	0	0	PASS
-A123456789	0、1	0	1	FAIL
-
-⸻
-
-如果是我要交給 PM、SA 或廠商的測試文件，我會再加一句：
-
-驗證原則：同一 RefNo 若存在多筆資料且 IsDeleted 狀態不一致，系統應採用最嚴格狀態(MIN IsDeleted)寫入 PB_boardofdirector_fact，以避免有效資料被誤判為刪除資料。
+這就是決定「每次只抓上個月資料」的核心邏輯。
