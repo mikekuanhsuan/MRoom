@@ -1,88 +1,231 @@
-SELECT
-    AML_TYPE,
-    COUNT(*) DUP_CNT
-FROM
-(
-    SELECT
-        AML_INFO_SEQ,
-        AML_TYPE,
-        COUNT(*) CNT
-    FROM WBS_AML_DETAIL
-    WHERE AML_TYPE IN
-    (
-        'RED_FLAG',
-        'GOODSCODE',
-        'MERCHANDISE',
-        'VESSEL_NAME',
-        'FLAG_VESSEL',
-        'REMARK',
-        'TAG44A_CONTENT',
-        'TAG44E_CONTENT',
-        'TAG44F_CONTENT',
-        'TAG44B_CONTENT'
-    )
-    GROUP BY AML_INFO_SEQ, AML_TYPE
-    HAVING COUNT(*) > 1
-) A
-GROUP BY AML_TYPE
-ORDER BY AML_TYPE;
+找到問題了，而且是大問題。
 
-AML_TYPE	DUP_CNT
-FLAG_VESSEL	4526
-GOODSCODE	1
-MERCHANDISE	1
-RED_FLAG	1
-REMARK	1
-TAG44A_CONTENT	19
-TAG44B_CONTENT	127
-TAG44E_CONTENT	303
-TAG44F_CONTENT	318
-VESSEL_NAME	5240
+你的原始寫法 不能直接上正式。
 
+原因：
 
+FLAG_VESSEL    4526 組重複
+VESSEL_NAME    5240 組重複
+TAG44F         318 組重複
+TAG44E         303 組重複
+TAG44B         127 組重複
+TAG44A          19 組重複
+
+代表：
+
+LEFT JOIN WBS_AML_DETAIL
+
+這種寫法一定會造成 Cartesian Expansion（筆數膨脹）。
+
+⸻
+
+例如：
+
+AML_INFO_SEQ=100
+
+RED_FLAG       1筆
+VESSEL_NAME    3筆
+FLAG_VESSEL    2筆
+
+JOIN後：
+
+1 × 3 × 2
+=
+6筆
+
+實際只有：
+
+1筆交易
+
+卻變：
+
+6筆報表
+
+⸻
+
+所以最終版 SP 必須改。
+
+⸻
+
+驗證我說的是對的
+
+跑：
 
 ;WITH Combined_List AS
 (
-    -- 你的 Combined_List
+    你的Combined_List
 )
-SELECT COUNT(*)
-FROM Combined_List E
-JOIN WBS_AML_DETAIL AML
-    ON E.AML_INFO_SEQ = AML.AML_INFO_SEQ
-WHERE AML.AML_TYPE='RED_FLAG'
-AND AML.FLAG='Y'
-
-(沒有資料行名稱)
-3195
-
-
-
-
-
 SELECT COUNT(*)
 FROM
 (
     SELECT
-        AML_INFO_SEQ,
-        AML_TYPE,
-        COUNT(*) CNT
-    FROM WBS_AML_DETAIL
-    WHERE AML_TYPE IN
+        E.AML_INFO_SEQ
+    FROM Combined_List E
+    LEFT JOIN
     (
-        'RED_FLAG',
-        'GOODSCODE',
-        'MERCHANDISE',
-        'VESSEL_NAME',
-        'FLAG_VESSEL',
-        'REMARK',
-        'TAG44A_CONTENT',
-        'TAG44E_CONTENT',
-        'TAG44F_CONTENT',
-        'TAG44B_CONTENT'
-    )
-    GROUP BY AML_INFO_SEQ, AML_TYPE
-    HAVING COUNT(*) > 1
+        SELECT *
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='RED_FLAG'
+    ) AML
+        ON E.AML_INFO_SEQ=AML.AML_INFO_SEQ
+    LEFT JOIN
+    (
+        SELECT *
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='VESSEL_NAME'
+    ) VESSEL_NAME
+        ON E.AML_INFO_SEQ=VESSEL_NAME.AML_INFO_SEQ
+    LEFT JOIN
+    (
+        SELECT *
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='FLAG_VESSEL'
+    ) FLAG_VESSEL
+        ON E.AML_INFO_SEQ=FLAG_VESSEL.AML_INFO_SEQ
+    WHERE AML.FLAG='Y'
 ) A
 
-(沒有資料行名稱)
-10537
+我猜一定遠大於：
+
+3195
+
+⸻
+
+正確做法
+
+全部改成聚合。
+
+例如：
+
+LEFT JOIN
+(
+    SELECT
+        AML_INFO_SEQ,
+        MAX(CONTENT) AS CONTENT
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE='VESSEL_NAME'
+    GROUP BY AML_INFO_SEQ
+) VESSEL_NAME
+
+⸻
+
+FLAG_VESSEL
+
+LEFT JOIN
+(
+    SELECT
+        AML_INFO_SEQ,
+        MAX(CONTENT) AS CONTENT
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE='FLAG_VESSEL'
+    GROUP BY AML_INFO_SEQ
+) FLAG_VESSEL
+
+⸻
+
+TAG44A
+
+LEFT JOIN
+(
+    SELECT
+        AML_INFO_SEQ,
+        MAX(CONTENT) AS CONTENT
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE='TAG44A_CONTENT'
+    GROUP BY AML_INFO_SEQ
+) TAG44A
+
+⸻
+
+TAG44B
+
+LEFT JOIN
+(
+    SELECT
+        AML_INFO_SEQ,
+        MAX(CONTENT) AS CONTENT
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE='TAG44B_CONTENT'
+    GROUP BY AML_INFO_SEQ
+) TAG44B
+
+⸻
+
+TAG44E
+
+LEFT JOIN
+(
+    SELECT
+        AML_INFO_SEQ,
+        MAX(CONTENT) AS CONTENT
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE='TAG44E_CONTENT'
+    GROUP BY AML_INFO_SEQ
+) TAG44E
+
+⸻
+
+TAG44F
+
+LEFT JOIN
+(
+    SELECT
+        AML_INFO_SEQ,
+        MAX(CONTENT) AS CONTENT
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE='TAG44F_CONTENT'
+    GROUP BY AML_INFO_SEQ
+) TAG44F
+
+⸻
+
+再確認一件事
+
+因為你現在的重複很多。
+
+我要知道到底是：
+
+VESSEL_NAME
+VESSEL_NAME
+VESSEL_NAME
+
+三筆不同船名
+
+還是：
+
+VESSEL_NAME
+VESSEL_NAME
+VESSEL_NAME
+
+三筆完全一樣資料。
+
+請跑：
+
+SELECT TOP 50
+       AML_INFO_SEQ,
+       AML_TYPE,
+       CONTENT
+FROM WBS_AML_DETAIL
+WHERE AML_INFO_SEQ IN
+(
+    SELECT TOP 10 AML_INFO_SEQ
+    FROM WBS_AML_DETAIL
+    WHERE AML_TYPE='VESSEL_NAME'
+    GROUP BY AML_INFO_SEQ
+    HAVING COUNT(*)>1
+)
+ORDER BY AML_INFO_SEQ
+
+把結果貼給我。
+
+如果內容不同，我會建議改成：
+
+STRING_AGG(CONTENT,'; ')
+
+如果內容都一樣，
+
+MAX(CONTENT)
+
+就夠了。
+
+這一步決定我最後給你的正式版 SP 要用哪種寫法。
