@@ -1,125 +1,62 @@
+你這支是要驗證「聚合後筆數是否回到正常」，所以不用整個報表都貼。
+
+直接跑下面這支：
 
 ;WITH Combined_List AS
 (
     -- LOAN
-    SELECT
-        'LOAN' AS SOURCE_TYPE,
-        LON_NO AS DOC_NO,
-        LON_CCY AS CURRENCY,
-        LON_AMT AS AMOUNT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'LOAN' AS SOURCE_TYPE, LON_NO AS DOC_NO, LON_CCY AS CURRENCY, LON_AMT AS AMOUNT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_LON_INFO
     UNION ALL
     -- LC CREATE
-    SELECT
-        'LC_CREATE',
-        LC_NO,
-        LC_NO_CCY,
-        LC_NO_AMT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'LC_CREATE', LC_NO, LC_NO_CCY, LC_NO_AMT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_IMP_LC
     UNION ALL
     -- LC AMEND
-    SELECT
-        'LC_AMEND',
-        LC_NO,
-        LC_NO_CCY,
-        NEW_AMT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'LC_AMEND', LC_NO, LC_NO_CCY, NEW_AMT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_IMP_LC
     UNION ALL
     -- SGED
-    SELECT
-        'SGED',
-        SGED_NO,
-        SGED_CCY,
-        SGED_AMT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'SGED', SGED_NO, SGED_CCY, SGED_AMT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_IMP_SGED
     UNION ALL
     -- IB
-    SELECT
-        'IB',
-        IB_NO,
-        BILL_CCY,
-        BILL_AMT1,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'IB', IB_NO, BILL_CCY, BILL_AMT1,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_IMP_IB
     UNION ALL
     -- IC
-    SELECT
-        'IC',
-        IC_NO,
-        BILL_CCY,
-        BILL_AMT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'IC', IC_NO, BILL_CCY, BILL_AMT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_IMP_IC
     UNION ALL
     -- LA
-    SELECT
-        'LA',
-        LA_NO,
-        LC_CCY,
-        LC_AMT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'LA', LA_NO, LC_CCY, LC_AMT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_EXP_LA_INFO
     UNION ALL
     -- LT
-    SELECT
-        'LT',
-        LT_NO,
-        LC_CCY,
-        LT_AMT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'LT', LT_NO, LC_CCY, LT_AMT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_EXP_LT_INFO
     UNION ALL
     -- NEGO
-    SELECT
-        'NEGO',
-        NEGO_NO,
-        BILL_CCY,
-        BILL_AMT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'NEGO', NEGO_NO, BILL_CCY, BILL_AMT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_EXP_NEGO_INFO
     UNION ALL
     -- RENEGO
-    SELECT
-        'RENEGO',
-        REF_NO,
-        BILL_CCY,
-        BILL_AMT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'RENEGO', REF_NO, BILL_CCY, BILL_AMT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_EXP_RE_NEGO_INFO
     UNION ALL
     -- OC
-    SELECT
-        'OC',
-        OC_NO,
-        BILL_CCY,
-        BILL_AMT,
-        CIF_CUST_INFO_SEQ,
-        AML_INFO_SEQ,
-        TRADE_DATE
+    SELECT 'OC', OC_NO, BILL_CCY, BILL_AMT,
+           CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE
     FROM WBS_EXP_OC_INFO
 )
 SELECT COUNT(*)
@@ -130,26 +67,132 @@ FROM
     FROM Combined_List E
     LEFT JOIN
     (
-        SELECT *
+        SELECT
+            AML_INFO_SEQ,
+            MAX(FLAG) AS FLAG,
+            MAX(FUN_CODE) AS FUN_CODE,
+            MAX(CONTENT) AS CONTENT
         FROM WBS_AML_DETAIL
         WHERE AML_TYPE='RED_FLAG'
+        GROUP BY AML_INFO_SEQ
     ) AML
-        ON E.AML_INFO_SEQ=AML.AML_INFO_SEQ
+        ON E.AML_INFO_SEQ = AML.AML_INFO_SEQ
     LEFT JOIN
     (
-        SELECT *
+        SELECT
+            AML_INFO_SEQ,
+            MAX(CONTENT) AS CONTENT
         FROM WBS_AML_DETAIL
         WHERE AML_TYPE='VESSEL_NAME'
+        GROUP BY AML_INFO_SEQ
     ) VESSEL_NAME
-        ON E.AML_INFO_SEQ=VESSEL_NAME.AML_INFO_SEQ
+        ON E.AML_INFO_SEQ = VESSEL_NAME.AML_INFO_SEQ
     LEFT JOIN
     (
-        SELECT *
+        SELECT
+            AML_INFO_SEQ,
+            MAX(CONTENT) AS CONTENT
         FROM WBS_AML_DETAIL
         WHERE AML_TYPE='FLAG_VESSEL'
+        GROUP BY AML_INFO_SEQ
     ) FLAG_VESSEL
-        ON E.AML_INFO_SEQ=FLAG_VESSEL.AML_INFO_SEQ
+        ON E.AML_INFO_SEQ = FLAG_VESSEL.AML_INFO_SEQ
+    LEFT JOIN
+    (
+        SELECT
+            AML_INFO_SEQ,
+            MAX(CONTENT) AS CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='GOODSCODE'
+        GROUP BY AML_INFO_SEQ
+    ) GOODSCODE
+        ON E.AML_INFO_SEQ = GOODSCODE.AML_INFO_SEQ
+    LEFT JOIN
+    (
+        SELECT
+            AML_INFO_SEQ,
+            MAX(CONTENT) AS CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='MERCHANDISE'
+        GROUP BY AML_INFO_SEQ
+    ) MERCHANDISE
+        ON E.AML_INFO_SEQ = MERCHANDISE.AML_INFO_SEQ
+    LEFT JOIN
+    (
+        SELECT
+            AML_INFO_SEQ,
+            MAX(CONTENT) AS CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='REMARK'
+        GROUP BY AML_INFO_SEQ
+    ) REMARK
+        ON E.AML_INFO_SEQ = REMARK.AML_INFO_SEQ
+    LEFT JOIN
+    (
+        SELECT
+            AML_INFO_SEQ,
+            MAX(CONTENT) AS CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='TAG44A_CONTENT'
+        GROUP BY AML_INFO_SEQ
+    ) TAG44A
+        ON E.AML_INFO_SEQ = TAG44A.AML_INFO_SEQ
+    LEFT JOIN
+    (
+        SELECT
+            AML_INFO_SEQ,
+            MAX(CONTENT) AS CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='TAG44E_CONTENT'
+        GROUP BY AML_INFO_SEQ
+    ) TAG44E
+        ON E.AML_INFO_SEQ = TAG44E.AML_INFO_SEQ
+    LEFT JOIN
+    (
+        SELECT
+            AML_INFO_SEQ,
+            MAX(CONTENT) AS CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='TAG44F_CONTENT'
+        GROUP BY AML_INFO_SEQ
+    ) TAG44F
+        ON E.AML_INFO_SEQ = TAG44F.AML_INFO_SEQ
+    LEFT JOIN
+    (
+        SELECT
+            AML_INFO_SEQ,
+            MAX(CONTENT) AS CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='TAG44B_CONTENT'
+        GROUP BY AML_INFO_SEQ
+    ) TAG44B
+        ON E.AML_INFO_SEQ = TAG44B.AML_INFO_SEQ
     WHERE AML.FLAG='Y'
-) A
-(沒有資料行名稱)
-7669
+) A;
+
+你要看的結果
+
+如果結果：
+
+3195
+
+或
+
+3196
+3197
+
+接近原始筆數
+
+代表：
+
+✅ 防重複成功
+
+✅ 可以開始產 SP
+
+✅ Informatica 不會倍增筆數
+
+把這個 COUNT 結果貼給我，我直接幫你組完整的
+
+ALTER PROCEDURE dbo.SP_AMLM007_REDFLAG_REPORT_HK
+
+正式版。
