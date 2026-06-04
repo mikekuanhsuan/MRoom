@@ -1,19 +1,72 @@
-																	
-Target Table Name 	CD::E:\data\AML\HK\USER\DWLOAD\AMLM007_REDFLAG_REPORT_HK.CSV																
-Target Description																	
-Table Total Length																	
-Source Type (F: File/T: Table)	T	T	T														
-"Data Source DB Name /
-Data Source Machine Name"	OBODS.HKDB	OBODS.HKDB	OBODS.HKDB														
-Data Source File Path																	
-"Data Source Table Name /
-Data Source File Name"	WBS_EXP_LA_INFO TXN	WBS_CIF_CUST_INFO CCI	WBS_RAA_FUNC_INFO FN														
-"Data Source Table Descripti/ 
-Data Source File Description"																	
-Data Source Conditions																	
-Actions	LEFT JOIN	LEFT JOIN	LEFT JOIN														
-Tables Join Conditions		TXN.CIF_CUST_INFO_SEQ=CCI.CIF_CUST_INFO_SEQ	FN.FUNC_CODE=TXN.FUNC_CODE														
-Tables Grouping	"GROUP BY GROUPING SETS ( 
-   ( RAWBK.TRADE_DATE ,RAWBK.TRADE_OPERATION ,RAWBK.CUST_ID ,RAWBK.REF_NO ,RAWBK.ADV_BANK ,RAWBK.ADV_BANK_NAME ) 
-   ,(RAWBK.ADV_BANK /*,RAWBK.ADV_BANK_NAME*/) )"																
-Target Remark																	
+如果這份文件是要反映你目前的 SP 邏輯，那舊內容：
+
+Data Source Table Name	Action	Join Condition
+WBS_EXP_LA_INFO TXN	LEFT JOIN	
+WBS_CIF_CUST_INFO CCI	LEFT JOIN	TXN.CIF_CUST_INFO_SEQ=CCI.CIF_CUST_INFO_SEQ
+WBS_RAA_FUNC_INFO FN	LEFT JOIN	FN.FUNC_CODE=TXN.FUNC_CODE
+
+已經不正確了，因為你的 SP 根本不是只用 WBS_EXP_LA_INFO。
+
+應該改成類似：
+
+項目	內容
+Source Type (F: File/T: Table)	T / T / T / T
+Data Source DB Name	OBODS.HKDB
+Data Source Table Name	Combined_List E
+	WBS_CIF_CUST_INFO C
+	WBS_AML_DETAIL AML
+	WBS_RAA_FUNC_INFO F
+Actions	Main
+	LEFT JOIN
+	LEFT JOIN
+	LEFT JOIN
+Tables Join Conditions	
+	E.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
+	E.AML_INFO_SEQ = AML.AML_INFO_SEQ
+	AML.FUN_CODE = F.FUNC_CODE
+
+⸻
+
+如果文件規範不允許寫 CTE (Combined_List)，則第一個來源要改寫成：
+
+Data Source Table Name / Data Source File Name
+
+WBS_LON_INFO
+WBS_IMP_LC
+WBS_IMP_SGED
+WBS_IMP_IB
+WBS_IMP_IC
+WBS_EXP_LA_INFO
+WBS_EXP_LT_INFO
+WBS_EXP_NEGO_INFO
+WBS_EXP_RE_NEGO_INFO
+WBS_EXP_OC_INFO
+WBS_CIF_CUST_INFO
+WBS_AML_DETAIL
+WBS_RAA_FUNC_INFO
+
+Target Remark
+
+Source transaction data is consolidated through Combined_List (UNION ALL) before joining customer and AML reference tables.
+
+另外有個地方我特別注意到：
+
+Tables Grouping
+GROUP BY GROUPING SETS (...)
+
+你的 SP 裡面完全沒有：
+
+GROUP BY
+GROUPING SETS
+
+所以這段是舊規格殘留。
+
+建議直接改成：
+
+N/A
+
+或留空。
+
+⸻
+
+如果你能再貼一下這份 Excel 的下一頁（欄位 Mapping 那頁），我可以直接幫你整理成符合目前 SP 的完整文件內容。很多時候除了 Source Table，那頁的 Source Column 也要跟著一起改。
