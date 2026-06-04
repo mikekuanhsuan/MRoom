@@ -1,198 +1,67 @@
-可以，我用 你現在這份 Mapping Spec 的角度來看，哪些地方要補、要改，以及怎麼填。
+依照你目前的 SP 與 Excel 格式，我建議直接修改成下面這樣。
 
-⸻
+Data Source Conditions（第10列）
 
-1. Source Conditions 要補
-
-你目前是空白：
-
-Data Source Conditions
-
-(空白)
-
-但 SP 有兩個條件：
-
-WHERE (
-    LEFT(E.TRADE_DATE,6)
-    =
-    CONVERT(VARCHAR(6),
-    DATEADD(MONTH,-1,GETDATE()),
-    112)
-)
-AND AML.FLAG='Y'
-
-所以建議填：
-
-Data Source Conditions
-
-TRADE_DATE = Previous Month (YYYYMM)
-
-AML.FLAG = ‘Y’
-
-或寫得正式一點：
+D10 填：
 
 LEFT(E.TRADE_DATE,6) =
 CONVERT(VARCHAR(6),DATEADD(MONTH,-1,GETDATE()),112)
-AND AML.FLAG = 'Y'
+AND AML.FLAG='Y'
+
+E10 ~ 最後都留空即可，不用合併。
 
 ⸻
 
-2. Target Remark 補完整
+Target Remark（第14列）
 
-你目前：
+建議 D14 ~ 最後一個來源欄位合併。
 
-Source transaction data is consolidated through Combined_List (UNION ALL) before joining customer and AML reference tables.
+填入：
 
-建議改成：
-
-Source transaction data is consolidated through Combined_List (UNION ALL) from:
-WBS_LON_INFO
-WBS_IMP_LC
-WBS_IMP_SGED
-WBS_IMP_IB
-WBS_IMP_IC
-WBS_EXP_LA_INFO
-WBS_EXP_LT_INFO
-WBS_EXP_NEGO_INFO
-WBS_EXP_RE_NEGO_INFO
-WBS_EXP_OC_INFO
+Source transaction data is consolidated through Combined_List (UNION ALL)
+from WBS_LON_INFO, WBS_IMP_LC, WBS_IMP_SGED,
+WBS_IMP_IB, WBS_IMP_IC, WBS_EXP_LA_INFO,
+WBS_EXP_LT_INFO, WBS_EXP_NEGO_INFO,
+WBS_EXP_RE_NEGO_INFO and WBS_EXP_OC_INFO
 before joining customer and AML reference tables.
 
 ⸻
 
-3. CUSTOMER_ID 欄位備註
+欄位 Mapping
 
-SP：
+直接填 Source 欄即可。
 
-'_' + ISNULL(C.CUSTOMER_ID,'')
-
-因此輸出：
-
-_123456
-
-而不是：
-
-123456
-
-所以在 Column Notes 填：
-
-Field Name	Column Notes
-CUSTOMER_ID	Prefix “_” before CUSTOMER_ID
-
-⸻
-
-4. Function_Code 補來源
-
-目前：
-
-Field Name	Source
-Function_Code	空白
-
-建議：
-
-Field Name	Source
-Function_Code	WBS_RAA_FUNC_INFO.FUNC_CODE
+Field Name	Source	Column Notes
+SOURCE_TYPE	Combined_List.SOURCE_TYPE	
+DOC_NO	Combined_List.DOC_NO	
+CURRENCY	Combined_List.CURRENCY	
+AMOUNT	Combined_List.AMOUNT	
+TRADE_DATE	Combined_List.TRADE_DATE	
+CUSTOMER_ID	WBS_CIF_CUST_INFO.CUSTOMER_ID	Prefix “_” before CUSTOMER_ID
+Function_Code	WBS_RAA_FUNC_INFO.FUNC_CODE	
+Function_Name	WBS_RAA_FUNC_INFO.FUNC_NAME	
+FLAG	WBS_AML_DETAIL.FLAG	AML_TYPE=‘RED_FLAG’
+FLAG_CONTENT	WBS_AML_DETAIL.CONTENT	AML_TYPE=‘RED_FLAG’
+GOODSCODE	WBS_AML_DETAIL.CONTENT	AML_TYPE=‘GOODSCODE’
+MERCHANDISE	WBS_AML_DETAIL.CONTENT	AML_TYPE=‘MERCHANDISE’
+VESSEL_NAME	WBS_AML_DETAIL.CONTENT	STRING_AGG, AML_TYPE=‘VESSEL_NAME’
+FLAG_VESSEL	WBS_AML_DETAIL.CONTENT	AML_TYPE=‘FLAG_VESSEL’
+REMARK	WBS_AML_DETAIL.CONTENT	AML_TYPE=‘REMARK’
+TAG44A_CONTENT	WBS_AML_DETAIL.CONTENT	AML_TYPE=‘TAG44A_CONTENT’
+TAG44E_CONTENT	WBS_AML_DETAIL.CONTENT	AML_TYPE=‘TAG44E_CONTENT’
+TAG44F_CONTENT	WBS_AML_DETAIL.CONTENT	AML_TYPE=‘TAG44F_CONTENT’
+TAG44B_CONTENT	WBS_AML_DETAIL.CONTENT	AML_TYPE=‘TAG44B_CONTENT’
+AML_INFO_SEQ	Combined_List.AML_INFO_SEQ	
 
 ⸻
 
-5. Function_Name 補來源
+Source Table 區塊
 
-Field Name	Source
-Function_Name	WBS_RAA_FUNC_INFO.FUNC_NAME
+維持你現在的：
 
-⸻
-
-6. FLAG 補來源
-
-Field Name	Source
-FLAG	WBS_AML_DETAIL.FLAG
-
-⸻
-
-7. FLAG_CONTENT 補來源
-
-Field Name	Source
-FLAG_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘RED_FLAG’)
-
-⸻
-
-8. GOODSCODE 補來源
-
-Field Name	Source
-GOODSCODE	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘GOODSCODE’)
-
-⸻
-
-9. MERCHANDISE 補來源
-
-Field Name	Source
-MERCHANDISE	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘MERCHANDISE’)
-
-⸻
-
-10. VESSEL_NAME 補來源
-
-Field Name	Source
-VESSEL_NAME	STRING_AGG(WBS_AML_DETAIL.CONTENT) WHERE AML_TYPE=‘VESSEL_NAME’
-
-⸻
-
-11. FLAG_VESSEL
-
-Field Name	Source
-FLAG_VESSEL	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘FLAG_VESSEL’)
-
-⸻
-
-12. REMARK
-
-Field Name	Source
-REMARK	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘REMARK’)
-
-⸻
-
-13. TAG44A_CONTENT
-
-Field Name	Source
-TAG44A_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘TAG44A_CONTENT’)
-
-⸻
-
-14. TAG44E_CONTENT
-
-Field Name	Source
-TAG44E_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘TAG44E_CONTENT’)
-
-⸻
-
-15. TAG44F_CONTENT
-
-Field Name	Source
-TAG44F_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘TAG44F_CONTENT’)
-
-⸻
-
-16. TAG44B_CONTENT
-
-Field Name	Source
-TAG44B_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘TAG44B_CONTENT’)
-
-⸻
-
-17. AML_INFO_SEQ
-
-Field Name	Source
-AML_INFO_SEQ	Combined_List.AML_INFO_SEQ
-
-⸻
-
-18. Source Table 區塊要不要改？
-
-你目前：
-
-WBS_CIF_CUST_INFO
-WBS_AML_DETAIL
-WBS_RAA_FUNC_INFO
+WBS_CIF_CUST_INFO C
+WBS_AML_DETAIL AML
+WBS_RAA_FUNC_INFO F
 WBS_LON_INFO
 WBS_IMP_LC
 WBS_IMP_SGED
@@ -203,31 +72,29 @@ WBS_EXP_LT_INFO
 WBS_EXP_NEGO_INFO
 WBS_EXP_RE_NEGO_INFO
 WBS_EXP_OC_INFO
-
-這個其實已經正確。
 
 不用改。
 
 ⸻
 
-我建議你最少修改這四個地方
+Tables Join Conditions
 
-✅ Data Source Conditions
+維持：
 
-LEFT(E.TRADE_DATE,6) =
-CONVERT(VARCHAR(6),DATEADD(MONTH,-1,GETDATE()),112)
-AND AML.FLAG='Y'
+E.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
+E.AML_INFO_SEQ = AML.AML_INFO_SEQ
+AML.FUN_CODE = F.FUNC_CODE
 
-✅ Target Remark
-
-補 Combined_List 來源表說明
-
-✅ CUSTOMER_ID
-
-Prefix "_" before CUSTOMER_ID
-
-✅ Function_Code / Function_Name / FLAG_CONTENT 等欄位 Source 補齊
+即可。
 
 ⸻
 
-如果你把 Mapping Excel 的欄位 Source、Spec、Column Notes 那幾欄截圖給我，我可以直接幫你把 20 個欄位該填什麼內容全部整理成表格，你直接複製貼到文件即可。
+我覺得還要補一個欄位
+
+Target Description（第3列）目前空白。
+
+建議填：
+
+AML Red Flag Report for Trade Finance transactions in Hong Kong.
+
+這樣整份 Mapping 文件就完整了，通常 SIT/UAT 文件審查都能過。
