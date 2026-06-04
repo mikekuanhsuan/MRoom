@@ -1,227 +1,233 @@
-看你貼的 Mapping Spec 跟 SP，我覺得 SP 本身邏輯大致上已符合規格，但有幾個地方建議你確認，不然之後文件審查或 SIT/UAT 很容易被抓出來。
+可以，我用 你現在這份 Mapping Spec 的角度來看，哪些地方要補、要改，以及怎麼填。
 
-1. Source Table 要補 Combined_List 說明
+⸻
 
-你現在文件寫：
+1. Source Conditions 要補
 
-Source Table
+你目前是空白：
 
-WBS_CIF_CUST_INFO
+Data Source Conditions
 
-WBS_AML_DETAIL
+(空白)
 
-WBS_RAA_FUNC_INFO
+但 SP 有兩個條件：
 
-WBS_LON_INFO
-
-WBS_IMP_LC
-
-…
-
-但實際上 SP 是：
-
-WITH Combined_List AS (
-   UNION ALL ...
+WHERE (
+    LEFT(E.TRADE_DATE,6)
+    =
+    CONVERT(VARCHAR(6),
+    DATEADD(MONTH,-1,GETDATE()),
+    112)
 )
+AND AML.FLAG='Y'
 
-所以建議在 Target Remark 或 Source Description 補：
+所以建議填：
 
-Transaction data is consolidated from
-WBS_LON_INFO,
-WBS_IMP_LC,
-WBS_IMP_SGED,
-WBS_IMP_IB,
-WBS_IMP_IC,
-WBS_EXP_LA_INFO,
-WBS_EXP_LT_INFO,
-WBS_EXP_NEGO_INFO,
-WBS_EXP_RE_NEGO_INFO,
+Data Source Conditions
+
+TRADE_DATE = Previous Month (YYYYMM)
+
+AML.FLAG = ‘Y’
+
+或寫得正式一點：
+
+LEFT(E.TRADE_DATE,6) =
+CONVERT(VARCHAR(6),DATEADD(MONTH,-1,GETDATE()),112)
+AND AML.FLAG = 'Y'
+
+⸻
+
+2. Target Remark 補完整
+
+你目前：
+
+Source transaction data is consolidated through Combined_List (UNION ALL) before joining customer and AML reference tables.
+
+建議改成：
+
+Source transaction data is consolidated through Combined_List (UNION ALL) from:
+WBS_LON_INFO
+WBS_IMP_LC
+WBS_IMP_SGED
+WBS_IMP_IB
+WBS_IMP_IC
+WBS_EXP_LA_INFO
+WBS_EXP_LT_INFO
+WBS_EXP_NEGO_INFO
+WBS_EXP_RE_NEGO_INFO
 WBS_EXP_OC_INFO
-through Combined_List (UNION ALL)
-before joining AML and Customer reference tables.
-
-這個你其實已經寫了：
-
-Source transaction data is consolidated through Combined_List (UNION ALL)
 before joining customer and AML reference tables.
 
-所以 OK。
+⸻
+
+3. CUSTOMER_ID 欄位備註
+
+SP：
+
+'_' + ISNULL(C.CUSTOMER_ID,'')
+
+因此輸出：
+
+_123456
+
+而不是：
+
+123456
+
+所以在 Column Notes 填：
+
+Field Name	Column Notes
+CUSTOMER_ID	Prefix “_” before CUSTOMER_ID
 
 ⸻
 
-2. CUSTOMER_ID 規格與程式不一致
+4. Function_Code 補來源
 
-文件：
+目前：
 
-CUSTOMER_ID VARCHAR(25)
+Field Name	Source
+Function_Code	空白
 
-程式：
+建議：
 
-'_' + ISNULL(C.CUSTOMER_ID,'') AS CUSTOMER_ID
-
-實際輸出會變：
-
-_123456789
-
-前面多一個底線。
-
-因此規格要二選一：
-
-選項A
-
-文件補註解
-
-Prefix "_" before CUSTOMER_ID.
-
-選項B
-
-把 SP 改掉
-
-ISNULL(C.CUSTOMER_ID,'') AS CUSTOMER_ID
-
-這個要確認原 AMLM 系統是否要求前面加 _
-
-⸻
-
-3. Function_Code / Function_Name
-
-文件：
-
-Function_Code
-Function_Name
-
-來源實際是：
-
-F.FUNC_CODE
-F.FUNC_NAME
-
-建議在欄位 Mapping 補：
-
-Target	Source
+Field Name	Source
 Function_Code	WBS_RAA_FUNC_INFO.FUNC_CODE
+
+⸻
+
+5. Function_Name 補來源
+
+Field Name	Source
 Function_Name	WBS_RAA_FUNC_INFO.FUNC_NAME
 
-不然 reviewer 會問。
+⸻
+
+6. FLAG 補來源
+
+Field Name	Source
+FLAG	WBS_AML_DETAIL.FLAG
 
 ⸻
 
-4. VESSEL_NAME 型態
+7. FLAG_CONTENT 補來源
 
-文件：
+Field Name	Source
+FLAG_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘RED_FLAG’)
 
-NVARCHAR(MAX)
+⸻
 
-程式：
+8. GOODSCODE 補來源
 
-STRING_AGG(
-   CAST(CONTENT AS NVARCHAR(MAX)),
-   ','
-)
+Field Name	Source
+GOODSCODE	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘GOODSCODE’)
 
-這個是對的。
+⸻
+
+9. MERCHANDISE 補來源
+
+Field Name	Source
+MERCHANDISE	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘MERCHANDISE’)
+
+⸻
+
+10. VESSEL_NAME 補來源
+
+Field Name	Source
+VESSEL_NAME	STRING_AGG(WBS_AML_DETAIL.CONTENT) WHERE AML_TYPE=‘VESSEL_NAME’
+
+⸻
+
+11. FLAG_VESSEL
+
+Field Name	Source
+FLAG_VESSEL	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘FLAG_VESSEL’)
+
+⸻
+
+12. REMARK
+
+Field Name	Source
+REMARK	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘REMARK’)
+
+⸻
+
+13. TAG44A_CONTENT
+
+Field Name	Source
+TAG44A_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘TAG44A_CONTENT’)
+
+⸻
+
+14. TAG44E_CONTENT
+
+Field Name	Source
+TAG44E_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘TAG44E_CONTENT’)
+
+⸻
+
+15. TAG44F_CONTENT
+
+Field Name	Source
+TAG44F_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘TAG44F_CONTENT’)
+
+⸻
+
+16. TAG44B_CONTENT
+
+Field Name	Source
+TAG44B_CONTENT	WBS_AML_DETAIL.CONTENT (AML_TYPE=‘TAG44B_CONTENT’)
+
+⸻
+
+17. AML_INFO_SEQ
+
+Field Name	Source
+AML_INFO_SEQ	Combined_List.AML_INFO_SEQ
+
+⸻
+
+18. Source Table 區塊要不要改？
+
+你目前：
+
+WBS_CIF_CUST_INFO
+WBS_AML_DETAIL
+WBS_RAA_FUNC_INFO
+WBS_LON_INFO
+WBS_IMP_LC
+WBS_IMP_SGED
+WBS_IMP_IB
+WBS_IMP_IC
+WBS_EXP_LA_INFO
+WBS_EXP_LT_INFO
+WBS_EXP_NEGO_INFO
+WBS_EXP_RE_NEGO_INFO
+WBS_EXP_OC_INFO
+
+這個其實已經正確。
 
 不用改。
 
 ⸻
 
-5. FLAG 過濾條件沒寫
+我建議你最少修改這四個地方
 
-程式：
+✅ Data Source Conditions
 
+LEFT(E.TRADE_DATE,6) =
+CONVERT(VARCHAR(6),DATEADD(MONTH,-1,GETDATE()),112)
 AND AML.FLAG='Y'
 
-但文件沒看到。
+✅ Target Remark
 
-建議 Source Conditions 加：
+補 Combined_List 來源表說明
 
-AML.FLAG = 'Y'
+✅ CUSTOMER_ID
 
-⸻
+Prefix "_" before CUSTOMER_ID
 
-6. 月份條件沒寫
-
-程式：
-
-LEFT(E.TRADE_DATE,6)
-=
-CONVERT(VARCHAR(6),
-DATEADD(MONTH,-1,GETDATE()),
-112)
-
-表示：
-
-取上個月交易資料
-
-建議文件補：
-
-Trade Date = Previous Month (YYYYMM)
-
-不然之後別人看文件不知道為什麼只出一個月資料。
+✅ Function_Code / Function_Name / FLAG_CONTENT 等欄位 Source 補齊
 
 ⸻
 
-7. 最後 End of Report
-
-SP 最後有：
-
-UNION ALL
-SELECT ',,,,*** End of Report ***,,,,,,,,,,,,,,,,,,'
-
-這是輸出檔特有格式。
-
-如果是 AML 檔案規格要求：
-
-File Trailer:
-**** End of Report ****
-
-建議寫進 File Format Spec。
-
-⸻
-
-8. 最大問題：AML_DETAIL 被 Join 很多次
-
-目前：
-
-WBS_AML_DETAIL
-
-被掃描了 10 次以上：
-
-GOODSCODE
-MERCHANDISE
-VESSEL_NAME
-FLAG_VESSEL
-REMARK
-TAG44A
-TAG44B
-TAG44E
-TAG44F
-RED_FLAG
-
-效能上比較差。
-
-之後若要優化可以改成一次 Pivot：
-
-WITH AML_DETAIL_PIVOT AS (...)
-
-再 Join 一次即可。
-
-不過這是效能優化，不影響規格文件。
-
-⸻
-
-結論
-
-如果是問 PS (Mapping Spec) 要不要修改：
-
-我會建議至少補這 3 個：
-
-1. AML.FLAG='Y'
-2. Trade Date = Previous Month
-3. CUSTOMER_ID 前面會加 '_'
-
-另外把 Source Remark 保留：
-
-Source transaction data is consolidated through Combined_List (UNION ALL)
-before joining customer and AML reference tables.
-
-這樣你的文件就已經跟 SP 95% 一致了。
+如果你把 Mapping Excel 的欄位 Source、Spec、Column Notes 那幾欄截圖給我，我可以直接幫你把 20 個欄位該填什麼內容全部整理成表格，你直接複製貼到文件即可。
