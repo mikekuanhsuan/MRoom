@@ -1,86 +1,130 @@
-USE [HKDB]
-GO
-/****** Object:  StoredProcedure [dbo].[SP_AMLM005_ADV_BANK_TXN_HK]    Script Date: 2026/6/2 下午 03:33:03 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
+其實你不用整個重寫。
 
-ALTER PROCEDURE [dbo].[SP_AMLM005_ADV_BANK_TXN_HK] AS
+你只要在你的 GenerateSqlFromRiskData() 裡面做 3 個修改 就可以了。
 
-/*
-*	20210222 香港交易統計表
-*	20210907 ADV_BANK空時改抓ISSUING_BANK
-*	20210916 增加AML欄位
-*/
-BEGIN
-	SET NOCOUNT OFF;
+⸻
 
-	EXECUTE( N'DROP TABLE IF EXISTS ##AMLM005_ADV_BANK_TXN_HK' );
-	
-	SELECT
-		GRPCT.TRADE_OPERATION 
-		,IIF(LEN(GRPCT.CUST_ID)>1,'_'+GRPCT.CUST_ID,'') AS CUST_ID ,IIF(LEN(GRPCT.REF_NO)>1,'_'+GRPCT.REF_NO,'') AS REF_NO 
-		,GRPCT.ADV_BANK ,GRPCT.ADV_BANK_NAME 
-		,IIF(GRPCT.REF_NO IS NULL ,CAST(GRPCT.CNT AS VARCHAR) ,'') AS TOTAL ,FORMAT(ROUND( GRPCT.AMT*1.00 ,2),'########0') AS AMT
-	INTO ##AMLM005_ADV_BANK_TXN_HK
-	FROM (
-		SELECT 
-			RAWBK.TRADE_OPERATION ,RAWBK.CUST_ID ,RAWBK.REF_NO ,RAWBK.ADV_BANK ,RAWBK.ADV_BANK_NAME ,COUNT(1) AS CNT ,SUM(RAWBK.AMT) AS AMT
-		FROM (
-			SELECT 
-				TXN.TRADE_DATE ,CONCAT(CONCAT(FN.FUNC_CODE,'：'),FN.FUNC_NAME) AS TRADE_OPERATION 
-				,CCI.CUSTOMER_ID AS CUST_ID ,TXN.REF_NO ,TXN.ADV_BANK ,TXN.ADV_BANK_NAME ,TXN.AMT*ISNULL(BKRT.BOOK_RATE,1) AS AMT
-			FROM (
-				SELECT
-					'077005' AS FUNC_CODE ,TXN.ADVISE_DATE AS TRADE_DATE ,TXN.CIF_CUST_INFO_SEQ ,TXN.LA_NO AS REF_NO 
-					,ISNULL(TXN.FST_ADV_BANK_BIC,TXN.ISSUING_BANK_BIC) AS ADV_BANK ,ISNULL(TXN.FST_ADV_BANK_NAME,TXN.ISSUING_BANK_NAME) AS ADV_BANK_NAME
-					,TXN.LC_CCY AS CCY ,TXN.LC_ORIGINAL_AMT AS AMT
-				FROM WBS_EXP_LA_INFO TXN WITH(NOLOCK)
-				WHERE 1=1
-				--AND ISNULL(TXN.FST_ADV_BANK_BIC,'')<>'TSIBHKHH'
-				AND TXN.CASE_STATUS NOT IN ('GENERATION','GEN','DELETION','REGISTRATION','CANCEL','CANCELLATION')
-			) TXN
-			LEFT JOIN WBS_CIF_CUST_INFO CCI WITH(NOLOCK) ON TXN.CIF_CUST_INFO_SEQ=CCI.CIF_CUST_INFO_SEQ
-			LEFT JOIN WBS_RAA_FUNC_INFO FN WITH(NOLOCK) ON FN.FUNC_CODE=TXN.FUNC_CODE
-			LEFT JOIN (
-				SELECT DISTINCT RT.CCY_CODE ,RT.BOOK_RATE FROM WBS_CTB_BOOK_RATE RT WITH(NOLOCK) WHERE RT.RATE_TYPE='DBU' 
-				AND RT.UPDATE_DATE = ( SELECT MAX(RTDT.UPDATE_DATE) FROM WBS_CTB_BOOK_RATE RTDT WITH(NOLOCK) 
-					WHERE RTDT.RATE_TYPE='DBU' AND RTDT.CCY_CODE=RT.CCY_CODE GROUP BY RTDT.CCY_CODE )
-			) BKRT ON BKRT.CCY_CODE=TXN.CCY
-			WHERE ( (LEFT(TXN.TRADE_DATE,6)=CONVERT(VARCHAR(6),DATEADD(MONTH,-1,GETDATE()),112)) OR @@SERVERNAME='OBODS_TEST' )
-		) RAWBK
-		GROUP BY GROUPING SETS ( 
-			( RAWBK.TRADE_DATE ,RAWBK.TRADE_OPERATION ,RAWBK.CUST_ID ,RAWBK.REF_NO ,RAWBK.ADV_BANK ,RAWBK.ADV_BANK_NAME ) 
-			,(RAWBK.ADV_BANK /*,RAWBK.ADV_BANK_NAME*/) )
-	) GRPCT ORDER BY ISNULL(GRPCT.ADV_BANK,'ZZZZZZZZZZZZZZZ') ,ISNULL(GRPCT.CUST_ID,'ZZZZZZZZZZZZZZ') ,ISNULL(GRPCT.REF_NO,'ZZZZZZZZZZZZZZ')
+修改 1
 
-	DECLARE @SQL NVARCHAR(MAX) = N'';
-	WITH TBLCOLNME AS (
-		SELECT C.OBJECT_ID ,C.NAME FROM TEMPDB.SYS.TABLES T JOIN TEMPDB.SYS.COLUMNS C ON T.OBJECT_ID=C.OBJECT_ID WHERE T.NAME=N'##AMLM005_ADV_BANK_TXN_HK'
-	)	
-	SELECT DISTINCT /*B.OBJECT_ID ,*/
-		@SQL = STUFF( (SELECT CONCAT(',"',A.NAME,'"') FROM TBLCOLNME A WHERE  A.OBJECT_ID = B.OBJECT_ID FOR XML PATH ('')) ,1 ,1 ,'')
-	FROM TBLCOLNME B
+找到：
 
-	SET @SQL = 
-		CONCAT( 
-			CONCAT( 'SELECT ''',@SQL,''' AS COL' )
-			,' UNION ALL '
-			,CONCAT( N'SELECT CONCAT(' 
-				,N'REPLACE(REPLACE(REPLACE(REPLACE('
-				,REPLACE(@SQL,',',N',CHAR(9),''''),CHAR(10),''''),CHAR(13),''''),'','',''，''),'','',REPLACE(REPLACE(REPLACE(REPLACE(')
-				,N',CHAR(9),''''),CHAR(10),''''),CHAR(13),''''),'','',''，'')'
-				,N') AS COL FROM ##AMLM005_ADV_BANK_TXN_HK ' )
-		)
-	SET @SQL = CONCAT( @SQL ,N' UNION ALL SELECT '',,,,*** End of Report ***,,,,,,,,,'' ')
-	--PRINT(CONCAT('AAA ',@SQL))	--不拿掉會fail
-	EXECUTE(@SQL) 
-END
+Dim finalSqlBuilder As String, groupKeyVariant As Variant, branchLabelVariant As Variant
 
+改成：
 
+Dim finalSqlBuilder As String
+Dim groupKeyVariant As Variant
+Dim branchLabelVariant As Variant
+Dim branchOffset As Object
+Set branchOffset = CreateObject("Scripting.Dictionary")
 
-這支是每個月再跑的?
+⸻
 
-他變數是怎麼設計的?
-日期在哪?
+修改 2
+
+找到：
+
+For Each groupKeyVariant In groups.Keys
+
+改成下面整段：
+
+Dim sortedKeys() As String
+Dim keyCount As Long
+Dim i As Long
+Dim j As Long
+Dim tempKey As String
+keyCount = groups.Count
+ReDim sortedKeys(0 To keyCount - 1)
+i = 0
+For Each groupKeyVariant In groups.Keys
+    sortedKeys(i) = CStr(groupKeyVariant)
+    i = i + 1
+Next
+For i = 0 To UBound(sortedKeys) - 1
+    For j = i + 1 To UBound(sortedKeys)
+        If sortedKeys(i) > sortedKeys(j) Then
+            tempKey = sortedKeys(i)
+            sortedKeys(i) = sortedKeys(j)
+            sortedKeys(j) = tempKey
+        End If
+    Next j
+Next i
+For i = 0 To UBound(sortedKeys)
+    groupKeyVariant = sortedKeys(i)
+
+然後把最後：
+
+Next groupKeyVariant
+
+改成：
+
+Next i
+
+⸻
+
+修改 3
+
+找到：
+
+For Each branchLabelVariant In branchConditions.Keys
+    condList.Add "BRNCH_NBR = '" & branchLabelVariant & _
+                 "' AND CNT <= " & branchConditions(branchLabelVariant)
+Next branchLabelVariant
+
+全部刪掉。
+
+改成：
+
+For Each branchLabelVariant In branchConditions.Keys
+    Dim allocCnt As Long
+    Dim startCnt As Long
+    Dim endCnt As Long
+    allocCnt = CLng(branchConditions(branchLabelVariant))
+    If branchOffset.Exists(branchLabelVariant) Then
+        startCnt = branchOffset(branchLabelVariant) + 1
+    Else
+        startCnt = 1
+    End If
+    endCnt = startCnt + allocCnt - 1
+    condList.Add _
+        "(BRNCH_NBR = '" & branchLabelVariant & _
+        "' AND CNT BETWEEN " & startCnt & _
+        " AND " & endCnt & ")"
+    branchOffset(branchLabelVariant) = endCnt
+Next branchLabelVariant
+
+⸻
+
+改完後會產生
+
+以前：
+
+BRNCH_NBR='0002' AND CNT<=40
+
+下一個月份：
+
+BRNCH_NBR='0002' AND CNT<=79
+
+會重覆拿到 1~40。
+
+⸻
+
+現在：
+
+第一個月份：
+
+(BRNCH_NBR='0002' AND CNT BETWEEN 1 AND 40)
+
+第二個月份：
+
+(BRNCH_NBR='0002' AND CNT BETWEEN 41 AND 79)
+
+第三個月份：
+
+(BRNCH_NBR='0002' AND CNT BETWEEN 80 AND 120)
+
+完全不會重覆。
+
+⸻
+
+如果你願意，把 「中風險」工作表前 10 筆資料格式貼出來（A~D欄）」，我可以直接幫你驗證這個邏輯是否符合你實際的分配規則，避免改完 VBA 後發現月份排序還有其他需求。
