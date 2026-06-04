@@ -1,117 +1,221 @@
-我看到問題了。
-
-你現在的 branchOffset 是這樣記：
-
-branchOffset("0017") = 100
-
-所以只要分行是 0017，不管供給月份是：
-
-202706
-202707
-202708
-
-都會一路累加下去。
-
-但你的實際規則是：
-
-同一個供給月份(Supply Month)
-    要累加 CNT
-不同供給月份
-    要重新從 1 開始
-
-例如：
-
-供給月	需求月	分行	筆數
-202706	202607	0017	40
-202706	202608	0017	30
-202706	202609	0017	20
-202707	202608	0017	50
-
-應該產生：
-
-202706
-CNT BETWEEN 1 AND 40
-CNT BETWEEN 41 AND 70
-CNT BETWEEN 71 AND 90
-
-但是到了
-
-202707
-
-要重置：
-
-CNT BETWEEN 1 AND 50
-
-而不是：
-
-CNT BETWEEN 91 AND 140
+可以，我直接對照你現在的程式告訴你改哪裡。
 
 ⸻
 
-修改方式
+目前問題
 
-找到這段：
+你現在有這段：
+
+Dim branchOffset As Object
+Set branchOffset = CreateObject("Scripting.Dictionary")
+
+後面又有：
 
 If branchOffset.Exists(branchLabelVariant) Then
     startCnt = branchOffset(branchLabelVariant) + 1
 Else
     startCnt = 1
 End If
+...
 branchOffset(branchLabelVariant) = endCnt
 
-改成使用：
+因此 Dictionary 裡面存的是：
 
+0017 = 90
+0027 = 350
+0066 = 120
+
+所以只要看到分行 0017
+
+不管供給月份是：
+
+202706
+202707
+202708
+
+都會接著往下編號。
+
+⸻
+
+你要的規則
+
+同供給月份：
+
+202706 → 202607
+202706 → 202608
+202706 → 202609
+
+CNT 要累加：
+
+1~40
+41~70
+71~90
+
+但換供給月份：
+
+202707 → 202608
+
+要重新從：
+
+1~50
+
+開始。
+
+⸻
+
+第一步
+
+找到這段
+
+For Each branchLabelVariant In branchConditions.Keys
+    Dim allocCnt As Long
+    Dim startCnt As Long
+    Dim endCnt As Long
+    allocCnt = CLng(branchConditions(branchLabelVariant))
+    If branchOffset.Exists(branchLabelVariant) Then
+        startCnt = branchOffset(branchLabelVariant) + 1
+    Else
+        startCnt = 1
+    End If
+    endCnt = startCnt + allocCnt - 1
+    condList.Add _
+        "(BRNCH_NBR = '" & branchLabelVariant & _
+        "' AND CNT BETWEEN " & startCnt & _
+        " AND " & endCnt & ")"
+    branchOffset(branchLabelVariant) = endCnt
+Next branchLabelVariant
+
+⸻
+
+第二步
+
+在
+
+allocCnt = CLng(branchConditions(branchLabelVariant))
+
+下面新增：
+
+Dim offsetKey As String
+offsetKey = supply & "_" & branchLabelVariant
+
+變成：
+
+allocCnt = CLng(branchConditions(branchLabelVariant))
 Dim offsetKey As String
 offsetKey = supply & "_" & branchLabelVariant
 
 ⸻
 
+第三步
+
+把這段：
+
+If branchOffset.Exists(branchLabelVariant) Then
+    startCnt = branchOffset(branchLabelVariant) + 1
+Else
+    startCnt = 1
+End If
+
 改成：
 
-Dim offsetKey As String
-offsetKey = supply & "_" & branchLabelVariant
 If branchOffset.Exists(offsetKey) Then
     startCnt = branchOffset(offsetKey) + 1
 Else
     startCnt = 1
 End If
-endCnt = startCnt + allocCnt - 1
-condList.Add _
-    "(BRNCH_NBR = '" & branchLabelVariant & _
-    "' AND CNT BETWEEN " & startCnt & _
-    " AND " & endCnt & ")"
+
+⸻
+
+第四步
+
+把這段：
+
+branchOffset(branchLabelVariant) = endCnt
+
+改成：
+
 branchOffset(offsetKey) = endCnt
 
 ⸻
 
-這樣 Dictionary 內容會變成
+修改後完整區塊
 
-不是：
+直接複製貼上即可：
 
-0017 = 90
-
-而是：
-
-202706_0017 = 90
-202707_0017 = 50
-202708_0017 = 30
-
-每個供給月份獨立計算。
+For Each branchLabelVariant In branchConditions.Keys
+    Dim allocCnt As Long
+    Dim startCnt As Long
+    Dim endCnt As Long
+    Dim offsetKey As String
+    allocCnt = CLng(branchConditions(branchLabelVariant))
+    offsetKey = supply & "_" & branchLabelVariant
+    If branchOffset.Exists(offsetKey) Then
+        startCnt = branchOffset(offsetKey) + 1
+    Else
+        startCnt = 1
+    End If
+    endCnt = startCnt + allocCnt - 1
+    condList.Add _
+        "(BRNCH_NBR = '" & branchLabelVariant & _
+        "' AND CNT BETWEEN " & startCnt & _
+        " AND " & endCnt & ")"
+    branchOffset(offsetKey) = endCnt
+Next branchLabelVariant
 
 ⸻
 
-範例結果
+修改前
 
-202706
+Dictionary：
 
-(BRNCH_NBR='0017' AND CNT BETWEEN 1 AND 40)
-(BRNCH_NBR='0017' AND CNT BETWEEN 41 AND 70)
-(BRNCH_NBR='0017' AND CNT BETWEEN 71 AND 90)
+0017 = 90
 
-202707
+所以：
 
-(BRNCH_NBR='0017' AND CNT BETWEEN 1 AND 50)
+202706 → 1~40
+202706 → 41~70
+202706 → 71~90
+202707 → 91~140
 
-重新從 1 開始。
+錯誤 ❌
 
-這是你目前程式最小的修改，而且完全符合你描述的「供給月份不同就重置序列」規則。
+⸻
+
+修改後
+
+Dictionary：
+
+202706_0017 = 90
+202707_0017 = 50
+
+所以：
+
+202706 → 1~40
+202706 → 41~70
+202706 → 71~90
+202707 → 1~50
+
+正確 ✅
+
+⸻
+
+另外我還看到一個潛在問題：
+
+你目前排序是
+
+sortedKeys(i) > sortedKeys(j)
+
+字串排序。
+
+如果 Excel 有：
+
+202706_202607
+202706_202608
+202706_202609
+202707_202608
+
+沒問題。
+
+但如果未來格式改掉或月份不是固定 6 碼，有機會排序錯亂。
+
+如果你把「中風險」工作表前 10 筆資料貼給我（A欄到D欄），我可以順便幫你確認目前排序是否完全符合你的業務規則。
