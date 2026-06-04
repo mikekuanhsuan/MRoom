@@ -1,4 +1,50 @@
-Seq | Col. No | Field Name | Chinese Name | Data Type | Key | Source | Spec. | Column Notes 1 | 1 | SOURCE_TYPE | | varchar(9) | | | | 2 | 2 | DOC_NO | | varchar(50) | | | | 3 | 3 | CURRENCY | | varchar(3) | | | | 4 | 4 | AMOUNT | | numeric(18,3) | | | | 5 | 5 | TRADE_DATE | | varchar(8) | | | | 6 | 6 | CUSTOMER_ID | | varchar(25) | | | | 7 | 7 | Function_Code | | varchar(10) | | | | 8 | 8 | Function_Name | | varchar(100) | | | | 9 | 9 | FLAG | | varchar(1) | | | | 10 | 10 | FLAG_CONTENT | | varchar(210) | | | | 11 | 11 | GOODSCODE | | varchar(210) | | | | 12 | 12 | MERCHANDISE | | varchar(210) | | | | 13 | 13 | VESSEL_NAME | | nvarchar(max) | | | | 14 | 14 | FLAG_VESSEL | | varchar(210) | | | | 15 | 15 | REMARK | | varchar(210) | | | | 16 | 16 | TAG44A_CONTENT | | varchar(210) | | | | 17 | 17 | TAG44E_CONTENT | | varchar(210) | | | | 18 | 18 | TAG44F_CONTENT | | varchar(210) | | | | 19 | 19 | TAG44B_CONTENT | | varchar(210) | | | | 20 | 20 | AML_INFO_SEQ | | decimal(18,0) | | | |
+以下是整理成 SQL Server CREATE TABLE 格式：
 
+CREATE TABLE dbo.YourTableName (
+    SOURCE_TYPE     VARCHAR(9),
+    DOC_NO          VARCHAR(50),
+    CURRENCY        VARCHAR(3),
+    AMOUNT          NUMERIC(18,3),
+    TRADE_DATE      VARCHAR(8),
+    CUSTOMER_ID     VARCHAR(25),
+    Function_Code   VARCHAR(10),
+    Function_Name   VARCHAR(100),
+    FLAG            VARCHAR(1),
+    FLAG_CONTENT    VARCHAR(210),
+    GOODSCODE       VARCHAR(210),
+    MERCHANDISE     VARCHAR(210),
+    VESSEL_NAME     NVARCHAR(MAX),
+    FLAG_VESSEL     VARCHAR(210),
+    REMARK          VARCHAR(210),
+    TAG44A_CONTENT  VARCHAR(210),
+    TAG44E_CONTENT  VARCHAR(210),
+    TAG44F_CONTENT  VARCHAR(210),
+    TAG44B_CONTENT  VARCHAR(210),
+    AML_INFO_SEQ    DECIMAL(18,0)
+);
 
-給我table
+若你是要文件規格用的 Table，則如下：
+
+Seq	Field Name	Data Type
+1	SOURCE_TYPE	VARCHAR(9)
+2	DOC_NO	VARCHAR(50)
+3	CURRENCY	VARCHAR(3)
+4	AMOUNT	NUMERIC(18,3)
+5	TRADE_DATE	VARCHAR(8)
+6	CUSTOMER_ID	VARCHAR(25)
+7	Function_Code	VARCHAR(10)
+8	Function_Name	VARCHAR(100)
+9	FLAG	VARCHAR(1)
+10	FLAG_CONTENT	VARCHAR(210)
+11	GOODSCODE	VARCHAR(210)
+12	MERCHANDISE	VARCHAR(210)
+13	VESSEL_NAME	NVARCHAR(MAX)
+14	FLAG_VESSEL	VARCHAR(210)
+15	REMARK	VARCHAR(210)
+16	TAG44A_CONTENT	VARCHAR(210)
+17	TAG44E_CONTENT	VARCHAR(210)
+18	TAG44F_CONTENT	VARCHAR(210)
+19	TAG44B_CONTENT	VARCHAR(210)
+20	AML_INFO_SEQ	DECIMAL(18,0)
+
+如果是 Informatica 要建立 Target Table，我也可以順便幫你產生 INSERT INTO 範本和 Source-to-Target Mapping 規格。
