@@ -1,411 +1,271 @@
+你現在的邏輯是：
 
+BRNCH_NBR = '0002' AND CNT <= 40
 
+假設：
 
-產生的 SQL 腳本
--- =============================================
--- 集中處理 - 中風險客戶 (202706 供給 → 202607 需求)
--- =============================================
-INSERT INTO @CustData
-SELECT CustomerNo, '20260930'
-FROM (
-    SELECT 
-        A.CustomerNo,
-        D.BRNCH_NBR,
-        DENSE_RANK() OVER (PARTITION BY D.BRNCH_NBR ORDER BY A.CIF_KEY) AS CNT
-    FROM (
-        SELECT CIF_KEY, CustomerNo 
-        FROM BSADBTW..BSA_SUB_CUST_FACT WITH (NOLOCK)
-        WHERE HIGHRISK = 'M'
-    ) A
+202706 → 202607
 
-    INNER JOIN BSADBTW..PB_CUSTOMER_FACT D WITH (NOLOCK)
-        ON A.CIF_KEY = D.CIF_KEY 
-    AND D.BRNCH_NBR IN ('0002', '0011', '0020', '0023', '0026', '0043', '0048', '0049', '0055', '0062', '0063', '0070', '0073', '0074', '0079', '0084', '0088', '0090', '0092', '0097', '0099', '0109', '0110', '0111', '0113', '0001', '0004', '0005', '0008', '0016', '0017', '0028', '0031', '0040', '0041', '0045', '0047', '0056', '0061', '0064', '0065', '0068', '0069', '0077', '0082', '0086', '0089', '0091', '0094', '0112', '0668', '0801', '0013', '0007', '0018', '0022', '0027', '0037', '0044', '0051', '0054', '0066', '0076', '0080', '0083', '0104', '0105', '0107', '0601', '0603', '0006', '0012', '0024', '0032', '0052', '0075', '0078', '0085', '0098', '0100', '0101', '0102', '0103', '0108', '0009', '0015', '0025', '0030', '0038', '0039', '0046', '0067', '0072', '0081', '0106', '0114', '0010', '0021', '0029', '0033', '0034', '0035', '0036', '0071', '0087', '0093')
-    AND D.RecordStatus = 'O'
-    AND D.Customer_Segment <> 'NCR'
+拿了
 
-    INNER JOIN BSADBTW..EDD_ReviewSchedule B WITH (NOLOCK)
-        ON A.CIF_KEY = B.CIFKey 
-    AND B.Status = 'P'
-    AND B.ReviewDt >= '20270601 00:00:00.000'
-    AND B.ReviewDt <= '20270630 23:59:59.999'
+CNT <= 40
 
-    LEFT JOIN (
-        SELECT CIF_KEY 
-        FROM BSADBTW..HRS_CUST_RISK_MGMT WITH (NOLOCK)
-        WHERE STATUS <> '3'
-    ) C ON A.CIF_KEY = C.CIF_KEY
+那麼同一個供給月份 202706 如果又有：
 
-    WHERE C.CIF_KEY IS NULL
-) T
+202706 → 202608
 
-WHERE 
-BRNCH_NBR = '0002' AND CNT <= 40 OR
-BRNCH_NBR = '0011' AND CNT <= 39 OR
-BRNCH_NBR = '0020' AND CNT <= 32 OR
-BRNCH_NBR = '0023' AND CNT <= 36 OR
-BRNCH_NBR = '0043' AND CNT <= 30 OR
-BRNCH_NBR = '0048' AND CNT <= 40 OR
-BRNCH_NBR = '0049' AND CNT <= 40 OR
-BRNCH_NBR = '0062' AND CNT <= 39 OR
-BRNCH_NBR = '0063' AND CNT <= 83 OR
-BRNCH_NBR = '0070' AND CNT <= 19 OR
-BRNCH_NBR = '0073' AND CNT <= 39 OR
-BRNCH_NBR = '0074' AND CNT <= 41 OR
-BRNCH_NBR = '0079' AND CNT <= 40 OR
-BRNCH_NBR = '0084' AND CNT <= 42 OR
-BRNCH_NBR = '0088' AND CNT <= 52 OR
-BRNCH_NBR = '0090' AND CNT <= 12 OR
-BRNCH_NBR = '0092' AND CNT <= 47 OR
-BRNCH_NBR = '0097' AND CNT <= 32 OR
-BRNCH_NBR = '0099' AND CNT <= 24 OR
-BRNCH_NBR = '0109' AND CNT <= 10 OR
-BRNCH_NBR = '0110' AND CNT <= 29 OR
-BRNCH_NBR = '0111' AND CNT <= 39 OR
-BRNCH_NBR = '0113' AND CNT <= 24 OR
-BRNCH_NBR = '0001' AND CNT <= 236 OR
-BRNCH_NBR = '0005' AND CNT <= 218 OR
-BRNCH_NBR = '0008' AND CNT <= 91 OR
-BRNCH_NBR = '0016' AND CNT <= 114 OR
-BRNCH_NBR = '0017' AND CNT <= 125 OR
-BRNCH_NBR = '0028' AND CNT <= 114 OR
-BRNCH_NBR = '0040' AND CNT <= 65 OR
-BRNCH_NBR = '0041' AND CNT <= 27 OR
-BRNCH_NBR = '0045' AND CNT <= 76 OR
-BRNCH_NBR = '0047' AND CNT <= 81 OR
-BRNCH_NBR = '0056' AND CNT <= 28 OR
-BRNCH_NBR = '0061' AND CNT <= 12 OR
-BRNCH_NBR = '0064' AND CNT <= 75 OR
-BRNCH_NBR = '0065' AND CNT <= 85 OR
-BRNCH_NBR = '0069' AND CNT <= 57 OR
-BRNCH_NBR = '0077' AND CNT <= 65 OR
-BRNCH_NBR = '0082' AND CNT <= 30 OR
-BRNCH_NBR = '0086' AND CNT <= 32 OR
-BRNCH_NBR = '0094' AND CNT <= 35 OR
-BRNCH_NBR = '0112' AND CNT <= 45 OR
-BRNCH_NBR = '0668' AND CNT <= 3 OR
-BRNCH_NBR = '0801' AND CNT <= 58 OR
-BRNCH_NBR = '0013' AND CNT <= 5 OR
-BRNCH_NBR = '0007' AND CNT <= 157 OR
-BRNCH_NBR = '0018' AND CNT <= 151 OR
-BRNCH_NBR = '0022' AND CNT <= 59 OR
-BRNCH_NBR = '0027' AND CNT <= 357 OR
-BRNCH_NBR = '0037' AND CNT <= 117 OR
-BRNCH_NBR = '0044' AND CNT <= 99 OR
-BRNCH_NBR = '0051' AND CNT <= 66 OR
-BRNCH_NBR = '0054' AND CNT <= 84 OR
-BRNCH_NBR = '0066' AND CNT <= 107 OR
-BRNCH_NBR = '0076' AND CNT <= 49 OR
-BRNCH_NBR = '0080' AND CNT <= 114 OR
-BRNCH_NBR = '0083' AND CNT <= 22 OR
-BRNCH_NBR = '0104' AND CNT <= 72 OR
-BRNCH_NBR = '0105' AND CNT <= 83 OR
-BRNCH_NBR = '0107' AND CNT <= 77 OR
-BRNCH_NBR = '0601' AND CNT <= 2857 OR
-BRNCH_NBR = '0006' AND CNT <= 197 OR
-BRNCH_NBR = '0012' AND CNT <= 302 OR
-BRNCH_NBR = '0024' AND CNT <= 90 OR
-BRNCH_NBR = '0032' AND CNT <= 62 OR
-BRNCH_NBR = '0075' AND CNT <= 108 OR
-BRNCH_NBR = '0078' AND CNT <= 97 OR
-BRNCH_NBR = '0085' AND CNT <= 41 OR
-BRNCH_NBR = '0100' AND CNT <= 82 OR
-BRNCH_NBR = '0101' AND CNT <= 170 OR
-BRNCH_NBR = '0102' AND CNT <= 2 OR
-BRNCH_NBR = '0103' AND CNT <= 42 OR
-BRNCH_NBR = '0108' AND CNT <= 98 OR
-BRNCH_NBR = '0009' AND CNT <= 23 OR
-BRNCH_NBR = '0015' AND CNT <= 85 OR
-BRNCH_NBR = '0025' AND CNT <= 74 OR
-BRNCH_NBR = '0030' AND CNT <= 75 OR
-BRNCH_NBR = '0038' AND CNT <= 48 OR
-BRNCH_NBR = '0039' AND CNT <= 43 OR
-BRNCH_NBR = '0046' AND CNT <= 47 OR
-BRNCH_NBR = '0067' AND CNT <= 40 OR
-BRNCH_NBR = '0072' AND CNT <= 34 OR
-BRNCH_NBR = '0081' AND CNT <= 36 OR
-BRNCH_NBR = '0106' AND CNT <= 37 OR
-BRNCH_NBR = '0114' AND CNT <= 22 OR
-BRNCH_NBR = '0010' AND CNT <= 84 OR
-BRNCH_NBR = '0021' AND CNT <= 72 OR
-BRNCH_NBR = '0029' AND CNT <= 37 OR
-BRNCH_NBR = '0034' AND CNT <= 28 OR
-BRNCH_NBR = '0035' AND CNT <= 52 OR
-BRNCH_NBR = '0036' AND CNT <= 40 OR
-BRNCH_NBR = '0071' AND CNT <= 31 OR
-BRNCH_NBR = '0087' AND CNT <= 31 OR
-BRNCH_NBR = '0093' AND CNT <= 12
+拿了
 
+CNT <= 60
 
+第二次就會把 1~40 再拿一次。
 
+因此你要改成區間：
 
+CNT BETWEEN 41 AND 60
 
+或
 
+CNT > 40 AND CNT <= 60
 
+這樣才不會重覆。
 
+⸻
 
-現在有個狀況
-如果是在同一個月且同一個序列
-應該要用between 應為這樣才不會拿到重複的CNT
+VBA 要怎麼改
 
-幫我改
+目前你的 Dictionary 只記錄：
 
-Option Explicit
+groups(groupKey)(branchLabel) = allocation
 
-' 主程序：執行此巨集以產生所有 SQL
-Public Sub GenerateCombinedSQL()
-    ' --- 設定區 ---
-    Const RISK_LEVEL As String = "M" ' 風險等級: "L" (低), "M" (中), "H" (高)
-    
-    ' --- 工作表名稱設定 ---
-    Const RISK_DATA_SHEET As String = "中風險"
-    Const BRANCH_LIST_SHEET As String = "列標籤"
-    Const NEXT_CHECK_DATE_SHEET As String = "下次審查日" ' 下次審查日對照表的分頁名稱
-    Const OUTPUT_SHEET As String = "SQL_Output"
-    
-    Dim wb As Workbook
-    Set wb = ThisWorkbook
-    
-    Dim wsRisk As Worksheet, wsBranch As Worksheet, wsNextCheck As Worksheet, wsOutput As Worksheet
-    
-    ' 檢查工作表是否存在
-    On Error Resume Next
-    Set wsRisk = wb.Sheets(RISK_DATA_SHEET)
-    If wsRisk Is Nothing Then
-        MsgBox "找不到名為 '" & RISK_DATA_SHEET & "' 的工作表。", vbCritical, "錯誤": Exit Sub
+只知道每個月份需要多少筆，
+
+不知道前面月份已經拿了多少筆。
+
+所以要先累加每個分行已使用的 CNT。
+
+⸻
+
+建議新增一個 Dictionary
+
+在
+
+Dim finalSqlBuilder As String
+
+前面加：
+
+Dim branchOffset As Object
+Set branchOffset = CreateObject("Scripting.Dictionary")
+
+⸻
+
+產生條件時改成
+
+原本：
+
+For Each branchLabelVariant In branchConditions.Keys
+    condList.Add "BRNCH_NBR = '" & branchLabelVariant & _
+                 "' AND CNT <= " & branchConditions(branchLabelVariant)
+Next branchLabelVariant
+
+改成：
+
+For Each branchLabelVariant In branchConditions.Keys
+    Dim startCnt As Long
+    Dim endCnt As Long
+    Dim allocCnt As Long
+    allocCnt = CLng(branchConditions(branchLabelVariant))
+    If branchOffset.Exists(branchLabelVariant) Then
+        startCnt = branchOffset(branchLabelVariant) + 1
+    Else
+        startCnt = 1
     End If
-    
-    Set wsBranch = wb.Sheets(BRANCH_LIST_SHEET)
-    If wsBranch Is Nothing Then
-        MsgBox "找不到名為 '" & BRANCH_LIST_SHEET & "' 的工作表。", vbCritical, "錯誤": Exit Sub
-    End If
-    
-    Set wsNextCheck = wb.Sheets(NEXT_CHECK_DATE_SHEET)
-    If wsNextCheck Is Nothing Then
-        MsgBox "找不到名為 '" & NEXT_CHECK_DATE_SHEET & "' 的工作表。", vbCritical, "錯誤": Exit Sub
-    End If
-    On Error GoTo 0
+    endCnt = startCnt + allocCnt - 1
+    condList.Add _
+        "(BRNCH_NBR = '" & branchLabelVariant & _
+        "' AND CNT BETWEEN " & startCnt & _
+        " AND " & endCnt & ")"
+    branchOffset(branchLabelVariant) = endCnt
+Next branchLabelVariant
 
-    ' --- 步驟 0: 讀取 "下次審查日" 對照表 ---
-    Dim nextCheckMap As Object
-    Set nextCheckMap = CreateObject("Scripting.Dictionary")
-    
-    Dim lastMapRow As Long
-    lastMapRow = wsNextCheck.Cells(wsNextCheck.Rows.Count, "A").End(xlUp).Row
-    Dim i As Long
-    ' *** 修正 1: 從第 2 行開始讀取，以跳過標題 ***
-    For i = 2 To lastMapRow
-        Dim key As String, val As String
-        val = GetNumericPart(CStr(wsNextCheck.Cells(i, 1).Value)) ' A欄: 下次審查日
-        key = GetNumericPart(CStr(wsNextCheck.Cells(i, 2).Value)) ' B欄: 需求月份
-        If key <> "" And val <> "" Then
-            nextCheckMap(key) = val
+⸻
+
+產生結果會變成
+
+第一次：
+
+(BRNCH_NBR='0002' AND CNT BETWEEN 1 AND 40)
+
+第二次：
+
+(BRNCH_NBR='0002' AND CNT BETWEEN 41 AND 79)
+
+第三次：
+
+(BRNCH_NBR='0002' AND CNT BETWEEN 80 AND 120)
+
+完全不會重覆拿到同一個 CNT。
+
+⸻
+
+還有一個隱藏問題
+
+你現在：
+
+For Each groupKeyVariant In groups.Keys
+
+Dictionary 的順序不保證一定是：
+
+202706→202607
+202706→202608
+202706→202609
+
+有可能變成：
+
+202706→202609
+202706→202607
+202706→202608
+
+這樣 offset 會亂掉。
+
+因此如果要用 BETWEEN 累加，最好先依：
+
+SupplyMonth
+DemandMonth
+
+排序後再產生 SQL。
+
+否則同一份 Excel 今天產出的區間可能和明天不一樣。
+
+所以除了改成 BETWEEN 外，我更建議你把 groups.Keys 先排序後再迴圈，這樣同月份同序列的 CNT 區間才會永遠一致。
+
+：@
+你的需求不只是把 CNT <= N 改成 BETWEEN 而已。
+
+因為同一個分行在不同需求月份會累積使用 CNT，所以必須：
+
+1. 記錄每個分行已經使用到哪個 CNT
+2. 用 BETWEEN 起始值 AND 結束值
+3. 依照 SupplyMonth + DemandMonth 排序，避免 Dictionary 順序亂掉
+
+你只需要修改 GenerateSqlFromRiskData() 裡面產生條件的部分即可。
+
+⸻
+
+1. 在建立 groups 後新增 Offset Dictionary
+
+找到：
+
+Dim finalSqlBuilder As String, groupKeyVariant As Variant, branchLabelVariant As Variant
+
+改成：
+
+Dim finalSqlBuilder As String, groupKeyVariant As Variant, branchLabelVariant As Variant
+Dim branchOffset As Object
+Set branchOffset = CreateObject("Scripting.Dictionary")
+
+⸻
+
+2. 將 Group Key 排序
+
+在：
+
+For Each groupKeyVariant In groups.Keys
+
+前面新增：
+
+Dim sortedKeys() As String
+Dim keyCount As Long
+Dim x As Long, y As Long
+Dim tempKey As String
+keyCount = groups.Count
+ReDim sortedKeys(0 To keyCount - 1)
+x = 0
+For Each groupKeyVariant In groups.Keys
+    sortedKeys(x) = CStr(groupKeyVariant)
+    x = x + 1
+Next
+For x = 0 To UBound(sortedKeys) - 1
+    For y = x + 1 To UBound(sortedKeys)
+        If sortedKeys(x) > sortedKeys(y) Then
+            tempKey = sortedKeys(x)
+            sortedKeys(x) = sortedKeys(y)
+            sortedKeys(y) = tempKey
         End If
-    Next i
-    
-    If nextCheckMap.Count = 0 Then
-        MsgBox "在 '" & NEXT_CHECK_DATE_SHEET & "' 工作表中找不到任何有效的日期對照資料(已跳過第一行標題)。", vbExclamation, "提示": Exit Sub
+    Next y
+Next y
+
+然後把：
+
+For Each groupKeyVariant In groups.Keys
+
+改成：
+
+For x = 0 To UBound(sortedKeys)
+    groupKeyVariant = sortedKeys(x)
+
+並把最後的：
+
+Next groupKeyVariant
+
+改成：
+
+Next x
+
+⸻
+
+3. 修改 CNT 條件產生邏輯
+
+找到這段：
+
+For Each branchLabelVariant In branchConditions.Keys
+    condList.Add "BRNCH_NBR = '" & branchLabelVariant & _
+                 "' AND CNT <= " & branchConditions(branchLabelVariant)
+Next branchLabelVariant
+
+整段改成：
+
+For Each branchLabelVariant In branchConditions.Keys
+    Dim allocCnt As Long
+    Dim startCnt As Long
+    Dim endCnt As Long
+    allocCnt = CLng(branchConditions(branchLabelVariant))
+    If branchOffset.Exists(branchLabelVariant) Then
+        startCnt = branchOffset(branchLabelVariant) + 1
+    Else
+        startCnt = 1
     End If
+    endCnt = startCnt + allocCnt - 1
+    condList.Add _
+        "(BRNCH_NBR = '" & branchLabelVariant & _
+        "' AND CNT BETWEEN " & startCnt & _
+        " AND " & endCnt & ")"
+    branchOffset(branchLabelVariant) = endCnt
+Next branchLabelVariant
 
-    ' --- 步驟 1: 產生 IN 子句 ---
-    Dim branchInClause As String
-    branchInClause = GetBranchInClause(wsBranch)
-    If branchInClause = "" Then
-        MsgBox "在 '" & BRANCH_LIST_SHEET & "' 工作表中找不到任何分行資料(已跳過第一行標題)。", vbExclamation, "提示": Exit Sub
-    End If
+⸻
 
-    ' --- 步驟 2 & 3: 讀取風險資料、分組並產生完整 SQL ---
-    Dim finalSql As String
-    finalSql = GenerateSqlFromRiskData(wsRisk, branchInClause, RISK_LEVEL, nextCheckMap)
-    
-    If finalSql = "" Then
-        MsgBox "在 '" & RISK_DATA_SHEET & "' 工作表中找不到可處理的資料，或處理過程中發生錯誤。", vbExclamation, "提示": Exit Sub
-    End If
-    
-    ' --- 步驟 4: 輸出結果到新的工作表 ---
-    Application.ScreenUpdating = False
-    Application.DisplayAlerts = False
-    On Error Resume Next
-    wb.Sheets(OUTPUT_SHEET).Delete
-    On Error GoTo 0
-    Application.DisplayAlerts = True
-    
-    Set wsOutput = wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
-    wsOutput.Name = OUTPUT_SHEET
-    wsOutput.Cells(1, 1).Value = "產生的 SQL 腳本"
-    
-    Dim lines() As String
-    lines = Split(finalSql, vbCrLf)
-    
-    For i = 0 To UBound(lines)
-        wsOutput.Cells(i + 2, 1).Value = lines(i)
-    Next i
-    
-    wsOutput.Columns("A").Font.Name = "Consolas"
-    wsOutput.Columns("A").EntireColumn.AutoFit
-    Application.ScreenUpdating = True
-    
-    MsgBox "SQL 產生完成！結果已輸出到 '" & OUTPUT_SHEET & "' 工作表中。", vbInformation, "完成"
-End Sub
+產生結果範例
 
-' 函數：從 "列標籤" 工作表產生 SQL IN 子句
-Private Function GetBranchInClause(ws As Worksheet) As String
+原本：
 
-    Dim lastRow As Long
-    Dim cell As Range
-    Dim arr As Object
+WHERE
+BRNCH_NBR='0002' AND CNT<=40 OR
+BRNCH_NBR='0002' AND CNT<=79 OR
+BRNCH_NBR='0002' AND CNT<=120
 
-    Set arr = CreateObject("System.Collections.ArrayList")
+改完後：
 
-    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+第一個月份：
 
-    For Each cell In ws.Range("A2:A" & lastRow)
+(BRNCH_NBR='0002' AND CNT BETWEEN 1 AND 40)
 
-        If Trim(cell.Value) <> "" Then
+第二個月份：
 
-            arr.Add "'" & Replace(Trim(cell.Value), "_", "") & "'"
+(BRNCH_NBR='0002' AND CNT BETWEEN 41 AND 79)
 
-        End If
+第三個月份：
 
-    Next cell
+(BRNCH_NBR='0002' AND CNT BETWEEN 80 AND 120)
 
-    GetBranchInClause = Join(arr.ToArray(), ", ")
-
-End Function
-
-' 函數：從 "中風險" 工作表產生完整的 SQL 腳本 (此函數無需修改)
-Private Function GenerateSqlFromRiskData(ws As Worksheet, branchInClause As String, riskLevel As String, ByVal nextCheckMap As Object) As String
-    Dim lastRow As Long
-    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
-    If lastRow <= 1 Then Exit Function
-    
-    Dim dataRange As Range
-    Set dataRange = ws.Range("A2:D" & lastRow) ' 讀取 A 到 D 欄
-    
-    Dim groups As Object
-    Set groups = CreateObject("Scripting.Dictionary")
-    
-    Dim r As Long
-    For r = 1 To dataRange.Rows.Count
-        Dim supplyMonth As String, demandMonth As String, branchLabel As String
-        Dim allocation As Double
-        
-        demandMonth = GetNumericPart(CStr(dataRange.Cells(r, 1).Value))
-        supplyMonth = GetNumericPart(CStr(dataRange.Cells(r, 2).Value))
-        branchLabel = Replace(Trim(CStr(dataRange.Cells(r, 4).Value)), "_", "", 1, 1)
-        
-        If IsNumeric(dataRange.Cells(r, 3).Value) Then
-            allocation = CDbl(dataRange.Cells(r, 3).Value)
-        Else
-            allocation = 0
-        End If
-        
-        If supplyMonth <> "" And demandMonth <> "" And branchLabel <> "" Then
-            Dim groupKey As String
-            groupKey = supplyMonth & "_" & demandMonth
-            
-            If Not groups.Exists(groupKey) Then
-                Set groups(groupKey) = CreateObject("Scripting.Dictionary")
-            End If
-            
-            If groups(groupKey).Exists(branchLabel) Then
-                groups(groupKey)(branchLabel) = groups(groupKey)(branchLabel) + allocation
-            Else
-                groups(groupKey)(branchLabel) = allocation
-            End If
-        End If
-    Next r
-    
-    Dim finalSqlBuilder As String, groupKeyVariant As Variant, branchLabelVariant As Variant
-    
-    Dim riskDesc As String
-    Select Case riskLevel
-        Case "H": riskDesc = "高風險"
-        Case "M": riskDesc = "中風險"
-        Case "L": riskDesc = "低風險"
-        Case Else: riskDesc = "未知風險"
-    End Select
-    
-    For Each groupKeyVariant In groups.Keys
-        Dim parts() As String
-        parts = Split(groupKeyVariant, "_")
-        Dim supply As String, demand As String, nextCheck As String
-        supply = parts(0)
-        demand = parts(1)
-        
-        If nextCheckMap.Exists(demand) Then
-            nextCheck = nextCheckMap(demand)
-        Else
-            nextCheck = "YYYYMMDD_NotFound"
-        End If
-        
-        Dim condList As Object
-        Set condList = CreateObject("System.Collections.ArrayList")
-        
-        Dim branchConditions As Object
-        Set branchConditions = groups(groupKeyVariant)
-        
-        For Each branchLabelVariant In branchConditions.Keys
-            condList.Add "BRNCH_NBR = '" & branchLabelVariant & "' AND CNT <= " & branchConditions(branchLabelVariant)
-        Next branchLabelVariant
-        
-        Dim whereConditions As String
-        whereConditions = Join(condList.ToArray(), " OR" & vbCrLf)
-        
-        Dim sqlTemplate As String
-        sqlTemplate = "-- =============================================" & vbCrLf
-        sqlTemplate = sqlTemplate & "-- 集中處理 - " & riskDesc & "客戶 (" & supply & " 供給 → " & demand & " 需求)" & vbCrLf
-        sqlTemplate = sqlTemplate & "-- =============================================" & vbCrLf
-        sqlTemplate = sqlTemplate & "INSERT INTO @CustData" & vbCrLf
-        sqlTemplate = sqlTemplate & "SELECT CustomerNo, '" & nextCheck & "'" & vbCrLf
-        sqlTemplate = sqlTemplate & "FROM (" & vbCrLf
-        sqlTemplate = sqlTemplate & "    SELECT " & vbCrLf
-        sqlTemplate = sqlTemplate & "        A.CustomerNo," & vbCrLf
-        sqlTemplate = sqlTemplate & "        D.BRNCH_NBR," & vbCrLf
-        sqlTemplate = sqlTemplate & "        DENSE_RANK() OVER (PARTITION BY D.BRNCH_NBR ORDER BY A.CIF_KEY) AS CNT" & vbCrLf
-        sqlTemplate = sqlTemplate & "    FROM (" & vbCrLf
-        sqlTemplate = sqlTemplate & "        SELECT CIF_KEY, CustomerNo " & vbCrLf
-        sqlTemplate = sqlTemplate & "        FROM BSADBTW..BSA_SUB_CUST_FACT WITH (NOLOCK)" & vbCrLf
-        sqlTemplate = sqlTemplate & "        WHERE HIGHRISK = '" & riskLevel & "'" & vbCrLf
-        sqlTemplate = sqlTemplate & "    ) A" & vbCrLf
-        sqlTemplate = sqlTemplate & "" & vbCrLf
-        sqlTemplate = sqlTemplate & "    INNER JOIN BSADBTW..PB_CUSTOMER_FACT D WITH (NOLOCK)" & vbCrLf
-        sqlTemplate = sqlTemplate & "        ON A.CIF_KEY = D.CIF_KEY " & vbCrLf
-        sqlTemplate = sqlTemplate & "    AND D.BRNCH_NBR IN (" & branchInClause & ")" & vbCrLf
-        sqlTemplate = sqlTemplate & "    AND D.RecordStatus = 'O'" & vbCrLf
-        sqlTemplate = sqlTemplate & "    AND D.Customer_Segment <> 'NCR'" & vbCrLf
-        sqlTemplate = sqlTemplate & "" & vbCrLf
-        sqlTemplate = sqlTemplate & "    INNER JOIN BSADBTW..EDD_ReviewSchedule B WITH (NOLOCK)" & vbCrLf
-        sqlTemplate = sqlTemplate & "        ON A.CIF_KEY = B.CIFKey " & vbCrLf
-        sqlTemplate = sqlTemplate & "    AND B.Status = 'P'" & vbCrLf
-        sqlTemplate = sqlTemplate & "    AND B.ReviewDt >= '" & supply & "01 00:00:00.000'" & vbCrLf
-        sqlTemplate = sqlTemplate & "    AND B.ReviewDt <= '" & supply & Day(DateSerial(Left(supply, 4), Right(supply, 2) + 1, 0)) & " 23:59:59.999'" & vbCrLf
-        sqlTemplate = sqlTemplate & "" & vbCrLf
-        sqlTemplate = sqlTemplate & "    LEFT JOIN (" & vbCrLf
-        sqlTemplate = sqlTemplate & "        SELECT CIF_KEY " & vbCrLf
-        sqlTemplate = sqlTemplate & "        FROM BSADBTW..HRS_CUST_RISK_MGMT WITH (NOLOCK)" & vbCrLf
-        sqlTemplate = sqlTemplate & "        WHERE STATUS <> '3'" & vbCrLf
-        sqlTemplate = sqlTemplate & "    ) C ON A.CIF_KEY = C.CIF_KEY" & vbCrLf
-        sqlTemplate = sqlTemplate & "" & vbCrLf
-        sqlTemplate = sqlTemplate & "    WHERE C.CIF_KEY IS NULL" & vbCrLf
-        sqlTemplate = sqlTemplate & ") T" & vbCrLf
-        sqlTemplate = sqlTemplate & "" & vbCrLf
-        sqlTemplate = sqlTemplate & "WHERE " & vbCrLf
-        sqlTemplate = sqlTemplate & whereConditions & vbCrLf
-            
-        finalSqlBuilder = finalSqlBuilder & sqlTemplate & vbCrLf
-    Next groupKeyVariant
-    
-    GenerateSqlFromRiskData = finalSqlBuilder
-End Function
-
-' 輔助函數：從字串中提取數字部分
-Private Function GetNumericPart(text As String) As String
-    Dim regEx As Object
-    Set regEx = CreateObject("VBScript.RegExp")
-    regEx.Pattern = "\d+"
-    regEx.Global = False
-    If regEx.Test(text) Then GetNumericPart = regEx.Execute(text)(0) Else GetNumericPart = ""
-End Function
-
-
+這樣同一個 CIF 只會被分配一次，不會因為 CNT<=N 而重複被抓到。
