@@ -1,195 +1,227 @@
-return																			
-		Target Table Name 	CD::E:\data\AML\HK\USER\DWLOAD\AMLM007_REDFLAG_REPORT_HK.CSV																
-		Target Description																	
-		Table Total Length																	
-		Source Type (F: File/T: Table)	T	T	T														
-		"Data Source DB Name /
-Data Source Machine Name"	OBODS.HKDB	OBODS.HKDB	OBODS.HKDB														
-		Data Source File Path																	
-		"Data Source Table Name /
-Data Source File Name"	WBS_CIF_CUST_INFO C	WBS_AML_DETAIL AML	WBS_RAA_FUNC_INFO F	WBS_LON_INFO	WBS_IMP_LC	WBS_IMP_SGED	WBS_IMP_IB	WBS_IMP_IC	WBS_EXP_LA_INFO	WBS_EXP_LT_INFO	WBS_EXP_NEGO_INFO	WBS_EXP_RE_NEGO_INFO	WBS_EXP_OC_INFO	WBS_CIF_CUST_INFO	WBS_AML_DETAIL	WBS_RAA_FUNC_INFO	
-		"Data Source Table Descripti/ 
-Data Source File Description"																	
-		Data Source Conditions																	
-		Actions	LEFT JOIN	LEFT JOIN	LEFT JOIN														
-		Tables Join Conditions	E.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ	E.AML_INFO_SEQ = AML.AML_INFO_SEQ	AML.FUN_CODE = F.FUNC_CODE														
-		Tables Grouping	N/A																
-		Target Remark	Source transaction data is consolidated through Combined_List (UNION ALL) before joining customer and AML reference tables.																
-																			
-Seq	"Col. 
-No"	Field Name	Chinese Name	Data Type	Key	Source	Spec.	Column Notes											
-1	1	SOURCE_TYPE		VARCHAR(9)															
-2	2	DOC_NO		VARCHAR(50)															
-3	3	CURRENCY		VARCHAR(3)															
-4	4	AMOUNT		NUMERIC(18,3)															
-5	5	TRADE_DATE		VARCHAR(8)															
-6	6	CUSTOMER_ID		VARCHAR(25)															
-7	7	Function_Code		VARCHAR(10)															
-8	8	Function_Name		VARCHAR(100)															
-9	9	FLAG		VARCHAR(1)															
-10	10	FLAG_CONTENT		VARCHAR(210)															
-11	11	GOODSCODE		VARCHAR(210)															
-12	12	MERCHANDISE		VARCHAR(210)															
-13	13	VESSEL_NAME		NVARCHAR(MAX)															
-14	14	FLAG_VESSEL		VARCHAR(210)															
-15	15	REMARK		VARCHAR(210)															
-16	16	TAG44A_CONTENT		VARCHAR(210)															
-17	17	TAG44E_CONTENT		VARCHAR(210)															
-18	18	TAG44F_CONTENT		VARCHAR(210)															
-19	19	TAG44B_CONTENT		VARCHAR(210)															
-20	20	AML_INFO_SEQ		DECIMAL(18,0)															
-																			
-																			
-																			
-					
-																			
-我的PS 有要修改的?
+看你貼的 Mapping Spec 跟 SP，我覺得 SP 本身邏輯大致上已符合規格，但有幾個地方建議你確認，不然之後文件審查或 SIT/UAT 很容易被抓出來。
 
+1. Source Table 要補 Combined_List 說明
 
-下面是我的code 給你參考
+你現在文件寫：
 
-USE [HKDB]
-GO
-/****** Object:  StoredProcedure [dbo].[SP_AMLM007_REDFLAG_REPORT_HK]    Script Date: 2026/6/4 下午 03:11:36 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
+Source Table
 
-ALTER PROCEDURE [dbo].[SP_AMLM007_REDFLAG_REPORT_HK]
-AS
-BEGIN
-    SET NOCOUNT OFF;
-    EXECUTE(N'DROP TABLE IF EXISTS ##AMLM007_REDFLAG_REPORT_HK');
+WBS_CIF_CUST_INFO
 
-    -- 1. Combine all source tables
-    ;WITH Combined_List AS (
-        -- LOAN
-        SELECT 'LOAN' AS SOURCE_TYPE, LON_NO AS DOC_NO, LON_CCY AS CURRENCY, LON_AMT AS AMOUNT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_LON_INFO
-        UNION ALL
-        -- LC CREATE
-        SELECT 'LC_CREATE', LC_NO, LC_NO_CCY, LC_NO_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_LC
-        UNION ALL
-        -- LC AMEND
-        SELECT 'LC_AMEND', LC_NO, LC_NO_CCY, NEW_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_LC
-        UNION ALL
-        -- SGED
-        SELECT 'SGED', SGED_NO, SGED_CCY, SGED_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_SGED
-        UNION ALL
-        -- IB
-        SELECT 'IB', IB_NO, BILL_CCY, BILL_AMT1, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_IB
-        UNION ALL
-        -- IC
-        SELECT 'IC', IC_NO, BILL_CCY, BILL_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_IC
-        UNION ALL
-        -- LA
-        SELECT 'LA', LA_NO, LC_CCY, LC_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_LA_INFO
-        UNION ALL
-        -- LT
-        SELECT 'LT', LT_NO, LC_CCY, LT_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_LT_INFO
-        UNION ALL
-        -- NEGO
-        SELECT 'NEGO', NEGO_NO, BILL_CCY, BILL_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_NEGO_INFO
-        UNION ALL
-        -- RENEGO
-        SELECT 'RENEGO', REF_NO, BILL_CCY, BILL_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_RE_NEGO_INFO
-        UNION ALL
-        -- OC
-        SELECT 'OC', OC_NO, BILL_CCY, BILL_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_OC_INFO
-    )
+WBS_AML_DETAIL
 
-    -- 2. Output to temp table
-    SELECT
-        E.SOURCE_TYPE, E.DOC_NO, E.CURRENCY, E.AMOUNT, E.TRADE_DATE,
-        '_' + ISNULL(C.CUSTOMER_ID,'') AS CUSTOMER_ID,
-        F.FUNC_CODE AS Function_Code,
-        F.FUNC_NAME AS Function_Name, 
-        AML.FLAG AS FLAG, 
-        AML.CONTENT AS FLAG_CONTENT, 
-        GOODSCODE.CONTENT AS GOODSCODE,
-        MERCHANDISE.CONTENT AS MERCHANDISE,
-        VESSEL_NAME.CONTENT AS VESSEL_NAME,
-        FLAG_VESSEL.CONTENT AS FLAG_VESSEL,
-        REMARK.CONTENT AS REMARK,
-        TAG44A_CONTENT.CONTENT AS TAG44A_CONTENT,  -- PORT_OF_LOADING
-        TAG44E_CONTENT.CONTENT AS TAG44E_CONTENT,  -- PORT_OF_DISCHARGE
-        TAG44F_CONTENT.CONTENT AS TAG44F_CONTENT,  -- PORT_OF_TRANSSHIPMENT
-        TAG44B_CONTENT.CONTENT AS TAG44B_CONTENT,  -- FINAL_DESTINATION
-        E.AML_INFO_SEQ
-    INTO ##AMLM007_REDFLAG_REPORT_HK
-    FROM Combined_List E
-    LEFT JOIN WBS_CIF_CUST_INFO C ON E.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(FLAG) AS FLAG, MAX(FUN_CODE) AS FUN_CODE, MAX(CONTENT) AS CONTENT
-        FROM WBS_AML_DETAIL WHERE AML_TYPE='RED_FLAG' GROUP BY AML_INFO_SEQ
-    ) AML ON E.AML_INFO_SEQ = AML.AML_INFO_SEQ
-    LEFT JOIN WBS_RAA_FUNC_INFO F ON AML.FUN_CODE = F.FUNC_CODE
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='GOODSCODE' GROUP BY AML_INFO_SEQ
-    ) GOODSCODE ON E.AML_INFO_SEQ = GOODSCODE.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='MERCHANDISE' GROUP BY AML_INFO_SEQ
-    ) MERCHANDISE ON E.AML_INFO_SEQ = MERCHANDISE.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, STRING_AGG(CAST(CONTENT AS NVARCHAR(MAX)), ',') AS CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='VESSEL_NAME' GROUP BY AML_INFO_SEQ
-    ) VESSEL_NAME ON E.AML_INFO_SEQ = VESSEL_NAME.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='FLAG_VESSEL' GROUP BY AML_INFO_SEQ
-    ) FLAG_VESSEL ON E.AML_INFO_SEQ = FLAG_VESSEL.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='REMARK' GROUP BY AML_INFO_SEQ
-    ) REMARK ON E.AML_INFO_SEQ = REMARK.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='TAG44A_CONTENT' GROUP BY AML_INFO_SEQ
-    ) TAG44A_CONTENT ON E.AML_INFO_SEQ = TAG44A_CONTENT.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='TAG44E_CONTENT' GROUP BY AML_INFO_SEQ
-    ) TAG44E_CONTENT ON E.AML_INFO_SEQ = TAG44E_CONTENT.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='TAG44F_CONTENT' GROUP BY AML_INFO_SEQ
-    ) TAG44F_CONTENT ON E.AML_INFO_SEQ = TAG44F_CONTENT.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='TAG44B_CONTENT' GROUP BY AML_INFO_SEQ
-    ) TAG44B_CONTENT ON E.AML_INFO_SEQ = TAG44B_CONTENT.AML_INFO_SEQ
-    WHERE (
-        LEFT(E.TRADE_DATE,6) = CONVERT(VARCHAR(6),DATEADD(MONTH,-1,GETDATE()),112)
-        --OR @@SERVERNAME='OBODS_TEST'
-    )
-    AND AML.FLAG='Y'
-    ORDER BY E.TRADE_DATE;
+WBS_RAA_FUNC_INFO
 
-    -- 3. 動態產生欄位名稱
-    DECLARE @SQL NVARCHAR(MAX) = N'';
-    WITH TBLCOLNME AS (
-        SELECT C.OBJECT_ID, C.NAME
-        FROM TEMPDB.SYS.TABLES T
-        JOIN TEMPDB.SYS.COLUMNS C ON T.OBJECT_ID=C.OBJECT_ID
-        WHERE T.NAME=N'##AMLM007_REDFLAG_REPORT_HK'
-    )
-    SELECT DISTINCT
-        @SQL = STUFF((
-            SELECT CONCAT(',"',A.NAME,'"')
-            FROM TBLCOLNME A
-            WHERE A.OBJECT_ID=B.OBJECT_ID
-            FOR XML PATH('')
-        ), 1, 1, '')
-    FROM TBLCOLNME B;
+WBS_LON_INFO
 
-    -- 4. 動態產生查詢語法
-    SET @SQL = CONCAT(
-        CONCAT('SELECT ''',@SQL,''' AS COL'),
-        ' UNION ALL ',
-        CONCAT(
-            N'SELECT CONCAT(',
-            N'REPLACE(REPLACE(REPLACE(REPLACE(',
-            REPLACE(@SQL,',',N',CHAR(9),''''),CHAR(10),''''),CHAR(13),''''),'','',''，''),'','',REPLACE(REPLACE(REPLACE(REPLACE('),
-            N',CHAR(9),''''),CHAR(10),''''),CHAR(13),''''),'','',''，'')',
-            N') AS COL FROM ##AMLM007_REDFLAG_REPORT_HK '
-        )
-    );
-    SET @SQL = CONCAT(
-        @SQL,
-        N' UNION ALL SELECT '',,,,*** End of Report ***,,,,,,,,,,,,,,,,,'' '
-    );
-    EXECUTE(@SQL);
-END
+WBS_IMP_LC
+
+…
+
+但實際上 SP 是：
+
+WITH Combined_List AS (
+   UNION ALL ...
+)
+
+所以建議在 Target Remark 或 Source Description 補：
+
+Transaction data is consolidated from
+WBS_LON_INFO,
+WBS_IMP_LC,
+WBS_IMP_SGED,
+WBS_IMP_IB,
+WBS_IMP_IC,
+WBS_EXP_LA_INFO,
+WBS_EXP_LT_INFO,
+WBS_EXP_NEGO_INFO,
+WBS_EXP_RE_NEGO_INFO,
+WBS_EXP_OC_INFO
+through Combined_List (UNION ALL)
+before joining AML and Customer reference tables.
+
+這個你其實已經寫了：
+
+Source transaction data is consolidated through Combined_List (UNION ALL)
+before joining customer and AML reference tables.
+
+所以 OK。
+
+⸻
+
+2. CUSTOMER_ID 規格與程式不一致
+
+文件：
+
+CUSTOMER_ID VARCHAR(25)
+
+程式：
+
+'_' + ISNULL(C.CUSTOMER_ID,'') AS CUSTOMER_ID
+
+實際輸出會變：
+
+_123456789
+
+前面多一個底線。
+
+因此規格要二選一：
+
+選項A
+
+文件補註解
+
+Prefix "_" before CUSTOMER_ID.
+
+選項B
+
+把 SP 改掉
+
+ISNULL(C.CUSTOMER_ID,'') AS CUSTOMER_ID
+
+這個要確認原 AMLM 系統是否要求前面加 _
+
+⸻
+
+3. Function_Code / Function_Name
+
+文件：
+
+Function_Code
+Function_Name
+
+來源實際是：
+
+F.FUNC_CODE
+F.FUNC_NAME
+
+建議在欄位 Mapping 補：
+
+Target	Source
+Function_Code	WBS_RAA_FUNC_INFO.FUNC_CODE
+Function_Name	WBS_RAA_FUNC_INFO.FUNC_NAME
+
+不然 reviewer 會問。
+
+⸻
+
+4. VESSEL_NAME 型態
+
+文件：
+
+NVARCHAR(MAX)
+
+程式：
+
+STRING_AGG(
+   CAST(CONTENT AS NVARCHAR(MAX)),
+   ','
+)
+
+這個是對的。
+
+不用改。
+
+⸻
+
+5. FLAG 過濾條件沒寫
+
+程式：
+
+AND AML.FLAG='Y'
+
+但文件沒看到。
+
+建議 Source Conditions 加：
+
+AML.FLAG = 'Y'
+
+⸻
+
+6. 月份條件沒寫
+
+程式：
+
+LEFT(E.TRADE_DATE,6)
+=
+CONVERT(VARCHAR(6),
+DATEADD(MONTH,-1,GETDATE()),
+112)
+
+表示：
+
+取上個月交易資料
+
+建議文件補：
+
+Trade Date = Previous Month (YYYYMM)
+
+不然之後別人看文件不知道為什麼只出一個月資料。
+
+⸻
+
+7. 最後 End of Report
+
+SP 最後有：
+
+UNION ALL
+SELECT ',,,,*** End of Report ***,,,,,,,,,,,,,,,,,,'
+
+這是輸出檔特有格式。
+
+如果是 AML 檔案規格要求：
+
+File Trailer:
+**** End of Report ****
+
+建議寫進 File Format Spec。
+
+⸻
+
+8. 最大問題：AML_DETAIL 被 Join 很多次
+
+目前：
+
+WBS_AML_DETAIL
+
+被掃描了 10 次以上：
+
+GOODSCODE
+MERCHANDISE
+VESSEL_NAME
+FLAG_VESSEL
+REMARK
+TAG44A
+TAG44B
+TAG44E
+TAG44F
+RED_FLAG
+
+效能上比較差。
+
+之後若要優化可以改成一次 Pivot：
+
+WITH AML_DETAIL_PIVOT AS (...)
+
+再 Join 一次即可。
+
+不過這是效能優化，不影響規格文件。
+
+⸻
+
+結論
+
+如果是問 PS (Mapping Spec) 要不要修改：
+
+我會建議至少補這 3 個：
+
+1. AML.FLAG='Y'
+2. Trade Date = Previous Month
+3. CUSTOMER_ID 前面會加 '_'
+
+另外把 Source Remark 保留：
+
+Source transaction data is consolidated through Combined_List (UNION ALL)
+before joining customer and AML reference tables.
+
+這樣你的文件就已經跟 SP 95% 一致了。
