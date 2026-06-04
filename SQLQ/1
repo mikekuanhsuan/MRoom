@@ -1,28 +1,4 @@
-項目	測試案例	預期結果
-1	月報資料整合	Informatica Job 執行成功，資料整合完成。
-2	月報檔案產出	報表成功產出並放置於指定下載路徑。
-3	資料筆數驗證	報表筆數與資料庫查詢結果一致。
-4	金額驗證	報表金額加總與資料庫查詢結果一致。
-5	欄位完整性驗證	報表包含需求定義之所有欄位。
-6	欄位內容驗證	報表欄位值與來源資料一致。
-7	Red Flag 條件驗證	僅 Red Flag = Y 交易納入報表。
-8	報表期間驗證	僅包含指定月份區間內資料。
-9	LOAN 資料驗證	符合條件之 LOAN 資料正確納入報表。
-10	重複資料驗證	同一交易／AML_Info_Seq 不重複出現。
-11	空值與格式驗證	欄位格式正確，無截斷、亂碼或異常。
+Seq | Col. No | Field Name | Chinese Name | Data Type | Key | Source | Spec. | Column Notes 1 | 1 | SOURCE_TYPE | | varchar(9) | | | | 2 | 2 | DOC_NO | | varchar(50) | | | | 3 | 3 | CURRENCY | | varchar(3) | | | | 4 | 4 | AMOUNT | | numeric(18,3) | | | | 5 | 5 | TRADE_DATE | | varchar(8) | | | | 6 | 6 | CUSTOMER_ID | | varchar(25) | | | | 7 | 7 | Function_Code | | varchar(10) | | | | 8 | 8 | Function_Name | | varchar(100) | | | | 9 | 9 | FLAG | | varchar(1) | | | | 10 | 10 | FLAG_CONTENT | | varchar(210) | | | | 11 | 11 | GOODSCODE | | varchar(210) | | | | 12 | 12 | MERCHANDISE | | varchar(210) | | | | 13 | 13 | VESSEL_NAME | | nvarchar(max) | | | | 14 | 14 | FLAG_VESSEL | | varchar(210) | | | | 15 | 15 | REMARK | | varchar(210) | | | | 16 | 16 | TAG44A_CONTENT | | varchar(210) | | | | 17 | 17 | TAG44E_CONTENT | | varchar(210) | | | | 18 | 18 | TAG44F_CONTENT | | varchar(210) | | | | 19 | 19 | TAG44B_CONTENT | | varchar(210) | | | | 20 | 20 | AML_INFO_SEQ | | decimal(18,0) | | | |
 
-如果是要放在 UAT測試報告，建議再精簡成：
 
-項目	驗證內容	預期結果
-1	資料整合	Job 執行成功。
-2	檔案產出	報表成功產出並可下載。
-3	筆數驗證	筆數一致。
-4	金額驗證	金額一致。
-5	欄位驗證	欄位完整且內容正確。
-6	條件驗證	僅納入符合條件資料。
-7	期間驗證	僅抓取指定月份資料。
-8	LOAN驗證	LOAN資料正確納入。
-9	重複資料驗證	無重複資料。
-10	格式驗證	格式與顯示正常。
-
-這個版本比較符合正式測試案例文件的寫法。
+給我table
