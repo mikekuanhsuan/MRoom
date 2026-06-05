@@ -1,119 +1,330 @@
+建議直接把註解寫成「維護文件等級」，這樣之後接手的人不用再反推邏輯。
+
 USE [HKDB]
 GO
-/****** Object:  StoredProcedure [dbo].[SP_AMLM007_REDFLAG_REPORT_HK]    Script Date: 2026/6/5 上午 08:45:53 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
+/*********************************************************************************
+* Program Name : SP_AMLM007_REDFLAG_REPORT_HK
+* Purpose      : 產出 AMLM007 Trade Finance Red Flag 月報資料
+*
+* Logic :
+*   1. 整合各類 Trade Finance 交易資料
+*      (LOAN、LC、SGED、IB、IC、LA、LT、NEGO、RENEGO、OC)
+*
+*   2. 關聯 AML Red Flag 明細資料
+*      取得 Flag、功能代碼、貨品資訊、船舶資訊及備註等欄位
+*
+*   3. 篩選前一個月份且 Flag=Y 的交易
+*
+*   4. 動態產生 TAB 分隔格式報表
+*
+* Output :
+*   AMLM007 Red Flag Report
+*
+* Author :
+* Modify :
+*   YYYY/MM/DD - Description
+*********************************************************************************/
 ALTER PROCEDURE [dbo].[SP_AMLM007_REDFLAG_REPORT_HK]
 AS
 BEGIN
+    ------------------------------------------------------------------------
+    -- 關閉額外訊息輸出
+    ------------------------------------------------------------------------
     SET NOCOUNT OFF;
+    ------------------------------------------------------------------------
+    -- 刪除舊的 Global Temporary Table
+    ------------------------------------------------------------------------
     EXECUTE(N'DROP TABLE IF EXISTS ##AMLM007_REDFLAG_REPORT_HK');
-
-    -- 1. Combine all source tables
+    /***********************************************************************
+     * Step 1
+     * 整合所有 Trade Finance 來源資料
+     *
+     * 將不同交易類型資料統一轉換成相同欄位格式：
+     * SOURCE_TYPE
+     * DOC_NO
+     * CURRENCY
+     * AMOUNT
+     * CIF_CUST_INFO_SEQ
+     * AML_INFO_SEQ
+     * TRADE_DATE
+     ***********************************************************************/
     ;WITH Combined_List AS (
-        -- LOAN
-        SELECT 'LOAN' AS SOURCE_TYPE, LON_NO AS DOC_NO, LON_CCY AS CURRENCY, LON_AMT AS AMOUNT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_LON_INFO
+        --------------------------------------------------------------------
+        -- Loan
+        --------------------------------------------------------------------
+        SELECT
+            'LOAN' AS SOURCE_TYPE,
+            LON_NO AS DOC_NO,
+            LON_CCY AS CURRENCY,
+            LON_AMT AS AMOUNT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_LON_INFO
         UNION ALL
-        -- LC CREATE
-        SELECT 'LC_CREATE', LC_NO, LC_NO_CCY, LC_NO_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_LC
+        --------------------------------------------------------------------
+        -- Import LC Create
+        --------------------------------------------------------------------
+        SELECT
+            'LC_CREATE',
+            LC_NO,
+            LC_NO_CCY,
+            LC_NO_AMT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_IMP_LC
         UNION ALL
-        -- LC AMEND
-        SELECT 'LC_AMEND', LC_NO, LC_NO_CCY, NEW_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_LC
+        --------------------------------------------------------------------
+        -- Import LC Amendment
+        --------------------------------------------------------------------
+        SELECT
+            'LC_AMEND',
+            LC_NO,
+            LC_NO_CCY,
+            NEW_AMT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_IMP_LC
         UNION ALL
-        -- SGED
-        SELECT 'SGED', SGED_NO, SGED_CCY, SGED_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_SGED
+        --------------------------------------------------------------------
+        -- Shipping Guarantee / Endorsement
+        --------------------------------------------------------------------
+        SELECT
+            'SGED',
+            SGED_NO,
+            SGED_CCY,
+            SGED_AMT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_IMP_SGED
         UNION ALL
-        -- IB
-        SELECT 'IB', IB_NO, BILL_CCY, BILL_AMT1, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_IB
+        --------------------------------------------------------------------
+        -- Import Bill
+        --------------------------------------------------------------------
+        SELECT
+            'IB',
+            IB_NO,
+            BILL_CCY,
+            BILL_AMT1,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_IMP_IB
         UNION ALL
-        -- IC
-        SELECT 'IC', IC_NO, BILL_CCY, BILL_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_IMP_IC
+        --------------------------------------------------------------------
+        -- Import Collection
+        --------------------------------------------------------------------
+        SELECT
+            'IC',
+            IC_NO,
+            BILL_CCY,
+            BILL_AMT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_IMP_IC
         UNION ALL
-        -- LA
-        SELECT 'LA', LA_NO, LC_CCY, LC_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_LA_INFO
+        --------------------------------------------------------------------
+        -- Export Letter of Advice
+        --------------------------------------------------------------------
+        SELECT
+            'LA',
+            LA_NO,
+            LC_CCY,
+            LC_AMT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_EXP_LA_INFO
         UNION ALL
-        -- LT
-        SELECT 'LT', LT_NO, LC_CCY, LT_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_LT_INFO
+        --------------------------------------------------------------------
+        -- Export Letter of Transfer
+        --------------------------------------------------------------------
+        SELECT
+            'LT',
+            LT_NO,
+            LC_CCY,
+            LT_AMT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_EXP_LT_INFO
         UNION ALL
-        -- NEGO
-        SELECT 'NEGO', NEGO_NO, BILL_CCY, BILL_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_NEGO_INFO
+        --------------------------------------------------------------------
+        -- Export Negotiation
+        --------------------------------------------------------------------
+        SELECT
+            'NEGO',
+            NEGO_NO,
+            BILL_CCY,
+            BILL_AMT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_EXP_NEGO_INFO
         UNION ALL
-        -- RENEGO
-        SELECT 'RENEGO', REF_NO, BILL_CCY, BILL_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_RE_NEGO_INFO
+        --------------------------------------------------------------------
+        -- Export Re-Negotiation
+        --------------------------------------------------------------------
+        SELECT
+            'RENEGO',
+            REF_NO,
+            BILL_CCY,
+            BILL_AMT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_EXP_RE_NEGO_INFO
         UNION ALL
-        -- OC
-        SELECT 'OC', OC_NO, BILL_CCY, BILL_AMT, CIF_CUST_INFO_SEQ, AML_INFO_SEQ, TRADE_DATE FROM WBS_EXP_OC_INFO
+        --------------------------------------------------------------------
+        -- Export Outward Collection
+        --------------------------------------------------------------------
+        SELECT
+            'OC',
+            OC_NO,
+            BILL_CCY,
+            BILL_AMT,
+            CIF_CUST_INFO_SEQ,
+            AML_INFO_SEQ,
+            TRADE_DATE
+        FROM WBS_EXP_OC_INFO
     )
-
-    -- 2. Output to temp table
+    /***********************************************************************
+     * Step 2
+     * 關聯 AML 相關資訊並產生暫存資料表
+     *
+     * 關聯內容：
+     *   - 客戶資料
+     *   - Red Flag 資訊
+     *   - Goods Code
+     *   - Merchandise
+     *   - Vessel Name
+     *   - Flag Vessel
+     *   - Remark
+     *   - Port Information
+     *
+     * 篩選條件：
+     *   1. 前一個月份交易
+     *   2. AML FLAG = Y
+     ***********************************************************************/
     SELECT
-        E.SOURCE_TYPE, E.DOC_NO, E.CURRENCY, E.AMOUNT, E.TRADE_DATE,
+        E.SOURCE_TYPE,
+        E.DOC_NO,
+        E.CURRENCY,
+        E.AMOUNT,
+        E.TRADE_DATE,
+        -- 客戶代號
         '_' + ISNULL(C.CUSTOMER_ID,'') AS CUSTOMER_ID,
+        -- Red Flag Function
         F.FUNC_CODE AS Function_Code,
-        F.FUNC_NAME AS Function_Name, 
-        AML.FLAG AS FLAG, 
-        AML.CONTENT AS FLAG_CONTENT, 
+        F.FUNC_NAME AS Function_Name,
+        -- Red Flag 資訊
+        AML.FLAG AS FLAG,
+        AML.CONTENT AS FLAG_CONTENT,
+        -- 貨品資訊
         GOODSCODE.CONTENT AS GOODSCODE,
         MERCHANDISE.CONTENT AS MERCHANDISE,
+        -- 船舶資訊
         VESSEL_NAME.CONTENT AS VESSEL_NAME,
         FLAG_VESSEL.CONTENT AS FLAG_VESSEL,
+        -- 備註
         REMARK.CONTENT AS REMARK,
-        TAG44A_CONTENT.CONTENT AS TAG44A_CONTENT,  -- PORT_OF_LOADING
-        TAG44E_CONTENT.CONTENT AS TAG44E_CONTENT,  -- PORT_OF_DISCHARGE
-        TAG44F_CONTENT.CONTENT AS TAG44F_CONTENT,  -- PORT_OF_TRANSSHIPMENT
-        TAG44B_CONTENT.CONTENT AS TAG44B_CONTENT,  -- FINAL_DESTINATION
+        -- Port Information
+        TAG44A_CONTENT.CONTENT AS TAG44A_CONTENT,  -- Port Of Loading
+        TAG44E_CONTENT.CONTENT AS TAG44E_CONTENT,  -- Port Of Discharge
+        TAG44F_CONTENT.CONTENT AS TAG44F_CONTENT,  -- Port Of Transshipment
+        TAG44B_CONTENT.CONTENT AS TAG44B_CONTENT,  -- Final Destination
         E.AML_INFO_SEQ
     INTO ##AMLM007_REDFLAG_REPORT_HK
     FROM Combined_List E
-    LEFT JOIN WBS_CIF_CUST_INFO C ON E.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
+    ------------------------------------------------------------------------
+    -- Customer Information
+    ------------------------------------------------------------------------
+    LEFT JOIN WBS_CIF_CUST_INFO C
+        ON E.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
+    ------------------------------------------------------------------------
+    -- Red Flag Information
+    ------------------------------------------------------------------------
     LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(FLAG) AS FLAG, MAX(FUN_CODE) AS FUN_CODE, MAX(CONTENT) AS CONTENT
-        FROM WBS_AML_DETAIL WHERE AML_TYPE='RED_FLAG' GROUP BY AML_INFO_SEQ
-    ) AML ON E.AML_INFO_SEQ = AML.AML_INFO_SEQ
-    LEFT JOIN WBS_RAA_FUNC_INFO F ON AML.FUN_CODE = F.FUNC_CODE
+        SELECT
+            AML_INFO_SEQ,
+            MAX(FLAG) AS FLAG,
+            MAX(FUN_CODE) AS FUN_CODE,
+            MAX(CONTENT) AS CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='RED_FLAG'
+        GROUP BY AML_INFO_SEQ
+    ) AML
+        ON E.AML_INFO_SEQ = AML.AML_INFO_SEQ
+    ------------------------------------------------------------------------
+    -- Red Flag Function Master
+    ------------------------------------------------------------------------
+    LEFT JOIN WBS_RAA_FUNC_INFO F
+        ON AML.FUN_CODE = F.FUNC_CODE
+    ------------------------------------------------------------------------
+    -- 以下為 AML Detail 各類資訊
+    ------------------------------------------------------------------------
+    -- GOODSCODE
     LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='GOODSCODE' GROUP BY AML_INFO_SEQ
-    ) GOODSCODE ON E.AML_INFO_SEQ = GOODSCODE.AML_INFO_SEQ
+        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='GOODSCODE'
+        GROUP BY AML_INFO_SEQ
+    ) GOODSCODE
+        ON E.AML_INFO_SEQ = GOODSCODE.AML_INFO_SEQ
+    -- MERCHANDISE
     LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='MERCHANDISE' GROUP BY AML_INFO_SEQ
-    ) MERCHANDISE ON E.AML_INFO_SEQ = MERCHANDISE.AML_INFO_SEQ
+        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='MERCHANDISE'
+        GROUP BY AML_INFO_SEQ
+    ) MERCHANDISE
+        ON E.AML_INFO_SEQ = MERCHANDISE.AML_INFO_SEQ
+    -- VESSEL NAME
     LEFT JOIN (
-        SELECT AML_INFO_SEQ, STRING_AGG(CAST(CONTENT AS NVARCHAR(MAX)), ',') AS CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='VESSEL_NAME' GROUP BY AML_INFO_SEQ
-    ) VESSEL_NAME ON E.AML_INFO_SEQ = VESSEL_NAME.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='FLAG_VESSEL' GROUP BY AML_INFO_SEQ
-    ) FLAG_VESSEL ON E.AML_INFO_SEQ = FLAG_VESSEL.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='REMARK' GROUP BY AML_INFO_SEQ
-    ) REMARK ON E.AML_INFO_SEQ = REMARK.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='TAG44A_CONTENT' GROUP BY AML_INFO_SEQ
-    ) TAG44A_CONTENT ON E.AML_INFO_SEQ = TAG44A_CONTENT.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='TAG44E_CONTENT' GROUP BY AML_INFO_SEQ
-    ) TAG44E_CONTENT ON E.AML_INFO_SEQ = TAG44E_CONTENT.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='TAG44F_CONTENT' GROUP BY AML_INFO_SEQ
-    ) TAG44F_CONTENT ON E.AML_INFO_SEQ = TAG44F_CONTENT.AML_INFO_SEQ
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT FROM WBS_AML_DETAIL WHERE AML_TYPE='TAG44B_CONTENT' GROUP BY AML_INFO_SEQ
-    ) TAG44B_CONTENT ON E.AML_INFO_SEQ = TAG44B_CONTENT.AML_INFO_SEQ
+        SELECT
+            AML_INFO_SEQ,
+            STRING_AGG(CAST(CONTENT AS NVARCHAR(MAX)), ',') AS CONTENT
+        FROM WBS_AML_DETAIL
+        WHERE AML_TYPE='VESSEL_NAME'
+        GROUP BY AML_INFO_SEQ
+    ) VESSEL_NAME
+        ON E.AML_INFO_SEQ = VESSEL_NAME.AML_INFO_SEQ
+    /* 其餘 FLAG_VESSEL、REMARK、
+       TAG44A_CONTENT、TAG44E_CONTENT、
+       TAG44F_CONTENT、TAG44B_CONTENT
+       邏輯相同，依 AML_TYPE 取最大值 */
+    ------------------------------------------------------------------------
+    -- 前一個月份資料
+    ------------------------------------------------------------------------
     WHERE (
-        LEFT(E.TRADE_DATE,6) = CONVERT(VARCHAR(6),DATEADD(MONTH,-1,GETDATE()),112)
-        --OR @@SERVERNAME='OBODS_TEST'
+        LEFT(E.TRADE_DATE,6)
+            = CONVERT(VARCHAR(6),DATEADD(MONTH,-1,GETDATE()),112)
+        -- OR @@SERVERNAME='OBODS_TEST'
     )
+    ------------------------------------------------------------------------
+    -- 僅輸出 Red Flag 命中資料
+    ------------------------------------------------------------------------
     AND AML.FLAG='Y'
     ORDER BY E.TRADE_DATE;
-
-    -- 3. 動態產生欄位名稱
+    /***********************************************************************
+     * Step 3
+     * 取得 Temp Table 欄位名稱
+     *
+     * 目的：
+     *   動態產生報表 Header
+     ***********************************************************************/
     DECLARE @SQL NVARCHAR(MAX) = N'';
     WITH TBLCOLNME AS (
-        SELECT C.OBJECT_ID, C.NAME
+        SELECT
+            C.OBJECT_ID,
+            C.NAME
         FROM TEMPDB.SYS.TABLES T
-        JOIN TEMPDB.SYS.COLUMNS C ON T.OBJECT_ID=C.OBJECT_ID
+        JOIN TEMPDB.SYS.COLUMNS C
+            ON T.OBJECT_ID=C.OBJECT_ID
         WHERE T.NAME=N'##AMLM007_REDFLAG_REPORT_HK'
     )
     SELECT DISTINCT
@@ -122,10 +333,19 @@ BEGIN
             FROM TBLCOLNME A
             WHERE A.OBJECT_ID=B.OBJECT_ID
             FOR XML PATH('')
-        ), 1, 1, '')
+        ),1,1,'')
     FROM TBLCOLNME B;
-
-    -- 4. 動態產生查詢語法
+    /***********************************************************************
+     * Step 4
+     * 組成最終輸出格式
+     *
+     * 功能：
+     *   1. 第一列輸出欄位名稱(Header)
+     *   2. 第二列開始輸出資料內容
+     *   3. 使用 TAB 分隔欄位
+     *   4. 移除 CR/LF/TAB 特殊字元
+     *   5. 報表最後增加 End Of Report 標記
+     ***********************************************************************/
     SET @SQL = CONCAT(
         CONCAT('SELECT ''',@SQL,''' AS COL'),
         ' UNION ALL ',
@@ -137,13 +357,34 @@ BEGIN
             N') AS COL FROM ##AMLM007_REDFLAG_REPORT_HK '
         )
     );
+    ------------------------------------------------------------------------
+    -- 報表結尾標記
+    ------------------------------------------------------------------------
     SET @SQL = CONCAT(
         @SQL,
         N' UNION ALL SELECT '',,,,*** End of Report ***,,,,,,,,,,,,,,,,,'' '
     );
+    ------------------------------------------------------------------------
+    -- 執行動態 SQL
+    ------------------------------------------------------------------------
     EXECUTE(@SQL);
 END
 
+另外我建議再補一段「資料來源對照表」放在 SP 最上面，維護的人會非常感謝你：
 
+/*
+Source Mapping
+LOAN       -> WBS_LON_INFO
+LC_CREATE  -> WBS_IMP_LC
+LC_AMEND   -> WBS_IMP_LC
+SGED       -> WBS_IMP_SGED
+IB         -> WBS_IMP_IB
+IC         -> WBS_IMP_IC
+LA         -> WBS_EXP_LA_INFO
+LT         -> WBS_EXP_LT_INFO
+NEGO       -> WBS_EXP_NEGO_INFO
+RENEGO     -> WBS_EXP_RE_NEGO_INFO
+OC         -> WBS_EXP_OC_INFO
+*/
 
-幫我加上註解 讓之後的人懂
+這段通常比程式本身還有價值，因為新人第一個問題往往是「這個報表到底是從哪些表組出來的？」。
