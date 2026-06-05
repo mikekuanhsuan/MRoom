@@ -1,93 +1,25 @@
-1. 製作TC、PS文件 (TC 驗測日期需晚於或等於程式過版嵌入日期)
+你可以寫得簡單一點，重點說明這次調整的原因與邏輯即可。
 
-2. TFS標籤壓板
-    2-1. 上傳CODE
-        cmsscript/project.config (SSIS要修改這次的批次)
-    2-2. 上傳文件
-        BuildScript.txt
-        XXX_rollbackplan.docx
-        & 修改文件(PS、DT...)
+程式調整說明
 
-        * 跑覆核buildscript
-        * TC 與 diff 覆核的壓
+調整原因：
+原程式依分行(BRNCH_NBR)累計產生 CNT 取號區間，當不同供給月份使用相同分行時，序號會持續累加，導致跨月份資料取號區間不正確。
 
-3. 過板機過版 (跑buildScript)
+調整內容：
 
-4. 寄SCR mail (附TC、SCR)
+1. 修改 CNT 取號邏輯，由原本單純使用分行作為累計依據，改為「供給月份 + 分行」作為累計 Key。
+2. 同一供給月份內，分行序號區間維持累加計算。
+3. 不同供給月份時，分行序號重新由 1 開始計算。
+4. SQL 條件由 CNT <= N 調整為 CNT BETWEEN StartCNT AND EndCNT，避免重複取得相同序號區間資料。
 
-5. 寄TK mail (附TC、TK)
+調整效益：
 
-6. TFS標籤補入文件
-   XXX_SCR.msg
-   XXX_TK.msg
+* 避免不同需求月份重複取得相同 CNT 資料。
+* 確保同一供給月份內序號區間連續且不重覆。
+* 不同供給月份間序號獨立計算，符合業務分派規則。
 
-   * 通知覆核人員 更新標籤
+⸻
 
-7. 填寫newflow
-   7-1. 程式變更單
-   7-2. sql單 (SQL語法跟log) / 檔案變更單
-   7-3. 批次變更單
+如果是要放在 PS（Program Specification）或版更單裡面，可以再精簡成：
 
-8. 單子跑完
-    借資料庫看資料是否新增(sql單&檔案變更單)
-    到tfs看log
-
-
-http://dssweb4-t/PORTAL/default.aspx
-
-
-覆核
-1. 確認程式
-2. 壓TC、diff
-3. 跑buildScript (壓標籤)
-4. 回mail(附TC、SCR)
-
-
-/*
-A:你們TC文件做好一般都會先給覆核的看嗎 還是會直接SCR
-B:一般唷  會直接給覆核build 順便給TC
-A:了解 但我還是先寄給你了XD
-B:都可以啦   早看晚看而已
-*/
-
-
-----------
-
-
-
-DEAR ALL:
-
-因為程式變更申請單新版已上線,
-提供新版(NewFlow)程式變更申請單作業流程說明供參考~
-紅字為有變化之項目,請特別注意喔~~~
-*每張程式變更申請單版號應為唯一,不可重覆
-*若為程式錯誤,應重新上版,若為config設定檔錯誤,可請資管重辦後修正~~
-
-==============================================================
-1.	AP開發完成
-2.	AP Checkin 程式、PS 、 RollBackPlan、chklog 至TFS-t，套Label (沒有_0的)
-3.	AP Assign Label (程式、PS 、 RollBackPlan) 沒p版
-4.	AP Mail測試覆核人員 (提供Label To P And Deploy Script)
-5.	測試覆核人員 Build & Deploy Success 後進行測試 ，此階段程式、PS 、 RollBackPlan將被Assign [P] Label、Mail提供SCR
-6.	測試覆核人員 做測試報告TC
-7.	測試覆核人員 CheckIn TC 、Diff 並Assign [P] Label(vs2010請用編輯標籤)
-8.	測試覆核人員 回Mail To AP 完成測試覆核
-9.	AP 請User驗收
-10.	AP 收到User EMAIL驗收單後，將驗收單TK Checkin 至TFS-T 並 Assign Label沒p版(vs2010請用編輯標籤)
-11.	AP Mail測試覆核人員完成驗收
-12.	測試覆核人員 Assign TK [P] Label 
-13.	測試覆核人員 回Mail To AP 完成壓板
-14.	AP以P版產生Compare後，取得EXCEL開始填單
-15.	AP填寫EFLOW單,匯入EXCEL清單, (送出會Check TFS-T上有無此版號的 PS,RollbackPlan,TK)
-16.	測試覆核人員簽核 (送出會Check TFS-T上有無此版號的Diff & TC及是不是覆核人員CheckIn的)
-17.	單位主管1簽核(查看EFLOW上的文件超連結，會自動連到TFS-T上捉出文件)
-18.	資管簽核 (已到資管端時,不可以抽單)
-
-
-
-
-
-這邊都一樣是在講程式變更的步驟流程
-
-
-你可以幫我整理詳細的步驟SOP?
+調整客戶分派 SQL 產生邏輯，將 CNT 區間計算方式由分行累計改為依「供給月份＋分行」累計，同時改採 BETWEEN 區間取號，避免跨月份序號累加及資料重複取用問題。
