@@ -1,390 +1,93 @@
-建議直接把註解寫成「維護文件等級」，這樣之後接手的人不用再反推邏輯。
+1. 製作TC、PS文件 (TC 驗測日期需晚於或等於程式過版嵌入日期)
 
-USE [HKDB]
-GO
-/*********************************************************************************
-* Program Name : SP_AMLM007_REDFLAG_REPORT_HK
-* Purpose      : 產出 AMLM007 Trade Finance Red Flag 月報資料
-*
-* Logic :
-*   1. 整合各類 Trade Finance 交易資料
-*      (LOAN、LC、SGED、IB、IC、LA、LT、NEGO、RENEGO、OC)
-*
-*   2. 關聯 AML Red Flag 明細資料
-*      取得 Flag、功能代碼、貨品資訊、船舶資訊及備註等欄位
-*
-*   3. 篩選前一個月份且 Flag=Y 的交易
-*
-*   4. 動態產生 TAB 分隔格式報表
-*
-* Output :
-*   AMLM007 Red Flag Report
-*
-* Author :
-* Modify :
-*   YYYY/MM/DD - Description
-*********************************************************************************/
-ALTER PROCEDURE [dbo].[SP_AMLM007_REDFLAG_REPORT_HK]
-AS
-BEGIN
-    ------------------------------------------------------------------------
-    -- 關閉額外訊息輸出
-    ------------------------------------------------------------------------
-    SET NOCOUNT OFF;
-    ------------------------------------------------------------------------
-    -- 刪除舊的 Global Temporary Table
-    ------------------------------------------------------------------------
-    EXECUTE(N'DROP TABLE IF EXISTS ##AMLM007_REDFLAG_REPORT_HK');
-    /***********************************************************************
-     * Step 1
-     * 整合所有 Trade Finance 來源資料
-     *
-     * 將不同交易類型資料統一轉換成相同欄位格式：
-     * SOURCE_TYPE
-     * DOC_NO
-     * CURRENCY
-     * AMOUNT
-     * CIF_CUST_INFO_SEQ
-     * AML_INFO_SEQ
-     * TRADE_DATE
-     ***********************************************************************/
-    ;WITH Combined_List AS (
-        --------------------------------------------------------------------
-        -- Loan
-        --------------------------------------------------------------------
-        SELECT
-            'LOAN' AS SOURCE_TYPE,
-            LON_NO AS DOC_NO,
-            LON_CCY AS CURRENCY,
-            LON_AMT AS AMOUNT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_LON_INFO
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Import LC Create
-        --------------------------------------------------------------------
-        SELECT
-            'LC_CREATE',
-            LC_NO,
-            LC_NO_CCY,
-            LC_NO_AMT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_IMP_LC
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Import LC Amendment
-        --------------------------------------------------------------------
-        SELECT
-            'LC_AMEND',
-            LC_NO,
-            LC_NO_CCY,
-            NEW_AMT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_IMP_LC
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Shipping Guarantee / Endorsement
-        --------------------------------------------------------------------
-        SELECT
-            'SGED',
-            SGED_NO,
-            SGED_CCY,
-            SGED_AMT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_IMP_SGED
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Import Bill
-        --------------------------------------------------------------------
-        SELECT
-            'IB',
-            IB_NO,
-            BILL_CCY,
-            BILL_AMT1,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_IMP_IB
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Import Collection
-        --------------------------------------------------------------------
-        SELECT
-            'IC',
-            IC_NO,
-            BILL_CCY,
-            BILL_AMT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_IMP_IC
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Export Letter of Advice
-        --------------------------------------------------------------------
-        SELECT
-            'LA',
-            LA_NO,
-            LC_CCY,
-            LC_AMT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_EXP_LA_INFO
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Export Letter of Transfer
-        --------------------------------------------------------------------
-        SELECT
-            'LT',
-            LT_NO,
-            LC_CCY,
-            LT_AMT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_EXP_LT_INFO
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Export Negotiation
-        --------------------------------------------------------------------
-        SELECT
-            'NEGO',
-            NEGO_NO,
-            BILL_CCY,
-            BILL_AMT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_EXP_NEGO_INFO
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Export Re-Negotiation
-        --------------------------------------------------------------------
-        SELECT
-            'RENEGO',
-            REF_NO,
-            BILL_CCY,
-            BILL_AMT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_EXP_RE_NEGO_INFO
-        UNION ALL
-        --------------------------------------------------------------------
-        -- Export Outward Collection
-        --------------------------------------------------------------------
-        SELECT
-            'OC',
-            OC_NO,
-            BILL_CCY,
-            BILL_AMT,
-            CIF_CUST_INFO_SEQ,
-            AML_INFO_SEQ,
-            TRADE_DATE
-        FROM WBS_EXP_OC_INFO
-    )
-    /***********************************************************************
-     * Step 2
-     * 關聯 AML 相關資訊並產生暫存資料表
-     *
-     * 關聯內容：
-     *   - 客戶資料
-     *   - Red Flag 資訊
-     *   - Goods Code
-     *   - Merchandise
-     *   - Vessel Name
-     *   - Flag Vessel
-     *   - Remark
-     *   - Port Information
-     *
-     * 篩選條件：
-     *   1. 前一個月份交易
-     *   2. AML FLAG = Y
-     ***********************************************************************/
-    SELECT
-        E.SOURCE_TYPE,
-        E.DOC_NO,
-        E.CURRENCY,
-        E.AMOUNT,
-        E.TRADE_DATE,
-        -- 客戶代號
-        '_' + ISNULL(C.CUSTOMER_ID,'') AS CUSTOMER_ID,
-        -- Red Flag Function
-        F.FUNC_CODE AS Function_Code,
-        F.FUNC_NAME AS Function_Name,
-        -- Red Flag 資訊
-        AML.FLAG AS FLAG,
-        AML.CONTENT AS FLAG_CONTENT,
-        -- 貨品資訊
-        GOODSCODE.CONTENT AS GOODSCODE,
-        MERCHANDISE.CONTENT AS MERCHANDISE,
-        -- 船舶資訊
-        VESSEL_NAME.CONTENT AS VESSEL_NAME,
-        FLAG_VESSEL.CONTENT AS FLAG_VESSEL,
-        -- 備註
-        REMARK.CONTENT AS REMARK,
-        -- Port Information
-        TAG44A_CONTENT.CONTENT AS TAG44A_CONTENT,  -- Port Of Loading
-        TAG44E_CONTENT.CONTENT AS TAG44E_CONTENT,  -- Port Of Discharge
-        TAG44F_CONTENT.CONTENT AS TAG44F_CONTENT,  -- Port Of Transshipment
-        TAG44B_CONTENT.CONTENT AS TAG44B_CONTENT,  -- Final Destination
-        E.AML_INFO_SEQ
-    INTO ##AMLM007_REDFLAG_REPORT_HK
-    FROM Combined_List E
-    ------------------------------------------------------------------------
-    -- Customer Information
-    ------------------------------------------------------------------------
-    LEFT JOIN WBS_CIF_CUST_INFO C
-        ON E.CIF_CUST_INFO_SEQ = C.CIF_CUST_INFO_SEQ
-    ------------------------------------------------------------------------
-    -- Red Flag Information
-    ------------------------------------------------------------------------
-    LEFT JOIN (
-        SELECT
-            AML_INFO_SEQ,
-            MAX(FLAG) AS FLAG,
-            MAX(FUN_CODE) AS FUN_CODE,
-            MAX(CONTENT) AS CONTENT
-        FROM WBS_AML_DETAIL
-        WHERE AML_TYPE='RED_FLAG'
-        GROUP BY AML_INFO_SEQ
-    ) AML
-        ON E.AML_INFO_SEQ = AML.AML_INFO_SEQ
-    ------------------------------------------------------------------------
-    -- Red Flag Function Master
-    ------------------------------------------------------------------------
-    LEFT JOIN WBS_RAA_FUNC_INFO F
-        ON AML.FUN_CODE = F.FUNC_CODE
-    ------------------------------------------------------------------------
-    -- 以下為 AML Detail 各類資訊
-    ------------------------------------------------------------------------
-    -- GOODSCODE
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT
-        FROM WBS_AML_DETAIL
-        WHERE AML_TYPE='GOODSCODE'
-        GROUP BY AML_INFO_SEQ
-    ) GOODSCODE
-        ON E.AML_INFO_SEQ = GOODSCODE.AML_INFO_SEQ
-    -- MERCHANDISE
-    LEFT JOIN (
-        SELECT AML_INFO_SEQ, MAX(CONTENT) CONTENT
-        FROM WBS_AML_DETAIL
-        WHERE AML_TYPE='MERCHANDISE'
-        GROUP BY AML_INFO_SEQ
-    ) MERCHANDISE
-        ON E.AML_INFO_SEQ = MERCHANDISE.AML_INFO_SEQ
-    -- VESSEL NAME
-    LEFT JOIN (
-        SELECT
-            AML_INFO_SEQ,
-            STRING_AGG(CAST(CONTENT AS NVARCHAR(MAX)), ',') AS CONTENT
-        FROM WBS_AML_DETAIL
-        WHERE AML_TYPE='VESSEL_NAME'
-        GROUP BY AML_INFO_SEQ
-    ) VESSEL_NAME
-        ON E.AML_INFO_SEQ = VESSEL_NAME.AML_INFO_SEQ
-    /* 其餘 FLAG_VESSEL、REMARK、
-       TAG44A_CONTENT、TAG44E_CONTENT、
-       TAG44F_CONTENT、TAG44B_CONTENT
-       邏輯相同，依 AML_TYPE 取最大值 */
-    ------------------------------------------------------------------------
-    -- 前一個月份資料
-    ------------------------------------------------------------------------
-    WHERE (
-        LEFT(E.TRADE_DATE,6)
-            = CONVERT(VARCHAR(6),DATEADD(MONTH,-1,GETDATE()),112)
-        -- OR @@SERVERNAME='OBODS_TEST'
-    )
-    ------------------------------------------------------------------------
-    -- 僅輸出 Red Flag 命中資料
-    ------------------------------------------------------------------------
-    AND AML.FLAG='Y'
-    ORDER BY E.TRADE_DATE;
-    /***********************************************************************
-     * Step 3
-     * 取得 Temp Table 欄位名稱
-     *
-     * 目的：
-     *   動態產生報表 Header
-     ***********************************************************************/
-    DECLARE @SQL NVARCHAR(MAX) = N'';
-    WITH TBLCOLNME AS (
-        SELECT
-            C.OBJECT_ID,
-            C.NAME
-        FROM TEMPDB.SYS.TABLES T
-        JOIN TEMPDB.SYS.COLUMNS C
-            ON T.OBJECT_ID=C.OBJECT_ID
-        WHERE T.NAME=N'##AMLM007_REDFLAG_REPORT_HK'
-    )
-    SELECT DISTINCT
-        @SQL = STUFF((
-            SELECT CONCAT(',"',A.NAME,'"')
-            FROM TBLCOLNME A
-            WHERE A.OBJECT_ID=B.OBJECT_ID
-            FOR XML PATH('')
-        ),1,1,'')
-    FROM TBLCOLNME B;
-    /***********************************************************************
-     * Step 4
-     * 組成最終輸出格式
-     *
-     * 功能：
-     *   1. 第一列輸出欄位名稱(Header)
-     *   2. 第二列開始輸出資料內容
-     *   3. 使用 TAB 分隔欄位
-     *   4. 移除 CR/LF/TAB 特殊字元
-     *   5. 報表最後增加 End Of Report 標記
-     ***********************************************************************/
-    SET @SQL = CONCAT(
-        CONCAT('SELECT ''',@SQL,''' AS COL'),
-        ' UNION ALL ',
-        CONCAT(
-            N'SELECT CONCAT(',
-            N'REPLACE(REPLACE(REPLACE(REPLACE(',
-            REPLACE(@SQL,',',N',CHAR(9),''''),CHAR(10),''''),CHAR(13),''''),'','',''，''),'','',REPLACE(REPLACE(REPLACE(REPLACE('),
-            N',CHAR(9),''''),CHAR(10),''''),CHAR(13),''''),'','',''，'')',
-            N') AS COL FROM ##AMLM007_REDFLAG_REPORT_HK '
-        )
-    );
-    ------------------------------------------------------------------------
-    -- 報表結尾標記
-    ------------------------------------------------------------------------
-    SET @SQL = CONCAT(
-        @SQL,
-        N' UNION ALL SELECT '',,,,*** End of Report ***,,,,,,,,,,,,,,,,,'' '
-    );
-    ------------------------------------------------------------------------
-    -- 執行動態 SQL
-    ------------------------------------------------------------------------
-    EXECUTE(@SQL);
-END
+2. TFS標籤壓板
+    2-1. 上傳CODE
+        cmsscript/project.config (SSIS要修改這次的批次)
+    2-2. 上傳文件
+        BuildScript.txt
+        XXX_rollbackplan.docx
+        & 修改文件(PS、DT...)
 
-另外我建議再補一段「資料來源對照表」放在 SP 最上面，維護的人會非常感謝你：
+        * 跑覆核buildscript
+        * TC 與 diff 覆核的壓
+
+3. 過板機過版 (跑buildScript)
+
+4. 寄SCR mail (附TC、SCR)
+
+5. 寄TK mail (附TC、TK)
+
+6. TFS標籤補入文件
+   XXX_SCR.msg
+   XXX_TK.msg
+
+   * 通知覆核人員 更新標籤
+
+7. 填寫newflow
+   7-1. 程式變更單
+   7-2. sql單 (SQL語法跟log) / 檔案變更單
+   7-3. 批次變更單
+
+8. 單子跑完
+    借資料庫看資料是否新增(sql單&檔案變更單)
+    到tfs看log
+
+
+http://dssweb4-t/PORTAL/default.aspx
+
+
+覆核
+1. 確認程式
+2. 壓TC、diff
+3. 跑buildScript (壓標籤)
+4. 回mail(附TC、SCR)
+
 
 /*
-Source Mapping
-LOAN       -> WBS_LON_INFO
-LC_CREATE  -> WBS_IMP_LC
-LC_AMEND   -> WBS_IMP_LC
-SGED       -> WBS_IMP_SGED
-IB         -> WBS_IMP_IB
-IC         -> WBS_IMP_IC
-LA         -> WBS_EXP_LA_INFO
-LT         -> WBS_EXP_LT_INFO
-NEGO       -> WBS_EXP_NEGO_INFO
-RENEGO     -> WBS_EXP_RE_NEGO_INFO
-OC         -> WBS_EXP_OC_INFO
+A:你們TC文件做好一般都會先給覆核的看嗎 還是會直接SCR
+B:一般唷  會直接給覆核build 順便給TC
+A:了解 但我還是先寄給你了XD
+B:都可以啦   早看晚看而已
 */
 
-這段通常比程式本身還有價值，因為新人第一個問題往往是「這個報表到底是從哪些表組出來的？」。
+
+----------
+
+
+
+DEAR ALL:
+
+因為程式變更申請單新版已上線,
+提供新版(NewFlow)程式變更申請單作業流程說明供參考~
+紅字為有變化之項目,請特別注意喔~~~
+*每張程式變更申請單版號應為唯一,不可重覆
+*若為程式錯誤,應重新上版,若為config設定檔錯誤,可請資管重辦後修正~~
+
+==============================================================
+1.	AP開發完成
+2.	AP Checkin 程式、PS 、 RollBackPlan、chklog 至TFS-t，套Label (沒有_0的)
+3.	AP Assign Label (程式、PS 、 RollBackPlan) 沒p版
+4.	AP Mail測試覆核人員 (提供Label To P And Deploy Script)
+5.	測試覆核人員 Build & Deploy Success 後進行測試 ，此階段程式、PS 、 RollBackPlan將被Assign [P] Label、Mail提供SCR
+6.	測試覆核人員 做測試報告TC
+7.	測試覆核人員 CheckIn TC 、Diff 並Assign [P] Label(vs2010請用編輯標籤)
+8.	測試覆核人員 回Mail To AP 完成測試覆核
+9.	AP 請User驗收
+10.	AP 收到User EMAIL驗收單後，將驗收單TK Checkin 至TFS-T 並 Assign Label沒p版(vs2010請用編輯標籤)
+11.	AP Mail測試覆核人員完成驗收
+12.	測試覆核人員 Assign TK [P] Label 
+13.	測試覆核人員 回Mail To AP 完成壓板
+14.	AP以P版產生Compare後，取得EXCEL開始填單
+15.	AP填寫EFLOW單,匯入EXCEL清單, (送出會Check TFS-T上有無此版號的 PS,RollbackPlan,TK)
+16.	測試覆核人員簽核 (送出會Check TFS-T上有無此版號的Diff & TC及是不是覆核人員CheckIn的)
+17.	單位主管1簽核(查看EFLOW上的文件超連結，會自動連到TFS-T上捉出文件)
+18.	資管簽核 (已到資管端時,不可以抽單)
+
+
+
+
+
+這邊都一樣是在講程式變更的步驟流程
+
+
+你可以幫我整理詳細的步驟SOP?
