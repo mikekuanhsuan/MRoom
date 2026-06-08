@@ -1,15 +1,92 @@
-SELECT COUNT(DISTINCT ACCT_KEY)  FROM BSADBTW..ACCT_XREF_DIM 
-WHERE  LEFT(ACCT_KEY, 3) = 'SK_';
---144647
+你現在其實是在比較兩個不同來源的筆數：
 
-SELECT COUNT(DISTINCT A.ACCT_KEY) AS Missing_Account_Count
+* 比不到 XREF 的帳號：150,124
+* ACCT_XREF_DIM 裡 SK_% 帳號：144,647
+* 差異：5,477
+
+如果想看這 5,477 筆到底是哪些帳號，可以先把兩邊的帳號清單取出來，再做差集。
+
+假設：
+
+* LoadTrxn_Migrate_buffer 比不到 XREF 的帳號
+* 補完 25 碼後會對應到 ACCT_XREF_DIM.ACCT_KEY
+
+可以這樣查：
+
+WITH Missing AS (
+    SELECT DISTINCT
+           RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) AS ACCT_KEY
+    FROM LoadTrxn_Migrate_buffer A
+    LEFT JOIN BSADBTW..XREF B
+           ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+    WHERE B.EXTN_REF_NO IS NULL
+      AND A.APPL <> 'LNA'
+),
+SK AS (
+    SELECT DISTINCT ACCT_KEY
+    FROM BSADBTW..ACCT_XREF_DIM
+    WHERE LEFT(ACCT_KEY,3) = 'SK_'
+)
+SELECT M.ACCT_KEY
+FROM Missing M
+LEFT JOIN SK S
+       ON M.ACCT_KEY = S.ACCT_KEY
+WHERE S.ACCT_KEY IS NULL;
+
+如果結果真的是 5477 筆，可以先驗證：
+
+SELECT COUNT(*)
+FROM (
+    SELECT M.ACCT_KEY
+    FROM Missing M
+    LEFT JOIN SK S
+           ON M.ACCT_KEY = S.ACCT_KEY
+    WHERE S.ACCT_KEY IS NULL
+) T;
+
+⸻
+
+如果你想直接看這 5477 筆的特徵，例如：
+
+* APPL 分布
+* 帳號長度
+* 是否有特殊前綴
+
+可以查：
+
+WITH Missing5477 AS (
+    ...
+)
+SELECT
+    A.APPL,
+    COUNT(DISTINCT A.ACCT_KEY) CNT
 FROM LoadTrxn_Migrate_buffer A
-LEFT JOIN BSADBTW..XREF B ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
-WHERE B.EXTN_REF_NO IS NULL AND a.APPL <> 'LNA'
--- 150124
+JOIN Missing5477 M
+     ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = M.ACCT_KEY
+GROUP BY A.APPL
+ORDER BY CNT DESC;
 
+我有點懷疑你目前是在拿：
 
-我現在測下來有差距
-150124-144647 = 5477
+「比不到 XREF 的帳號」
 
-我想找出那5477長怎樣
+跟
+
+「ACCT_XREF_DIM 中 SK_ 開頭的帳號」
+
+直接比較。
+
+這兩個集合不一定是同一批資料，所以那 5477 不一定是「少掉的帳號」，有可能是：
+
+1. ACCT_XREF_DIM 裡有非 SK_ 的資料。
+2. LoadTrxn_Migrate_buffer 裡有空白、特殊字元或長度異常。
+3. XREF.EXTN_REF_NO 有重複值。
+4. ACCT_KEY 補 0 後仍與 ACCT_XREF_DIM.ACCT_KEY 格式不同。
+
+如果你能貼出：
+
+* ACCT_XREF_DIM.ACCT_KEY 範例
+* XREF.EXTN_REF_NO 範例
+* LoadTrxn_Migrate_buffer.ACCT_KEY 範例
+
+我可以直接幫你把那 5477 筆精準抓出來。
