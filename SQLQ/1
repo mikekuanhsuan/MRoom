@@ -1,25 +1,23 @@
-你可以寫得簡單一點，重點說明這次調整的原因與邏輯即可。
+有，如果是寄給熟悉的客戶或內部團隊，可以寫得比較輕鬆自然：
 
-程式調整說明
+Hi HK Team,
 
-調整原因：
-原程式依分行(BRNCH_NBR)累計產生 CNT 取號區間，當不同供給月份使用相同分行時，序號會持續累加，導致跨月份資料取號區間不正確。
+The development is now completed and ready for your review.
 
-調整內容：
+Please find the attached test case and the generated CV Red Flag Report. Could you help take a look and confirm whether the output meets your expectations?
 
-1. 修改 CNT 取號邏輯，由原本單純使用分行作為累計依據，改為「供給月份 + 分行」作為累計 Key。
-2. 同一供給月份內，分行序號區間維持累加計算。
-3. 不同供給月份時，分行序號重新由 1 開始計算。
-4. SQL 條件由 CNT <= N 調整為 CNT BETWEEN StartCNT AND EndCNT，避免重複取得相同序號區間資料。
+If anything needs to be adjusted, just let us know. Otherwise, a quick confirmation by reply would be greatly appreciated.
 
-調整效益：
+Thanks!
 
-* 避免不同需求月份重複取得相同 CNT 資料。
-* 確保同一供給月份內序號區間連續且不重覆。
-* 不同供給月份間序號獨立計算，符合業務分派規則。
+Best regards,
 
-⸻
+如果想再更口語一點：
 
-如果是要放在 PS（Program Specification）或版更單裡面，可以再精簡成：
+We’ve finished the development on our side and it’s ready for review.
 
-調整客戶分派 SQL 產生邏輯，將 CNT 區間計算方式由分行累計改為依「供給月份＋分行」累計，同時改採 BETWEEN 區間取號，避免跨月份序號累加及資料重複取用問題。
+或
+
+We’ve completed this phase and would like to get your feedback on the report output.
+
+這兩句都很常見，聽起來比 “The development is now completed” 更自然一些。
