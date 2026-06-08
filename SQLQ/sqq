@@ -1,130 +1,29 @@
-其實你不用整個重寫。
+-- TC4：mapping table 比對不到的帳號是否加上 SK_ 識別
+-- 驗證條件： 比對寫入的SK_數量 跟 mapping table 比對不到的帳號 的數量是否吻合
+-- 預期結果： 寫入的SK_數量 跟 mapping table 比對不到的帳號 的數量相同
 
-你只要在你的 GenerateSqlFromRiskData() 裡面做 3 個修改 就可以了。
+-- 原帳號經標準化後為 0000000000000000001234567
+-- 轉出結果應為 SK_0000000000000000001234567
 
-⸻
+SELECT COUNT(DISTINCT ACCT_KEY)  FROM BSADBTW..ACCT_XREF_DIM 
+WHERE  LEFT(ACCT_KEY, 3) = 'SK_';
 
-修改 1
 
-找到：
+SELECT COUNT(DISTINCT A.ACCT_KEY) AS Missing_Account_Count
+FROM LoadTrxn_Migrate_buffer A
+LEFT JOIN BSADBTW..XREF B ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+WHERE B.EXTN_REF_NO IS NULL AND a.APPL <> 'LNA'
 
-Dim finalSqlBuilder As String, groupKeyVariant As Variant, branchLabelVariant As Variant
 
-改成：
+SELECT DISTINCT
+       A.ACCT_KEY,
+       RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) AS ACCT_KEY_25
+FROM LoadTrxn_Migrate_buffer A
+LEFT JOIN BSADBTW..XREF B       ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+LEFT JOIN BSADBTW..ACCT_XREF_DIM D       ON D.ACCT_KEY = 'SK_' + RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25)
+WHERE B.EXTN_REF_NO IS NULL
+  AND D.ACCT_KEY IS NULL
+  AND A.APPL <> 'LNA';
 
-Dim finalSqlBuilder As String
-Dim groupKeyVariant As Variant
-Dim branchLabelVariant As Variant
-Dim branchOffset As Object
-Set branchOffset = CreateObject("Scripting.Dictionary")
 
-⸻
-
-修改 2
-
-找到：
-
-For Each groupKeyVariant In groups.Keys
-
-改成下面整段：
-
-Dim sortedKeys() As String
-Dim keyCount As Long
-Dim i As Long
-Dim j As Long
-Dim tempKey As String
-keyCount = groups.Count
-ReDim sortedKeys(0 To keyCount - 1)
-i = 0
-For Each groupKeyVariant In groups.Keys
-    sortedKeys(i) = CStr(groupKeyVariant)
-    i = i + 1
-Next
-For i = 0 To UBound(sortedKeys) - 1
-    For j = i + 1 To UBound(sortedKeys)
-        If sortedKeys(i) > sortedKeys(j) Then
-            tempKey = sortedKeys(i)
-            sortedKeys(i) = sortedKeys(j)
-            sortedKeys(j) = tempKey
-        End If
-    Next j
-Next i
-For i = 0 To UBound(sortedKeys)
-    groupKeyVariant = sortedKeys(i)
-
-然後把最後：
-
-Next groupKeyVariant
-
-改成：
-
-Next i
-
-⸻
-
-修改 3
-
-找到：
-
-For Each branchLabelVariant In branchConditions.Keys
-    condList.Add "BRNCH_NBR = '" & branchLabelVariant & _
-                 "' AND CNT <= " & branchConditions(branchLabelVariant)
-Next branchLabelVariant
-
-全部刪掉。
-
-改成：
-
-For Each branchLabelVariant In branchConditions.Keys
-    Dim allocCnt As Long
-    Dim startCnt As Long
-    Dim endCnt As Long
-    allocCnt = CLng(branchConditions(branchLabelVariant))
-    If branchOffset.Exists(branchLabelVariant) Then
-        startCnt = branchOffset(branchLabelVariant) + 1
-    Else
-        startCnt = 1
-    End If
-    endCnt = startCnt + allocCnt - 1
-    condList.Add _
-        "(BRNCH_NBR = '" & branchLabelVariant & _
-        "' AND CNT BETWEEN " & startCnt & _
-        " AND " & endCnt & ")"
-    branchOffset(branchLabelVariant) = endCnt
-Next branchLabelVariant
-
-⸻
-
-改完後會產生
-
-以前：
-
-BRNCH_NBR='0002' AND CNT<=40
-
-下一個月份：
-
-BRNCH_NBR='0002' AND CNT<=79
-
-會重覆拿到 1~40。
-
-⸻
-
-現在：
-
-第一個月份：
-
-(BRNCH_NBR='0002' AND CNT BETWEEN 1 AND 40)
-
-第二個月份：
-
-(BRNCH_NBR='0002' AND CNT BETWEEN 41 AND 79)
-
-第三個月份：
-
-(BRNCH_NBR='0002' AND CNT BETWEEN 80 AND 120)
-
-完全不會重覆。
-
-⸻
-
-如果你願意，把 「中風險」工作表前 10 筆資料格式貼出來（A~D欄）」，我可以直接幫你驗證這個邏輯是否符合你實際的分配規則，避免改完 VBA 後發現月份排序還有其他需求。
+那我這個TC4要怎麼寫
