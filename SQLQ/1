@@ -1,9 +1,42 @@
-  SELECT COUNT(DISTINCT ACCT_KEY)  FROM LoadTrxn_Migrate_buffer 
-  ACCT_KEY 左邊補0補齊25碼
-  跟
-    SELECT COUNT(DISTINCT EXTN_REF_NO)  FROM BSADBTW..XREF  的 EXTN_REF_NO 
-    比對
-    找出比不到的帳號筆數
+如果你的需求是：
 
+1. LoadTrxn_Migrate_buffer.ACCT_KEY 左補 0 補到 25 碼
+2. 與 BSADBTW..XREF.EXTN_REF_NO 比對
+3. 找出 在 LoadTrxn_Migrate_buffer 有，但 XREF 找不到的帳號數量
 
-怎麼寫
+可以這樣寫：
+
+SELECT COUNT(DISTINCT A.ACCT_KEY) AS Missing_Account_Count
+FROM LoadTrxn_Migrate_buffer A
+LEFT JOIN BSADBTW..XREF B
+    ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+WHERE B.EXTN_REF_NO IS NULL;
+
+如果想看實際有哪些帳號比不到
+
+SELECT DISTINCT
+       A.ACCT_KEY,
+       RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) AS ACCT_KEY_25
+FROM LoadTrxn_Migrate_buffer A
+LEFT JOIN BSADBTW..XREF B
+    ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+WHERE B.EXTN_REF_NO IS NULL;
+
+如果只想比對唯一帳號後再計數
+
+避免同一個 ACCT_KEY 重複出現影響效能：
+
+WITH A AS (
+    SELECT DISTINCT
+           RIGHT(REPLICATE('0',25) + ACCT_KEY,25) AS ACCT_KEY_25
+    FROM LoadTrxn_Migrate_buffer
+)
+SELECT COUNT(*)
+FROM A
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM BSADBTW..XREF B
+    WHERE B.EXTN_REF_NO = A.ACCT_KEY_25
+);
+
+這個 NOT EXISTS 版本通常在大量資料時會比 LEFT JOIN ... IS NULL 更穩定一些。若 ACCT_KEY 或 EXTN_REF_NO 是數字欄位而不是字串欄位，我可以再幫你調整型別轉換。
