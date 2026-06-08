@@ -1,23 +1,9 @@
-有，如果是寄給熟悉的客戶或內部團隊，可以寫得比較輕鬆自然：
+  SELECT COUNT(DISTINCT ACCT_KEY)  FROM LoadTrxn_Migrate_buffer 
+  ACCT_KEY 左邊補0補齊25碼
+  跟
+    SELECT COUNT(DISTINCT EXTN_REF_NO)  FROM BSADBTW..XREF  的 EXTN_REF_NO 
+    比對
+    找出比不到的帳號筆數
 
-Hi HK Team,
 
-The development is now completed and ready for your review.
-
-Please find the attached test case and the generated CV Red Flag Report. Could you help take a look and confirm whether the output meets your expectations?
-
-If anything needs to be adjusted, just let us know. Otherwise, a quick confirmation by reply would be greatly appreciated.
-
-Thanks!
-
-Best regards,
-
-如果想再更口語一點：
-
-We’ve finished the development on our side and it’s ready for review.
-
-或
-
-We’ve completed this phase and would like to get your feedback on the report output.
-
-這兩句都很常見，聽起來比 “The development is now completed” 更自然一些。
+怎麼寫
