@@ -1,14 +1,60 @@
+了解，你的需求其實是：
 
-SELECT COUNT(DISTINCT ACCT_KEY)  FROM BSADBTW..ACCT_XREF_DIM 
-WHERE  LEFT(ACCT_KEY, 3) = 'SK_';
---144647
+1. 從 LoadTrxn_Migrate_buffer 取 ACCT_KEY
+2. 左補 0 到 25 碼
+3. 跟 BSADBTW..XREF.EXTN_REF_NO 比對
+4. 找出 補 0 後仍然比對不到 XREF 的帳號
+5. 而且你現在想以 ACCT_XREF_DIM 為主體來驗證
 
-SELECT COUNT(DISTINCT A.ACCT_KEY) AS Missing_Account_Count
+那麼要找「補 0 後比不到的資料」，核心還是一定要用到 LoadTrxn_Migrate_buffer，因為補 0 的來源就是它。
+
+直接把明細抓出來：
+
+SELECT DISTINCT
+       A.ACCT_KEY,
+       RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) AS ACCT_KEY_25
 FROM LoadTrxn_Migrate_buffer A
-LEFT JOIN BSADBTW..XREF B ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
-WHERE B.EXTN_REF_NO IS NULL AND a.APPL <> 'LNA'
--- 150124
+LEFT JOIN BSADBTW..XREF B
+       ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+WHERE B.EXTN_REF_NO IS NULL
+  AND A.APPL <> 'LNA';
 
+如果你想確認這些比不到的帳號是否存在於 ACCT_XREF_DIM：
 
-我知道問題了
-我應該都要以BSADBTW..ACCT_XREF_DIM  來做FROM
+SELECT DISTINCT
+       A.ACCT_KEY,
+       RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) AS ACCT_KEY_25,
+       D.ACCT_KEY AS DIM_ACCT_KEY
+FROM LoadTrxn_Migrate_buffer A
+LEFT JOIN BSADBTW..XREF B
+       ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+LEFT JOIN BSADBTW..ACCT_XREF_DIM D
+       ON D.ACCT_KEY = 'SK_' + RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25)
+WHERE B.EXTN_REF_NO IS NULL
+  AND A.APPL <> 'LNA';
+
+若只想看 補 0 後比不到 XREF，且在 ACCT_XREF_DIM 也找不到 的資料：
+
+SELECT DISTINCT
+       A.ACCT_KEY,
+       RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) AS ACCT_KEY_25
+FROM LoadTrxn_Migrate_buffer A
+LEFT JOIN BSADBTW..XREF B
+       ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+LEFT JOIN BSADBTW..ACCT_XREF_DIM D
+       ON D.ACCT_KEY = 'SK_' + RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25)
+WHERE B.EXTN_REF_NO IS NULL
+  AND D.ACCT_KEY IS NULL
+  AND A.APPL <> 'LNA';
+
+如果你的目標就是找那 5477 筆，建議不要用：
+
+150124 - 144647
+
+去推差異，而是直接用 NOT EXISTS 或 LEFT JOIN ... IS NULL 算集合差集，這樣才能真的抓到那批帳號。現在看起來，你要找的就是：
+
+LoadTrxn_Migrate_buffer
+→ 補0
+→ XREF找不到
+
+這批明細。先跑第一段 SQL 看看是不是你要的資料。
