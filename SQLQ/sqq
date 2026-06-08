@@ -1,87 +1,11 @@
-你的 TC4 驗證邏輯其實很明確：
-
-規則
-
-* 找不到 mapping (XREF) 的帳號
-* 系統應新增一筆 SK_ 帳號到 ACCT_XREF_DIM
-
-驗證方式
-
-比較：
-
-A = Mapping Table(XREF) 比對不到的帳號數
-B = ACCT_XREF_DIM 中新增的 SK_ 帳號數
-預期：A = B
-
-⸻
-
-Step 1. 計算比不到 Mapping 的帳號數
-
 SELECT COUNT(DISTINCT A.ACCT_KEY) AS Missing_Account_Count
 FROM LoadTrxn_Migrate_buffer A
-LEFT JOIN BSADBTW..XREF B
-       ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
-WHERE B.EXTN_REF_NO IS NULL
-  AND A.APPL <> 'LNA';
+ JOIN CIF_Migrate_Mapping_TEMP c ON  a.CIF_KEY = c.SOURCE_CIF_KEY
+LEFT JOIN BSADBTW..XREF B       ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+WHERE B.EXTN_REF_NO IS NULL  AND A.APPL <> 'LNA';
 
-⸻
 
-Step 2. 計算實際產生的 SK_ 帳號數
 
-如果 ACCT_XREF_DIM 是本次測試前清空後產生的資料：
 
-SELECT COUNT(DISTINCT ACCT_KEY)
-FROM BSADBTW..ACCT_XREF_DIM
-WHERE LEFT(ACCT_KEY,3) = 'SK_';
 
-⸻
-
-Step 3. 最重要的驗證
-
-不要只比 Count。
-
-應該驗證：
-
-每一個找不到 Mapping 的帳號，都存在對應的 SK_ 帳號。
-
-SELECT DISTINCT
-       A.ACCT_KEY,
-       RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) AS ACCT_KEY_25
-FROM LoadTrxn_Migrate_buffer A
-LEFT JOIN BSADBTW..XREF B
-       ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
-LEFT JOIN BSADBTW..ACCT_XREF_DIM D
-       ON D.ACCT_KEY = 'SK_' + RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25)
-WHERE B.EXTN_REF_NO IS NULL
-  AND D.ACCT_KEY IS NULL
-  AND A.APPL <> 'LNA';
-
-預期結果
-
-0 Rows Returned
-
-代表：
-
-找不到 Mapping 的帳號
-=
-全部成功建立 SK_ 帳號
-
-⸻
-
-建議 TC4 寫法
-
-TC4：Mapping Table 比對不到的帳號是否加上 SK_ 識別
-驗證條件：
-1. 統計 Mapping Table(XREF) 比對不到的帳號數量。
-2. 統計 ACCT_XREF_DIM 中產生的 SK_ 帳號數量。
-3. 驗證每一筆比對不到的帳號皆存在對應的 SK_ 帳號。
-預期結果：
-1. Mapping Table 比對不到的帳號數量 = SK_ 帳號數量。
-2. 查詢缺漏資料結果為 0 筆。
-3. 帳號格式為：
-   SK_ + 補零至 25 碼之原帳號
-例如：
-0000000000000000001234567
-→ SK_0000000000000000001234567
-
-其中第三支 SQL（查缺漏）其實是最有說服力的驗證，比單純比 Count 更能證明功能正確。
+阿要再加上mapping table 來找出這次寫入的
