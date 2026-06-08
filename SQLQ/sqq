@@ -1,27 +1,84 @@
+對，如果你的測試範圍其實是：
 
---1. 有 mapping 的帳號數
+只針對這次 Migration 的 CIF
+(CIF_Migrate_Mapping_TEMP)
+
+那這三支 SQL 都應該加上：
+
+JOIN CIF_Migrate_Mapping_TEMP C
+    ON A.CIF_KEY = C.SOURCE_CIF_KEY
+
+否則你現在算的是整個 LoadTrxn_Migrate_buffer。
+
+⸻
+
+1. 有 Mapping 的帳號數
 
 SELECT COUNT(DISTINCT A.ACCT_KEY) AS Has_Mapping
 FROM LoadTrxn_Migrate_buffer A
+JOIN CIF_Migrate_Mapping_TEMP C
+    ON A.CIF_KEY = C.SOURCE_CIF_KEY
 INNER JOIN BSADBTW..XREF B
     ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
 WHERE A.APPL <> 'LNA';
 
---2. 無 mapping 的帳號數
+⸻
+
+2. 無 Mapping 的帳號數
 
 SELECT COUNT(DISTINCT A.ACCT_KEY) AS No_Mapping
 FROM LoadTrxn_Migrate_buffer A
+JOIN CIF_Migrate_Mapping_TEMP C
+    ON A.CIF_KEY = C.SOURCE_CIF_KEY
 LEFT JOIN BSADBTW..XREF B
     ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
 WHERE B.EXTN_REF_NO IS NULL
   AND A.APPL <> 'LNA';
 
---3. 總帳號數
+⸻
 
-SELECT COUNT(DISTINCT ACCT_KEY) AS Total_Acct
-FROM LoadTrxn_Migrate_buffer
-WHERE APPL <> 'LNA';
+3. 總帳號數
 
+SELECT COUNT(DISTINCT A.ACCT_KEY) AS Total_Acct
+FROM LoadTrxn_Migrate_buffer A
+JOIN CIF_Migrate_Mapping_TEMP C
+    ON A.CIF_KEY = C.SOURCE_CIF_KEY
+WHERE A.APPL <> 'LNA';
 
-那我這也要ˇ改吧
+⸻
 
+驗證公式
+
+理論上應該滿足：
+
+Total_Acct = Has_Mapping + No_Mapping
+
+但要注意一件事：
+
+如果同一個 ACCT_KEY 在資料中同時出現：
+
+一筆有 Mapping
+一筆沒 Mapping
+
+那三個 Count 都是 DISTINCT ACCT_KEY，
+
+可能會出現：
+
+Has_Mapping + No_Mapping > Total_Acct
+
+這是因為同一帳號被兩邊都算到了。
+
+因此我更推薦驗證：
+
+SELECT
+    COUNT(DISTINCT A.ACCT_KEY) Total_Acct,
+    COUNT(DISTINCT CASE WHEN B.EXTN_REF_NO IS NOT NULL THEN A.ACCT_KEY END) Has_Mapping,
+    COUNT(DISTINCT CASE WHEN B.EXTN_REF_NO IS NULL THEN A.ACCT_KEY END) No_Mapping
+FROM LoadTrxn_Migrate_buffer A
+JOIN CIF_Migrate_Mapping_TEMP C
+    ON A.CIF_KEY = C.SOURCE_CIF_KEY
+LEFT JOIN BSADBTW..XREF B
+    ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+WHERE A.APPL <> 'LNA';
+
+這樣一次就能看到三個數字，比較適合放在 Test Case 證據裡。
