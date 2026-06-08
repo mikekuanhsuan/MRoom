@@ -1,82 +1,27 @@
-對，如果 TC4 要驗證的是這次 Migration 寫入的 SK_ 帳號，那就不能只看：
 
-BSADBTW..ACCT_XREF_DIM
+--1. 有 mapping 的帳號數
 
-因為裡面可能有歷史資料。
-
-你應該把 本次有參與 Migration 的 CIF 限縮進來，也就是你剛加的：
-
-JOIN CIF_Migrate_Mapping_TEMP c
-    ON a.CIF_KEY = c.SOURCE_CIF_KEY
-
-這樣才是在算「這次應該被處理的帳號」。
-
-計算這次找不到 Mapping 的帳號數
-
-SELECT COUNT(DISTINCT A.ACCT_KEY) AS Missing_Account_Count
+SELECT COUNT(DISTINCT A.ACCT_KEY) AS Has_Mapping
 FROM LoadTrxn_Migrate_buffer A
-JOIN CIF_Migrate_Mapping_TEMP C
-    ON A.CIF_KEY = C.SOURCE_CIF_KEY
+INNER JOIN BSADBTW..XREF B
+    ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
+WHERE A.APPL <> 'LNA';
+
+--2. 無 mapping 的帳號數
+
+SELECT COUNT(DISTINCT A.ACCT_KEY) AS No_Mapping
+FROM LoadTrxn_Migrate_buffer A
 LEFT JOIN BSADBTW..XREF B
     ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
 WHERE B.EXTN_REF_NO IS NULL
   AND A.APPL <> 'LNA';
 
-⸻
+--3. 總帳號數
 
-計算這次實際寫入的 SK_ 帳號數
+SELECT COUNT(DISTINCT ACCT_KEY) AS Total_Acct
+FROM LoadTrxn_Migrate_buffer
+WHERE APPL <> 'LNA';
 
-如果 ACCT_XREF_DIM 有 SOURCE_CIF_KEY 或相關欄位可回溯到這次 Migration：
 
-SELECT COUNT(DISTINCT D.ACCT_KEY)
-FROM BSADBTW..ACCT_XREF_DIM D
-JOIN CIF_Migrate_Mapping_TEMP C
-    ON D.CIF_KEY = C.TARGET_CIF_KEY   -- 依實際欄位調整
-WHERE D.ACCT_KEY LIKE 'SK_%';
+那我這也要ˇ改吧
 
-⸻
-
-最準的驗證方式
-
-不要比 Count。
-
-直接驗證：
-
-本次找不到 Mapping 的帳號，是否都存在對應的 SK_。
-
-SELECT DISTINCT
-       A.ACCT_KEY
-FROM LoadTrxn_Migrate_buffer A
-JOIN CIF_Migrate_Mapping_TEMP C
-    ON A.CIF_KEY = C.SOURCE_CIF_KEY
-LEFT JOIN BSADBTW..XREF B
-    ON RIGHT(REPLICATE('0',25)+A.ACCT_KEY,25)=B.EXTN_REF_NO
-LEFT JOIN BSADBTW..ACCT_XREF_DIM D
-    ON D.ACCT_KEY='SK_'+RIGHT(REPLICATE('0',25)+A.ACCT_KEY,25)
-WHERE B.EXTN_REF_NO IS NULL
-  AND D.ACCT_KEY IS NULL
-  AND A.APPL <> 'LNA';
-
-預期結果
-
-0 rows
-
-如果是 0 筆，比單純：
-
-150124 = 144647 ?
-
-更能證明 TC4 通過。
-
-另外我想確認一件事：
-
-ACCT_XREF_DIM 裡有沒有欄位能標示這次 Migration 寫入的資料？
-
-例如：
-
-CREATE_DT
-BATCH_ID
-LOAD_DATE
-SOURCE_SYSTEM
-MIGRATION_RUN_ID
-
-如果有的話，我可以直接幫你把「本次寫入的 SK_ 數量」精準算出來，而不是用全表的 144,647 去比。
