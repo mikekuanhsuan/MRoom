@@ -1,129 +1,146 @@
-如果 Job A 的目的就是從 Control-M 所在主機跳到 AMLDBT2 執行某支 PS1，那其實可以直接參考你貼的範例架構。
-
-流程：
-
-Control-M
-    ↓
-Job A
-    ↓
-RemoteRun.ps1
-    ↓
-WinRS 連到 AMLDBT2
-    ↓
-執行 AMLDBT2 上的 CheckSum.ps1
-
-例如你的 JSON：
-
+function Get-WorkPath {
+    $workPath = $PWD.Path
+    if ($PSScriptRoot) { 
+        $workPath = $PSScriptRoot 
+    }
+    return $workPath
+}
+#台新資源密碼系統API 取得帳號/密碼，分別放在陣列 $idPwd[0]：帳號，$idPWd[1]：密碼
+function Get-IdPwd
+(
+[string]$svrIPPort,
+[string]$appResCode
+)
 {
-    "ldapInfo": {
-        "svrIPPort": "APSC2,9999",
-        "appResCode": "JCIC-FTPS-TEST,FTP_0007",
-        "remoteIP": "AMLDBT2",
-        "cmd": "D:\\AML_Source\\CheckSum\\CheckSum.ps1"
+    try
+    {
+        if(-not ([System.Management.Automation.PSTypeName]'TaiShinGetPWD.Program').Type) 
+        {
+            Add-Type -TypeDefinition @'
+            using System;
+            using System.Text;
+            using System.Runtime.InteropServices;
+
+            namespace TaiShinGetPWD
+            {
+                public class Program
+                {
+                    [DllImport("PwDll64.dll")]
+                    public static extern int Init(string sSvrIP, int nSvrPort, StringBuilder sRtnMsg);
+                    [DllImport("PwDll64.dll")]
+                    public static extern int ReqToken(string sApCode, string sResCode, ref byte pToken, ref int nTokenSize, StringBuilder sRtnMsg);
+                    [DllImport("PwDll64.dll")]
+                    public static extern int GetCredential(ref byte pToken, int nTokenSize, StringBuilder sUID, StringBuilder sPWD, StringBuilder sRtnMsg);
+
+                    public static string[] getIdPwd(string svrIPPort, string appResCode)
+                    {
+                        int rtn;
+                        string[] idPwd=new string[2];
+                        string sSvrIP = svrIPPort.Split(',')[0];//"APSC2";
+                        int nSvrPort=int.Parse(svrIPPort.Split(',')[1]);//9999;
+                        StringBuilder sRtnMsg = new StringBuilder(2048);
+                        rtn=Init(sSvrIP, nSvrPort, sRtnMsg);
+                        if(rtn != 0){ Console.WriteLine("Init fail, msg:" + sRtnMsg);}
+
+                        string appcode=appResCode.Split(',')[0]; //"BIRPTT01";
+                        string rescode=appResCode.Split(',')[1];//"FTP_0002";  //FTP_0001
+
+                        StringBuilder sUID=new StringBuilder(256);
+                        StringBuilder sPWD=new StringBuilder(256);
+
+                        byte[] pToken=new byte[256];
+                        int nTokenSize = 256;
+                        rtn=ReqToken(appcode,rescode,ref pToken[0], ref nTokenSize, sRtnMsg);
+                        if(rtn==0)
+                        {
+                            /*
+                            Console.WriteLine("rtn=0, msg:reqToken SUCCESS");
+                            Console.WriteLine("pToken = " + pToken);
+                            Console.WriteLine("nTokenSize = " + nTokenSize);
+                            */
+
+                            rtn=GetCredential(ref pToken[0], nTokenSize, sUID, sPWD, sRtnMsg);
+                            if(rtn==0)
+                            {
+                                /*
+                                Console.WriteLine("sUID=" + sUID);
+                                Console.WriteLine("sPWD=" + sPWD);
+                                Console.WriteLine("sRrnMsg = " + sRtnMsg);
+                                */
+                                idPwd[0] = sUID.ToString().Trim();
+                                idPwd[1] = sPWD.ToString().Trim();
+                            }
+                            else
+                            {
+                                Console.WriteLine("GetCredential fail:" + sRtnMsg);
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("ReqToken fail:" + sRtnMsg);
+                        }
+                        return idPwd;
+                    }
+                }
+            }
+'@ -ErrorAction Stop
+        }
+        else
+        {
+            Write-Verbose -Message "Failed $($_.Exception.Message)"
+        }
     }
+    catch
+    {
+        Write-Warning -Message "Failed $($_.Exception.Message)"
+		exit 1
+    }
+
+    $idPWD=[TaiShinGetPWD.Program]::getIdPwd($svrIPPort,$appResCode)
+    return $idPWD
+}
+##################################################
+# MAIN
+##################################################
+##$args="NBINST01.json"
+if ($args.Count -ne 1) {
+    Write-Host "Please provide THE CONFIG JSON FILE"
+    $dirname = Get-WorkPath
+    $scriptName = $MyInvocation.MyCommand.Name
+    Write-Host "USAGE: $dirname\$scriptName <LDAP CONF FILE>"
+  exit 0
+} else {
+  $ldapconf = $args[0]
+  ## DEBUG USE
+  ##Write-Host "Ldap config file: $ldapconf"
 }
 
-或寫 IP：
-
-{
-    "ldapInfo": {
-        "svrIPPort": "APSC2,9999",
-        "appResCode": "JCIC-FTPS-TEST,FTP_0007",
-        "remoteIP": "172.19.x.x",
-        "cmd": "D:\\AML_Source\\CheckSum\\CheckSum.ps1"
-    }
+$configFile = Join-Path -Path (Get-WorkPath) -ChildPath "$ldapconf"
+if(Test-path $configFile -PathType leaf){
+   $config = Get-Content $configFile -Raw | ConvertFrom-Json
+} else {
+   write-host $configFile " NOT EXIST .. Please Check"
+   exit 0
 }
 
-⸻
+$cmd = $config.ldapInfo.cmd
+$remoteIP = $config.ldapInfo.remoteIP
+$svrIPPort = $config.ldapInfo.svrIPPort
+$appResCode = $config.ldapInfo.appResCode
+$idPwd = Get-IdPwd -svrIPPort $svrIPPort -appResCode $appResCode
+$user=$idPwd[0]
+$password=$idPwd[1]
+## DEBUG USAGE
+# write-output $user
+# write-output $password
+## 等LDAP 設定完成, 就可以不需要下列 hard-coding password
+#$user="filescan"
+#$password="1qaz@WSX"
+$winrs_command="winrs -r:$remoteIP "
+$winrs_command=$winrs_command + "-u:$user -p:$password "
+$winrs_command=$winrs_command + "powershell $cmd"
+# write-host $winrs_command
+# 執行指令隱藏密碼資訊
+Invoke-Expression $winrs_command
 
-你的主程式最後會組成：
-
-winrs -r:AMLDBT2 ^
--u:xxxx ^
--p:xxxx ^
-powershell D:\AML_Source\CheckSum\CheckSum.ps1
-
-等於在 AMLDBT2 上執行：
-
-D:\AML_Source\CheckSum\CheckSum.ps1
-
-⸻
-
-有兩個地方你要先確認：
-
-1. AMLDBT2 能不能 WinRS
-
-在 Control-M Server 上測：
-
-winrs -r:AMLDBT2 hostname
-
-如果成功會回：
-
-AMLDBT2
-
-如果失敗：
-
-WinRM cannot process the request
-
-那就要先找 SA 確認 WinRM 是否開啟。
-
-⸻
-
-2. PS1 路徑是否存在
-
-登入 AMLDBT2：
-
-Test-Path "D:\AML_Source\CheckSum\CheckSum.ps1"
-
-必須回：
-
-True
-
-⸻
-
-建議你的第一版先不要做 CheckSum
-
-先做最簡單測試。
-
-AMLDBT2 建一支：
-
-D:\AML_Source\Test.ps1
-
-內容：
-
-"Hello AMLDBT2" | Out-File D:\AML_Source\Test.log
-exit 0
-
-JSON：
-
-{
-    "ldapInfo": {
-        "svrIPPort": "APSC2,9999",
-        "appResCode": "JCIC-FTPS-TEST,FTP_0007",
-        "remoteIP": "AMLDBT2",
-        "cmd": "D:\\AML_Source\\Test.ps1"
-    }
-}
-
-先確認：
-
-Control-M
-   ↓
-成功跳到 AMLDBT2
-   ↓
-產生 Test.log
-
-這一步成功後，再把 Test.ps1 換成你的 CheckSum.ps1。
-
-這樣問題會很好切割，不然你會搞不清楚到底是：
-
-* WinRS 失敗
-* 密碼系統失敗
-* 路徑錯誤
-* CheckSum 程式錯誤
-
-哪一層出了問題。先驗證「能成功跳到 AMLDBT2 執行 PS1」最重要。
-
-
-
-
+那我這支怎麼改
