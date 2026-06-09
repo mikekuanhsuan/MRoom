@@ -1,0 +1,8 @@
+{
+    "ldapInfo": {
+        "svrIPPort": "APSC2,9999",
+        "appResCode":"JCIC-FTPS-TEST,FTP_0007",
+        "remoteIP":"172.19.1.6",
+        "cmd":"C:\\CheckFile\\Filechk.ps1"
+    }
+}
