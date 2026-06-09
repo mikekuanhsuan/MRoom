@@ -1,63 +1,8 @@
-依照你寫的 TC5：
-
-有 mapping → 不轉入
-無 mapping → 轉入（必要時加 SK_）
-
-其實驗證重點是 mapping table(XREF) 有沒有資料，不是直接看 LoadTrxn_Migrate_buffer 全量明細。
-
-你可以直接用數量驗證：
-
-1. 有 mapping 的帳號數
-
-SELECT COUNT(DISTINCT A.ACCT_KEY) AS Has_Mapping
-FROM LoadTrxn_Migrate_buffer A
-INNER JOIN BSADBTW..XREF B
-    ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
-WHERE A.APPL <> 'LNA';
-
-2. 無 mapping 的帳號數
-
-SELECT COUNT(DISTINCT A.ACCT_KEY) AS No_Mapping
-FROM LoadTrxn_Migrate_buffer A
-LEFT JOIN BSADBTW..XREF B
-    ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
-WHERE B.EXTN_REF_NO IS NULL
-  AND A.APPL <> 'LNA';
-
-3. 總帳號數
-
-SELECT COUNT(DISTINCT ACCT_KEY) AS Total_Acct
-FROM LoadTrxn_Migrate_buffer
-WHERE APPL <> 'LNA';
-
-理論上應該滿足：
-
-Total_Acct = Has_Mapping + No_Mapping
-
-⸻
-
-如果要驗證「無 mapping 的帳號會加 SK_ 轉入 ACCT_XREF_DIM」，那可以再驗證：
-
-SELECT COUNT(DISTINCT A.ACCT_KEY) AS No_Mapping_But_Inserted
-FROM LoadTrxn_Migrate_buffer A
-LEFT JOIN BSADBTW..XREF B
-    ON RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25) = B.EXTN_REF_NO
-INNER JOIN BSADBTW..ACCT_XREF_DIM D
-    ON D.ACCT_KEY = 'SK_' + RIGHT(REPLICATE('0',25) + A.ACCT_KEY,25)
-WHERE B.EXTN_REF_NO IS NULL
-  AND A.APPL <> 'LNA';
-
-這個數量應該等於：
-
-No_Mapping
-
-若相等，就代表：
-
-有 mapping    → 被排除
-無 mapping    → 成功產生 SK_ 帳號
-
-這其實就是 TC5 最有力的數量驗證。你不需要把 15 萬筆明細撈出來看，只要驗證：
-
-No_Mapping = No_Mapping_But_Inserted
-
-即可證明「僅不在 mapping table 內的帳號才轉入」。
+SELECT
+    B.NEW_CIF_KEY,
+    F.Value
+FROM Customer_Migrate_buffer A
+INNER JOIN CIF_Migrate_Mapping_TEMP B
+    ON A.CIF_KEY = B.SOURCE_CIF_KEY
+CROSS APPLY dbo.fnStringSplitter(A.CustPurposeOfAcc,'|') F
+WHERE A.CIF_KEY='161ca4cc-2beb-e511-80c8-0050568c710a'
