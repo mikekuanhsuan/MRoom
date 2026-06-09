@@ -1,10 +1,144 @@
-Write-Host "USER = $user"
+function Get-WorkPath {
+    $workPath = $PWD.Path
+    if ($PSScriptRoot) { 
+        $workPath = $PSScriptRoot 
+    }
+    return $workPath
+}
+#台新資源密碼系統API 取得帳號/密碼，分別放在陣列 $idPwd[0]：帳號，$idPWd[1]：密碼
+function Get-IdPwd
+(
+[string]$svrIPPort,
+[string]$appResCode
+)
+{
+    try
+    {
+        if(-not ([System.Management.Automation.PSTypeName]'TaiShinGetPWD.Program').Type) 
+        {
+            Add-Type -TypeDefinition @'
+            using System;
+            using System.Text;
+            using System.Runtime.InteropServices;
 
-if ([string]::IsNullOrEmpty($password))
-{
-    Write-Host "PASSWORD IS EMPTY"
+            namespace TaiShinGetPWD
+            {
+                public class Program
+                {
+                    [DllImport("PwDll64.dll")]
+                    public static extern int Init(string sSvrIP, int nSvrPort, StringBuilder sRtnMsg);
+                    [DllImport("PwDll64.dll")]
+                    public static extern int ReqToken(string sApCode, string sResCode, ref byte pToken, ref int nTokenSize, StringBuilder sRtnMsg);
+                    [DllImport("PwDll64.dll")]
+                    public static extern int GetCredential(ref byte pToken, int nTokenSize, StringBuilder sUID, StringBuilder sPWD, StringBuilder sRtnMsg);
+
+                    public static string[] getIdPwd(string svrIPPort, string appResCode)
+                    {
+                        int rtn;
+                        string[] idPwd=new string[2];
+                        string sSvrIP = svrIPPort.Split(',')[0];//"APSC2";
+                        int nSvrPort=int.Parse(svrIPPort.Split(',')[1]);//9999;
+                        StringBuilder sRtnMsg = new StringBuilder(2048);
+                        rtn=Init(sSvrIP, nSvrPort, sRtnMsg);
+                        if(rtn != 0){ Console.WriteLine("Init fail, msg:" + sRtnMsg);}
+
+                        string appcode=appResCode.Split(',')[0]; //"BIRPTT01";
+                        string rescode=appResCode.Split(',')[1];//"FTP_0002";  //FTP_0001
+
+                        StringBuilder sUID=new StringBuilder(256);
+                        StringBuilder sPWD=new StringBuilder(256);
+
+                        byte[] pToken=new byte[256];
+                        int nTokenSize = 256;
+                        rtn=ReqToken(appcode,rescode,ref pToken[0], ref nTokenSize, sRtnMsg);
+                        if(rtn==0)
+                        {
+                            /*
+                            Console.WriteLine("rtn=0, msg:reqToken SUCCESS");
+                            Console.WriteLine("pToken = " + pToken);
+                            Console.WriteLine("nTokenSize = " + nTokenSize);
+                            */
+
+                            rtn=GetCredential(ref pToken[0], nTokenSize, sUID, sPWD, sRtnMsg);
+                            if(rtn==0)
+                            {
+                                /*
+                                Console.WriteLine("sUID=" + sUID);
+                                Console.WriteLine("sPWD=" + sPWD);
+                                Console.WriteLine("sRrnMsg = " + sRtnMsg);
+                                */
+                                idPwd[0] = sUID.ToString().Trim();
+                                idPwd[1] = sPWD.ToString().Trim();
+                            }
+                            else
+                            {
+                                Console.WriteLine("GetCredential fail:" + sRtnMsg);
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("ReqToken fail:" + sRtnMsg);
+                        }
+                        return idPwd;
+                    }
+                }
+            }
+'@ -ErrorAction Stop
+        }
+        else
+        {
+            Write-Verbose -Message "Failed $($_.Exception.Message)"
+        }
+    }
+    catch
+    {
+        Write-Warning -Message "Failed $($_.Exception.Message)"
+		exit 1
+    }
+
+    $idPWD=[TaiShinGetPWD.Program]::getIdPwd($svrIPPort,$appResCode)
+    return $idPWD
 }
-else
-{
-    Write-Host "PASSWORD LENGTH = $($password.Length)"
+##################################################
+# MAIN
+##################################################
+##$args="NBINST01.json"
+if ($args.Count -ne 1) {
+    Write-Host "Please provide THE CONFIG JSON FILE"
+    $dirname = Get-WorkPath
+    $scriptName = $MyInvocation.MyCommand.Name
+    Write-Host "USAGE: $dirname\$scriptName <LDAP CONF FILE>"
+  exit 0
+} else {
+  $ldapconf = $args[0]
+  ## DEBUG USE
+  ##Write-Host "Ldap config file: $ldapconf"
 }
+
+$configFile = Join-Path -Path (Get-WorkPath) -ChildPath "$ldapconf"
+if(Test-path $configFile -PathType leaf){
+   $config = Get-Content $configFile -Raw | ConvertFrom-Json
+} else {
+   write-host $configFile " NOT EXIST .. Please Check"
+   exit 0
+}
+
+$cmd = $config.ldapInfo.cmd
+$remoteIP = $config.ldapInfo.remoteIP
+$svrIPPort = $config.ldapInfo.svrIPPort
+$appResCode = $config.ldapInfo.appResCode
+$idPwd = Get-IdPwd -svrIPPort $svrIPPort -appResCode $appResCode
+$user=$idPwd[0]
+$password=$idPwd[1]
+## DEBUG USAGE
+# write-output $user
+# write-output $password
+## 等LDAP 設定完成, 就可以不需要下列 hard-coding password
+#$user="filescan"
+#$password="1qaz@WSX"
+$winrs_command="winrs -r:$remoteIP "
+$winrs_command=$winrs_command + "-u:$user -p:$password "
+$winrs_command=$winrs_command + "powershell $cmd"
+# write-host $winrs_command
+# 執行指令隱藏密碼資訊
+Invoke-Expression $winrs_command
