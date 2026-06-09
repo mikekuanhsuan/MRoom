@@ -1,146 +1,186 @@
-function Get-WorkPath {
-    $workPath = $PWD.Path
-    if ($PSScriptRoot) { 
-        $workPath = $PSScriptRoot 
-    }
-    return $workPath
-}
-#台新資源密碼系統API 取得帳號/密碼，分別放在陣列 $idPwd[0]：帳號，$idPWd[1]：密碼
-function Get-IdPwd
-(
-[string]$svrIPPort,
-[string]$appResCode
-)
+如果是要拿去交接或自己看懂，我會整理成這樣：
+
+RunRemote.ps1
+
+功能
+
+透過台新密碼系統取得帳號密碼，使用 WinRS 遠端登入指定主機並執行指定 PowerShell Script。
+
+⸻
+
+執行方式
+
+powershell.exe -ExecutionPolicy Bypass -File RunRemote.ps1 AML_CHECKSUM.json
+
+⸻
+
+JSON 設定檔格式
+
 {
-    try
-    {
-        if(-not ([System.Management.Automation.PSTypeName]'TaiShinGetPWD.Program').Type) 
-        {
-            Add-Type -TypeDefinition @'
-            using System;
-            using System.Text;
-            using System.Runtime.InteropServices;
-
-            namespace TaiShinGetPWD
-            {
-                public class Program
-                {
-                    [DllImport("PwDll64.dll")]
-                    public static extern int Init(string sSvrIP, int nSvrPort, StringBuilder sRtnMsg);
-                    [DllImport("PwDll64.dll")]
-                    public static extern int ReqToken(string sApCode, string sResCode, ref byte pToken, ref int nTokenSize, StringBuilder sRtnMsg);
-                    [DllImport("PwDll64.dll")]
-                    public static extern int GetCredential(ref byte pToken, int nTokenSize, StringBuilder sUID, StringBuilder sPWD, StringBuilder sRtnMsg);
-
-                    public static string[] getIdPwd(string svrIPPort, string appResCode)
-                    {
-                        int rtn;
-                        string[] idPwd=new string[2];
-                        string sSvrIP = svrIPPort.Split(',')[0];//"APSC2";
-                        int nSvrPort=int.Parse(svrIPPort.Split(',')[1]);//9999;
-                        StringBuilder sRtnMsg = new StringBuilder(2048);
-                        rtn=Init(sSvrIP, nSvrPort, sRtnMsg);
-                        if(rtn != 0){ Console.WriteLine("Init fail, msg:" + sRtnMsg);}
-
-                        string appcode=appResCode.Split(',')[0]; //"BIRPTT01";
-                        string rescode=appResCode.Split(',')[1];//"FTP_0002";  //FTP_0001
-
-                        StringBuilder sUID=new StringBuilder(256);
-                        StringBuilder sPWD=new StringBuilder(256);
-
-                        byte[] pToken=new byte[256];
-                        int nTokenSize = 256;
-                        rtn=ReqToken(appcode,rescode,ref pToken[0], ref nTokenSize, sRtnMsg);
-                        if(rtn==0)
-                        {
-                            /*
-                            Console.WriteLine("rtn=0, msg:reqToken SUCCESS");
-                            Console.WriteLine("pToken = " + pToken);
-                            Console.WriteLine("nTokenSize = " + nTokenSize);
-                            */
-
-                            rtn=GetCredential(ref pToken[0], nTokenSize, sUID, sPWD, sRtnMsg);
-                            if(rtn==0)
-                            {
-                                /*
-                                Console.WriteLine("sUID=" + sUID);
-                                Console.WriteLine("sPWD=" + sPWD);
-                                Console.WriteLine("sRrnMsg = " + sRtnMsg);
-                                */
-                                idPwd[0] = sUID.ToString().Trim();
-                                idPwd[1] = sPWD.ToString().Trim();
-                            }
-                            else
-                            {
-                                Console.WriteLine("GetCredential fail:" + sRtnMsg);
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine("ReqToken fail:" + sRtnMsg);
-                        }
-                        return idPwd;
-                    }
-                }
-            }
-'@ -ErrorAction Stop
-        }
-        else
-        {
-            Write-Verbose -Message "Failed $($_.Exception.Message)"
-        }
+    "ldapInfo": {
+        "svrIPPort": "APSC2,9999",
+        "appResCode": "JCIC-FTPS-TEST,FTP_0007",
+        "remoteIP": "AMLDBT2",
+        "cmd": "D:\\AML_Source\\CheckSum\\CheckSum.ps1"
     }
-    catch
-    {
-        Write-Warning -Message "Failed $($_.Exception.Message)"
-		exit 1
-    }
-
-    $idPWD=[TaiShinGetPWD.Program]::getIdPwd($svrIPPort,$appResCode)
-    return $idPWD
-}
-##################################################
-# MAIN
-##################################################
-##$args="NBINST01.json"
-if ($args.Count -ne 1) {
-    Write-Host "Please provide THE CONFIG JSON FILE"
-    $dirname = Get-WorkPath
-    $scriptName = $MyInvocation.MyCommand.Name
-    Write-Host "USAGE: $dirname\$scriptName <LDAP CONF FILE>"
-  exit 0
-} else {
-  $ldapconf = $args[0]
-  ## DEBUG USE
-  ##Write-Host "Ldap config file: $ldapconf"
 }
 
-$configFile = Join-Path -Path (Get-WorkPath) -ChildPath "$ldapconf"
-if(Test-path $configFile -PathType leaf){
-   $config = Get-Content $configFile -Raw | ConvertFrom-Json
-} else {
-   write-host $configFile " NOT EXIST .. Please Check"
-   exit 0
-}
+⸻
 
-$cmd = $config.ldapInfo.cmd
-$remoteIP = $config.ldapInfo.remoteIP
-$svrIPPort = $config.ldapInfo.svrIPPort
-$appResCode = $config.ldapInfo.appResCode
-$idPwd = Get-IdPwd -svrIPPort $svrIPPort -appResCode $appResCode
-$user=$idPwd[0]
-$password=$idPwd[1]
-## DEBUG USAGE
-# write-output $user
-# write-output $password
-## 等LDAP 設定完成, 就可以不需要下列 hard-coding password
-#$user="filescan"
-#$password="1qaz@WSX"
+程式流程
+
+讀取 JSON
+    ↓
+取得 svrIPPort
+取得 appResCode
+取得 remoteIP
+取得 cmd
+    ↓
+呼叫 PwDll64.dll
+    ↓
+取得帳號密碼
+    ↓
+組成 WinRS 指令
+    ↓
+連線遠端主機
+    ↓
+執行指定 PS1
+
+⸻
+
+Function：Get-WorkPath()
+
+用途：
+
+取得目前 Script 所在目錄。
+
+Get-WorkPath
+
+回傳：
+
+D:\ControlM\Script
+
+⸻
+
+Function：Get-IdPwd()
+
+用途：
+
+透過 PwDll64.dll 取得資源帳號密碼。
+
+執行流程：
+
+Init()
+    ↓
+ReqToken()
+    ↓
+GetCredential()
+    ↓
+回傳 User / Password
+
+回傳格式：
+
+$idPwd[0] = User
+$idPwd[1] = Password
+
+⸻
+
+主程式流程
+
+1. 檢查參數
+
+if ($args.Count -ne 1)
+
+確認是否有帶入 JSON。
+
+例如：
+
+RunRemote.ps1 AML_CHECKSUM.json
+
+⸻
+
+2. 讀取 JSON
+
+$config = Get-Content $configFile -Raw | ConvertFrom-Json
+
+取得：
+
+$cmd
+$remoteIP
+$svrIPPort
+$appResCode
+
+⸻
+
+3. 取得帳號密碼
+
+$idPwd = Get-IdPwd `
+    -svrIPPort $svrIPPort `
+    -appResCode $appResCode
+
+取得：
+
+$user
+$password
+
+⸻
+
+4. 組成 WinRS 指令
+
 $winrs_command="winrs -r:$remoteIP "
-$winrs_command=$winrs_command + "-u:$user -p:$password "
-$winrs_command=$winrs_command + "powershell $cmd"
-# write-host $winrs_command
-# 執行指令隱藏密碼資訊
+$winrs_command+=" -u:$user -p:$password "
+$winrs_command+=" powershell $cmd"
+
+範例：
+
+winrs -r:AMLDBT2 ^
+-u:filescan ^
+-p:xxxxxx ^
+powershell D:\AML_Source\CheckSum\CheckSum.ps1
+
+⸻
+
+5. 執行遠端 Script
+
 Invoke-Expression $winrs_command
 
-那我這支怎麼改
+效果：
+
+登入 AMLDBT2
+    ↓
+執行
+D:\AML_Source\CheckSum\CheckSum.ps1
+
+⸻
+
+AML CheckSum 使用情境
+
+Control-M Job A
+    ↓
+RunRemote.ps1
+    ↓
+AMLDBT2
+    ↓
+CheckSum.ps1
+    ↓
+exit 0
+    ↓
+Control-M Success
+    ↓
+Job B
+
+⸻
+
+注意事項
+
+遠端執行的 CheckSum.ps1 必須回傳：
+
+成功：
+
+exit 0
+
+失敗：
+
+exit 1
+
+Control-M 將依據 Exit Code 判斷是否執行下一個 Job。
