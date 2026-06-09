@@ -1,86 +1,73 @@
-[2026-06-09 09:05:28] ===== JOB START =====
-[2026-06-09 09:05:28] Input Path: D:\AML_Source\20251114_新光資轉\EXE
-[2026-06-09 09:05:28] Target File Count: 8
-[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_Acct.csv
-[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_CHECK_SUM.csv
-[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_Cust.csv
-[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_LoadTrxn.csv
-[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_NameProperty_Cust.csv
-[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_NameProperty_RP.csv
-[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_SPEC_lowrisklistgroups.csv
-[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_SPEC_OFAC_SPEC.csv
-[2026-06-09 09:05:28] ===== Generating checksums =====
-[2026-06-09 09:05:28] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_Acct.csv
-[2026-06-09 09:06:25] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_CHECK_SUM.csv
-[2026-06-09 09:06:25] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_Cust.csv
-[2026-06-09 09:06:40] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_LoadTrxn.csv
-[2026-06-09 09:11:47] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_NameProperty_Cust.csv
-[2026-06-09 09:12:01] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_NameProperty_RP.csv
-[2026-06-09 09:12:02] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_SPEC_lowrisklistgroups.csv
-[2026-06-09 09:12:02] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_SPEC_OFAC_SPEC.csv
-[2026-06-09 09:12:02] Generated result file: D:\AML_Source\20251114_新光資轉\EXE\checksum\result.csv
-[2026-06-09 09:12:02] ===== Comparing with baseline =====
-[2026-06-09 09:12:02] MATCH: aml_cust.csv
-[2026-06-09 09:12:02] MATCH: aml_spec_ofac_spec.csv
-[2026-06-09 09:12:02] MISSING IN BASELINE: aml_check_sum.csv
-[2026-06-09 09:12:02] MATCH: aml_nameproperty_rp.csv
-[2026-06-09 09:12:02] MATCH: aml_loadtrxn.csv
-[2026-06-09 09:12:02] MATCH: aml_nameproperty_cust.csv
-[2026-06-09 09:12:02] MATCH: aml_acct.csv
-[2026-06-09 09:12:02] MATCH: aml_spec_lowrisklistgroups.csv
-[2026-06-09 09:12:02] ===== JOB END =====
-[2026-06-09 09:12:02] RETURN CODE: 1 (FAILED)
+對，你的 log 已經把問題暴露出來了。
 
+你目前把 AML_CHECK_SUM.csv 本身也納入 checksum 計算對象：
 
-我這邊是不是有個問題
-我的AML_CHECK_SUM.csv  裡面的對照表不會有自己aml_check_sum.csv 才對
+$fileList = @(
+    "AML_Acct.csv",
+    "AML_CUST.csv",
+    "AML_LoadTrxn.csv",
+    "AML_NameProperty_Cust.csv",
+    "AML_NameProperty_RP.csv",
+    "AML_SPEC_lowrisklistgroups.csv",
+    "AML_SPEC_OFAC_SPEC.csv",
+    "AML_CHECK_SUM.csv"   # ← 這個
+)
 
-幫我看一下我的code
-# ============================================
-# Input Path（固定寫死）
-# ============================================
-$folderPath = "D:\AML_Source\20251114_新光資轉\EXE"
-# baseline file
-$baselineFile = Join-Path $folderPath "AML_CHECK_SUM.csv"
-# ============================================
-# Output / Log
-# ============================================
-$basePath = Get-Location
-$outputFile = Join-Path $basePath "result.csv"
-$logFile    = Join-Path $basePath "SKcheck.log"
-# ============================================
-# 刪除舊檔
-# ============================================
-if (Test-Path $outputFile) {
-    Remove-Item $outputFile -Force
-}
-if (Test-Path $logFile) {
-    Remove-Item $logFile -Force
-}
-# ============================================
-# Log function
-# ============================================
-function Write-Log {
-    param([string]$msg)
-    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path $logFile -Value "[$time] $msg"
-}
-# ============================================
-# Start
-# ============================================
-Write-Log "===== JOB START ====="
-Write-Log "Input Path: $folderPath"
-# ============================================
-# 檢查資料夾
-# ============================================
-if (!(Test-Path $folderPath)) {
-    Write-Log "ERROR: Input folder not found"
-    Write-Host "INPUT PATH NOT FOUND"
-    exit 1
-}
-# ============================================
-# 目標檔案
-# ============================================
+所以執行時：
+
+Processing: AML_CHECK_SUM.csv
+
+接著比對 baseline：
+
+MISSING IN BASELINE: aml_check_sum.csv
+
+代表：
+
+* 你的程式算出了 AML_CHECK_SUM.csv 的 checksum
+* actualResults 裡面有
+
+aml_check_sum.csv
+
+* 但 baseline 檔案內容裡沒有這一筆
+
+所以被判定：
+
+MISSING IN BASELINE
+
+然後：
+
+$hasError = $true
+
+最後：
+
+RETURN CODE: 1 (FAILED)
+
+⸻
+
+正確做法
+
+通常：
+
+AML_CHECK_SUM.csv
+
+本身就是 baseline 對照檔。
+
+因此：
+
+它不應該參與 checksum 計算
+
+否則會變成：
+
+拿自己去驗證自己
+
+而且 checksum 檔每次更新內容後 MD5 都會改變，本來就不適合作為被驗證對象。
+
+⸻
+
+建議修改
+
+把：
+
 $fileList = @(
     "AML_Acct.csv",
     "AML_CUST.csv",
@@ -91,133 +78,72 @@ $fileList = @(
     "AML_SPEC_OFAC_SPEC.csv",
     "AML_CHECK_SUM.csv"
 )
-# ============================================
-# 只掃描 EXE 根目錄
-# ============================================
+
+改成：
+
+$fileList = @(
+    "AML_Acct.csv",
+    "AML_CUST.csv",
+    "AML_LoadTrxn.csv",
+    "AML_NameProperty_Cust.csv",
+    "AML_NameProperty_RP.csv",
+    "AML_SPEC_lowrisklistgroups.csv",
+    "AML_SPEC_OFAC_SPEC.csv"
+)
+
+直接把：
+
+"AML_CHECK_SUM.csv"
+
+拿掉。
+
+⸻
+
+或更安全的寫法
+
+如果未來有人誤把它加回去：
+
 $files = Get-ChildItem -Path $folderPath -File |
-    Where-Object { $fileList -contains $_.Name } |
+    Where-Object {
+        $fileList -contains $_.Name -and
+        $_.Name -ne "AML_CHECK_SUM.csv"
+    } |
     Sort-Object Name
-Write-Log "Target File Count: $($files.Count)"
-foreach ($f in $files) {
-    Write-Log "FOUND FILE: $($f.FullName)"
-}
-if ($files.Count -eq 0) {
-    Write-Log "WARN: No target files found."
-}
-# ============================================
-# 產生 result.csv
-# ============================================
-Write-Log "===== Generating checksums ====="
-$actualResults = @{}
-$resultList = [System.Collections.Generic.List[string]]::new()
-foreach ($file in $files) {
-    try {
-        Write-Log "Processing: $($file.FullName)"
-        # 計算筆數
-        $lineCount = 0
-        $reader = New-Object System.IO.StreamReader($file.FullName)
-        while ($reader.ReadLine() -ne $null) {
-            $lineCount++
-        }
-        $reader.Close()
-        $reader.Dispose()
-        # MD5
-        $md5Hash = (
-            Get-FileHash `
-                -Path $file.FullName `
-                -Algorithm MD5
-        ).Hash.ToLowerInvariant()
-        $key = $file.Name.Trim().ToLowerInvariant()
-        $value = "$lineCount;$md5Hash"
-        $actualResults[$key] = $value
-        $resultList.Add(
-            "$($file.Name);$lineCount;$md5Hash"
-        )
-    }
-    catch {
-        Write-Log "ERROR: $($file.FullName)"
-        Write-Log $_.Exception.Message
-    }
-}
-$resultList |
-Out-File `
-    -FilePath $outputFile `
-    -Encoding utf8
-Write-Log "Generated result file: $outputFile"
-# ============================================
-# 比對 Baseline
-# ============================================
-Write-Log "===== Comparing with baseline ====="
-$hasError = $false
-if (!(Test-Path $baselineFile)) {
-    Write-Log "ERROR: Baseline not found"
-    Write-Host "BASELINE NOT FOUND"
-    exit 1
-}
-$baseline = @{}
-try {
-    Import-Csv `
-        -Path $baselineFile `
-        -Delimiter ";" `
-        -Header "FileName","Count","MD5" |
-    ForEach-Object {
-        if (
-            [string]::IsNullOrWhiteSpace($_.FileName)
-        ) {
-            return
-        }
-        $key = $_.FileName.Trim().ToLowerInvariant()
-        $value =
-            "$($_.Count.Trim());$($_.MD5.Trim().ToLowerInvariant())"
-        $baseline[$key] = $value
-    }
-}
-catch {
-    Write-Log "ERROR reading baseline"
-    Write-Log $_.Exception.Message
-    Write-Host "BASELINE FILE PARSE ERROR"
-    exit 1
-}
-# ============================================
-# Actual vs Baseline
-# ============================================
-foreach ($key in $actualResults.Keys) {
-    if ($baseline.ContainsKey($key)) {
-        if ($actualResults[$key] -eq $baseline[$key]) {
-            Write-Log "MATCH: $key"
-        }
-        else {
-            Write-Log "MISMATCH: $key"
-            Write-Log "  ACTUAL  : $($actualResults[$key])"
-            Write-Log "  EXPECTED: $($baseline[$key])"
-            $hasError = $true
-        }
-    }
-    else {
-        Write-Log "MISSING IN BASELINE: $key"
-        $hasError = $true
-    }
-}
-# ============================================
-# Baseline 有但資料夾沒有
-# ============================================
-foreach ($key in $baseline.Keys) {
-    if (-not $actualResults.ContainsKey($key)) {
-        Write-Log "MISSING IN FOLDER: $key"
-        $hasError = $true
-    }
-}
-# ============================================
-# End
-# ============================================
-Write-Log "===== JOB END ====="
-if ($hasError) {
-    Write-Log "RETURN CODE: 1 (FAILED)"
-    Write-Host "FAILED"
-    exit 1
-}
-else {
-    Write-Log "RETURN CODE: 0 (SUCCESS)"
-    Write-Host "SUCCESS"
-    exit 0
-}
+
+這樣即使 fileList 裡有：
+
+AML_CHECK_SUM.csv
+
+也會被排除。
+
+⸻
+
+另外我發現一個小細節：
+
+$fileList = @(
+    "AML_CUST.csv"
+)
+
+但實際檔案是：
+
+AML_Cust.csv
+
+你 log 有抓到是因為 Windows 檔名比對不分大小寫。
+
+雖然目前沒問題，但建議統一成：
+
+"AML_Cust.csv"
+
+避免未來搬到 Linux 或其他環境踩雷。
+
+所以這次 FAILED 的根因，我判斷就是：
+
+AML_CHECK_SUM.csv 被拿去做 checksum
+↓
+baseline 裡沒有自己的紀錄
+↓
+MISSING IN BASELINE
+↓
+RETURN CODE = 1
+
+把它從 $fileList 移除後，這次 log 看起來應該就會變成全部 MATCH，最後回傳 SUCCESS。
