@@ -1,3 +1,1 @@
-cd D:\AML\SK\EXE\checksum
-
-powershell -File .\check_sk_csv_csv.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\check_sk_csv_csv.ps1"
