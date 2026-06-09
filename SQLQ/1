@@ -1,31 +1,3 @@
-INSERT  INTO dbo.PB_CustPurposeOfAcc
-                            ( CIF_KEY ,
-                              CODE ,
-                              LastUpdatedBy ,
-                              LastUpdatedDate_UTC
-                            )
-                            SELECT  NEW_CIF_KEY ,
-                                    F.Value ,
-                                    @UserId ,
-                                    @DateUTC
-                            FROM    dbo.Customer_Migrate_buffer A
-                                    INNER JOIN dbo.CIF_Migrate_Mapping_TEMP B ON A.CIF_KEY = B.SOURCE_CIF_KEY AND B.ACTION = 'INSERT'
-                                    CROSS APPLY dbo.fnStringSplitter(A.CustPurposeOfAcc,
-                                                              '|') F
-                            WHERE   NOT EXISTS ( SELECT 1
-                                                 FROM   dbo.PB_CustPurposeOfAcc Z
-                                                 WHERE  Z.CIF_KEY = B.NEW_CIF_KEY
-                                                        AND Z.CODE = F.Value )
-                                    AND ISNULL(A.CustPurposeOfAcc, '') <> '';
-                                    
-					IF @CIFMappingTable IS NOT NULL
-                       BEGIN                                       
-						   SET @sql = N'INSERT INTO SOURCEDB' + @BNK_NBR + '.dbo.CIF_CVT_Source(Cif_key, Internal_Cif_Key, LoadTimeKey)
-										 SELECT COALESCE(C.' + QUOTENAME(@CIFMappingTargetColumn) + ', B.CustomerNo) AS CustomerNo, A.NEW_CIF_KEY, B.time_key
-										 FROM dbo.CIF_Migrate_Mapping_TEMP A JOIN dbo.Customer_Migrate_buffer B ON A.SOURCE_CIF_KEY = B.CIF_KEY
-										 LEFT JOIN ' + QUOTENAME(@CIFMappingTable) + ' C WITH (NOLOCK) ON C.' + QUOTENAME(@CIFMappingSourceColumn) + ' = B.CustomerNo   
-										 WHERE A.ACTION = ''INSERT''
-										 AND NOT EXISTS(SELECT 1 FROM SOURCEDB' + @BNK_NBR + '.dbo.CIF_CVT_Source Z WHERE Z.Cif_key = COALESCE(C.' + QUOTENAME(@CIFMappingTargetColumn) + ', B.CustomerNo))';                               
-	              
-							EXEC sp_executesql @sql;   
-						END     
+cd D:\AML\SK\EXE\checksum
+
+powershell -File .\check_sk_csv_csv.ps1
