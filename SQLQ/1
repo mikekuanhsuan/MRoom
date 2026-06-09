@@ -1,31 +1,223 @@
-重點整理
+[2026-06-09 09:05:28] ===== JOB START =====
+[2026-06-09 09:05:28] Input Path: D:\AML_Source\20251114_新光資轉\EXE
+[2026-06-09 09:05:28] Target File Count: 8
+[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_Acct.csv
+[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_CHECK_SUM.csv
+[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_Cust.csv
+[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_LoadTrxn.csv
+[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_NameProperty_Cust.csv
+[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_NameProperty_RP.csv
+[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_SPEC_lowrisklistgroups.csv
+[2026-06-09 09:05:28] FOUND FILE: D:\AML_Source\20251114_新光資轉\EXE\AML_SPEC_OFAC_SPEC.csv
+[2026-06-09 09:05:28] ===== Generating checksums =====
+[2026-06-09 09:05:28] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_Acct.csv
+[2026-06-09 09:06:25] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_CHECK_SUM.csv
+[2026-06-09 09:06:25] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_Cust.csv
+[2026-06-09 09:06:40] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_LoadTrxn.csv
+[2026-06-09 09:11:47] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_NameProperty_Cust.csv
+[2026-06-09 09:12:01] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_NameProperty_RP.csv
+[2026-06-09 09:12:02] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_SPEC_lowrisklistgroups.csv
+[2026-06-09 09:12:02] Processing: D:\AML_Source\20251114_新光資轉\EXE\AML_SPEC_OFAC_SPEC.csv
+[2026-06-09 09:12:02] Generated result file: D:\AML_Source\20251114_新光資轉\EXE\checksum\result.csv
+[2026-06-09 09:12:02] ===== Comparing with baseline =====
+[2026-06-09 09:12:02] MATCH: aml_cust.csv
+[2026-06-09 09:12:02] MATCH: aml_spec_ofac_spec.csv
+[2026-06-09 09:12:02] MISSING IN BASELINE: aml_check_sum.csv
+[2026-06-09 09:12:02] MATCH: aml_nameproperty_rp.csv
+[2026-06-09 09:12:02] MATCH: aml_loadtrxn.csv
+[2026-06-09 09:12:02] MATCH: aml_nameproperty_cust.csv
+[2026-06-09 09:12:02] MATCH: aml_acct.csv
+[2026-06-09 09:12:02] MATCH: aml_spec_lowrisklistgroups.csv
+[2026-06-09 09:12:02] ===== JOB END =====
+[2026-06-09 09:12:02] RETURN CODE: 1 (FAILED)
 
-這張資料查詢單的目的：
-每月找出「本月新增或調整為私銀高資產客戶」的人員資料，確認 AML 系統中的客戶群組與分行資訊是否已正確同步。
 
-流程
+我這邊是不是有個問題
+我的AML_CHECK_SUM.csv  裡面的對照表不會有自己aml_check_sum.csv 才對
 
-1. SFA／來源系統更新高資產客戶註記
-2. 每月撈出有異動的客戶名單
-3. 比對 AML 系統中的客戶群組、分行資料
-4. 找出未同步或資料不一致的客戶
-5. 由相關人員確認並進行修正
-
-為什麼要每月執行？
-
-* 高資產客戶名單會持續變動
-* AML 系統不一定能完全自動同步
-* 需要定期檢查避免資料落差
-
-主要目的
-
-* 確保 AML 客戶分群正確
-    * 避免影響風險評級、監控規則及審查流程
-* 維護 KYC / CDD 資料品質
-    * 客戶屬性異動需反映到 AML 系統
-* 避免系統間資料不一致
-    * SFA 已更新，但 AML 未同步時可及時發現
-
-一句話總結
-
-這支查詢不是單純提供資料，而是每月找出 AML 系統中尚未正確更新的私銀高資產客戶，作為後續資料校正與維護依據。
+幫我看一下我的code
+# ============================================
+# Input Path（固定寫死）
+# ============================================
+$folderPath = "D:\AML_Source\20251114_新光資轉\EXE"
+# baseline file
+$baselineFile = Join-Path $folderPath "AML_CHECK_SUM.csv"
+# ============================================
+# Output / Log
+# ============================================
+$basePath = Get-Location
+$outputFile = Join-Path $basePath "result.csv"
+$logFile    = Join-Path $basePath "SKcheck.log"
+# ============================================
+# 刪除舊檔
+# ============================================
+if (Test-Path $outputFile) {
+    Remove-Item $outputFile -Force
+}
+if (Test-Path $logFile) {
+    Remove-Item $logFile -Force
+}
+# ============================================
+# Log function
+# ============================================
+function Write-Log {
+    param([string]$msg)
+    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $logFile -Value "[$time] $msg"
+}
+# ============================================
+# Start
+# ============================================
+Write-Log "===== JOB START ====="
+Write-Log "Input Path: $folderPath"
+# ============================================
+# 檢查資料夾
+# ============================================
+if (!(Test-Path $folderPath)) {
+    Write-Log "ERROR: Input folder not found"
+    Write-Host "INPUT PATH NOT FOUND"
+    exit 1
+}
+# ============================================
+# 目標檔案
+# ============================================
+$fileList = @(
+    "AML_Acct.csv",
+    "AML_CUST.csv",
+    "AML_LoadTrxn.csv",
+    "AML_NameProperty_Cust.csv",
+    "AML_NameProperty_RP.csv",
+    "AML_SPEC_lowrisklistgroups.csv",
+    "AML_SPEC_OFAC_SPEC.csv",
+    "AML_CHECK_SUM.csv"
+)
+# ============================================
+# 只掃描 EXE 根目錄
+# ============================================
+$files = Get-ChildItem -Path $folderPath -File |
+    Where-Object { $fileList -contains $_.Name } |
+    Sort-Object Name
+Write-Log "Target File Count: $($files.Count)"
+foreach ($f in $files) {
+    Write-Log "FOUND FILE: $($f.FullName)"
+}
+if ($files.Count -eq 0) {
+    Write-Log "WARN: No target files found."
+}
+# ============================================
+# 產生 result.csv
+# ============================================
+Write-Log "===== Generating checksums ====="
+$actualResults = @{}
+$resultList = [System.Collections.Generic.List[string]]::new()
+foreach ($file in $files) {
+    try {
+        Write-Log "Processing: $($file.FullName)"
+        # 計算筆數
+        $lineCount = 0
+        $reader = New-Object System.IO.StreamReader($file.FullName)
+        while ($reader.ReadLine() -ne $null) {
+            $lineCount++
+        }
+        $reader.Close()
+        $reader.Dispose()
+        # MD5
+        $md5Hash = (
+            Get-FileHash `
+                -Path $file.FullName `
+                -Algorithm MD5
+        ).Hash.ToLowerInvariant()
+        $key = $file.Name.Trim().ToLowerInvariant()
+        $value = "$lineCount;$md5Hash"
+        $actualResults[$key] = $value
+        $resultList.Add(
+            "$($file.Name);$lineCount;$md5Hash"
+        )
+    }
+    catch {
+        Write-Log "ERROR: $($file.FullName)"
+        Write-Log $_.Exception.Message
+    }
+}
+$resultList |
+Out-File `
+    -FilePath $outputFile `
+    -Encoding utf8
+Write-Log "Generated result file: $outputFile"
+# ============================================
+# 比對 Baseline
+# ============================================
+Write-Log "===== Comparing with baseline ====="
+$hasError = $false
+if (!(Test-Path $baselineFile)) {
+    Write-Log "ERROR: Baseline not found"
+    Write-Host "BASELINE NOT FOUND"
+    exit 1
+}
+$baseline = @{}
+try {
+    Import-Csv `
+        -Path $baselineFile `
+        -Delimiter ";" `
+        -Header "FileName","Count","MD5" |
+    ForEach-Object {
+        if (
+            [string]::IsNullOrWhiteSpace($_.FileName)
+        ) {
+            return
+        }
+        $key = $_.FileName.Trim().ToLowerInvariant()
+        $value =
+            "$($_.Count.Trim());$($_.MD5.Trim().ToLowerInvariant())"
+        $baseline[$key] = $value
+    }
+}
+catch {
+    Write-Log "ERROR reading baseline"
+    Write-Log $_.Exception.Message
+    Write-Host "BASELINE FILE PARSE ERROR"
+    exit 1
+}
+# ============================================
+# Actual vs Baseline
+# ============================================
+foreach ($key in $actualResults.Keys) {
+    if ($baseline.ContainsKey($key)) {
+        if ($actualResults[$key] -eq $baseline[$key]) {
+            Write-Log "MATCH: $key"
+        }
+        else {
+            Write-Log "MISMATCH: $key"
+            Write-Log "  ACTUAL  : $($actualResults[$key])"
+            Write-Log "  EXPECTED: $($baseline[$key])"
+            $hasError = $true
+        }
+    }
+    else {
+        Write-Log "MISSING IN BASELINE: $key"
+        $hasError = $true
+    }
+}
+# ============================================
+# Baseline 有但資料夾沒有
+# ============================================
+foreach ($key in $baseline.Keys) {
+    if (-not $actualResults.ContainsKey($key)) {
+        Write-Log "MISSING IN FOLDER: $key"
+        $hasError = $true
+    }
+}
+# ============================================
+# End
+# ============================================
+Write-Log "===== JOB END ====="
+if ($hasError) {
+    Write-Log "RETURN CODE: 1 (FAILED)"
+    Write-Host "FAILED"
+    exit 1
+}
+else {
+    Write-Log "RETURN CODE: 0 (SUCCESS)"
+    Write-Host "SUCCESS"
+    exit 0
+}
