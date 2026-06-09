@@ -1,14 +1,174 @@
-你的 SP1（其實是 CALL_DMZSRV.PS1）我不建議直接改邏輯，先加 Debug 輸出 就好。
 
-在這段下面：
+function Get-WorkPath {
+    $workPath = $PWD.Path
+    if ($PSScriptRoot) {
+        $workPath = $PSScriptRoot
+    }
+    return $workPath
+}
+#==================================================
+# 台新資源密碼系統 API
+# 回傳：
+#   $idPwd[0] = 帳號
+#   $idPwd[1] = 密碼
+#==================================================
+function Get-IdPwd (
+    [string]$svrIPPort,
+    [string]$appResCode
+)
+{
+    try {
+        if (-not ([System.Management.Automation.PSTypeName]'TaiShinGetPWD.Program').Type) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+namespace TaiShinGetPWD
+{
+    public class Program
+    {
+        [DllImport("PwDll64.dll")]
+        public static extern int Init(
+            string sSvrIP,
+            int nSvrPort,
+            StringBuilder sRtnMsg
+        );
+        [DllImport("PwDll64.dll")]
+        public static extern int ReqToken(
+            string sApCode,
+            string sResCode,
+            ref byte pToken,
+            ref int nTokenSize,
+            StringBuilder sRtnMsg
+        );
+        [DllImport("PwDll64.dll")]
+        public static extern int GetCredential(
+            ref byte pToken,
+            int nTokenSize,
+            StringBuilder sUID,
+            StringBuilder sPWD,
+            StringBuilder sRtnMsg
+        );
+        public static string[] getIdPwd(
+            string svrIPPort,
+            string appResCode
+        )
+        {
+            int rtn;
+            string[] idPwd = new string[2];
+            string sSvrIP = svrIPPort.Split(',')[0];
+            int nSvrPort = int.Parse(svrIPPort.Split(',')[1]);
+            StringBuilder sRtnMsg = new StringBuilder(2048);
+            rtn = Init(sSvrIP, nSvrPort, sRtnMsg);
+            if (rtn != 0)
+            {
+                Console.WriteLine("Init fail, msg:" + sRtnMsg);
+            }
+            string appcode = appResCode.Split(',')[0];
+            string rescode = appResCode.Split(',')[1];
+            StringBuilder sUID = new StringBuilder(256);
+            StringBuilder sPWD = new StringBuilder(256);
+            byte[] pToken = new byte[256];
+            int nTokenSize = 256;
+            rtn = ReqToken(
+                appcode,
+                rescode,
+                ref pToken[0],
+                ref nTokenSize,
+                sRtnMsg
+            );
+            if (rtn == 0)
+            {
+                rtn = GetCredential(
+                    ref pToken[0],
+                    nTokenSize,
+                    sUID,
+                    sPWD,
+                    sRtnMsg
+                );
+                if (rtn == 0)
+                {
+                    idPwd[0] = sUID.ToString().Trim();
+                    idPwd[1] = sPWD.ToString().Trim();
+                }
+                else
+                {
+                    Console.WriteLine(
+                        "GetCredential fail:" + sRtnMsg
+                    );
+                }
+            }
+            else
+            {
+                Console.WriteLine(
+                    "ReqToken fail:" + sRtnMsg
+                );
+            }
+            return idPwd;
+        }
+    }
+}
+'@ -ErrorAction Stop
+        }
+        else {
+            Write-Verbose -Message "Failed $($_.Exception.Message)"
+        }
+    }
+    catch {
+        Write-Warning -Message "Failed $($_.Exception.Message)"
+        exit 1
+    }
+    $idPwd = [TaiShinGetPWD.Program]::getIdPwd(
+        $svrIPPort,
+        $appResCode
+    )
+    return $idPwd
+}
+#==================================================
+# MAIN
+#==================================================
+# 用法：
+# .\script.ps1 config.json
+if ($args.Count -ne 1) {
+    Write-Host "Please provide THE CONFIG JSON FILE"
+    $dirname = Get-WorkPath
+    $scriptName = $MyInvocation.MyCommand.Name
+    Write-Host "USAGE: $dirname\$scriptName <LDAP CONF FILE>"
+    exit 0
+}
+else {
+    $ldapconf = $args[0]
+}
+#==================================================
+# 載入設定檔
+#==================================================
+$configFile = Join-Path `
+    -Path (Get-WorkPath) `
+    -ChildPath $ldapconf
+if (Test-Path $configFile -PathType Leaf) {
+    $config = Get-Content $configFile -Raw |
+              ConvertFrom-Json
+}
+else {
+    Write-Host "$configFile NOT EXIST .. Please Check"
+    exit 0
+}
+#==================================================
+# 讀取 LDAP 設定
+#==================================================
+$cmd         = $config.ldapInfo.cmd
+$remoteIP    = $config.ldapInfo.remoteIP
+$svrIPPort   = $config.ldapInfo.svrIPPort
+$appResCode  = $config.ldapInfo.appResCode
+#==================================================
+# 取得帳號密碼
+#==================================================
+' $idPwd = Get-IdPwd `
+'             -svrIPPort $svrIPPort `
+'             -appResCode $appResCode
+' $user     = $idPwd[0]
+' $password = $idPwd[1]
 
-$idPwd = Get-IdPwd `
-            -svrIPPort $svrIPPort `
-            -appResCode $appResCode
-$user     = $idPwd[0]
-$password = $idPwd[1]
-
-改成：
 
 $idPwd = Get-IdPwd `
             -svrIPPort $svrIPPort `
@@ -22,86 +182,30 @@ Write-Host "LOGIN USER: $user"
 Write-Host "CMD       : $cmd"
 Write-Host "================="
 
-Write-Host 會把訊息輸出到主控台，因此通常可以在 Control-M Output 看到。 
 
-然後在執行前再加：
 
+
+# DEBUG
+# Write-Output $user
+# Write-Output $password
+# LDAP 尚未完成時可使用
+# $user = "filescan"
+# $password = "1qaz@WSX"
+#==================================================
+# 組合 WinRS 指令
+#==================================================
 $winrs_command = "winrs -r:$remoteIP "
 $winrs_command += "-u:$user -p:$password "
 $winrs_command += "powershell $cmd"
-Write-Host "WINRS COMMAND="
-Write-Host $winrs_command
-
-⸻
-
-你跑完後，Output 應該會看到類似：
-
-===== DEBUG =====
-REMOTE IP : 10.13.60.30
-APP CODE  : AMLDBT2,FTP_0001
-LOGIN USER: XXXXX
-CMD       : powershell -ExecutionPolicy Bypass ...
-=================
-WINRS COMMAND=
-winrs -r:10.13.60.30 -u:XXXXX -p:***** powershell ...
-Winrs error: 存取被拒
-
-這樣我們就知道：
-
-情況 1
-
-如果看到：
-
-LOGIN USER:
-
-空白
-
-表示密碼系統沒取到帳號。
-
-⸻
-
-情況 2
-
-如果看到：
-
-LOGIN USER: ABCDEF
-
-那就知道真正被拒絕的是 ABCDEF。
-
-接著就可以：
-
-net user ABCDEF /domain
-
-查那個帳號。
-
-⸻
-
-另外建議加錯誤檢查
-
-你目前程式最後只有：
-
+# DEBUG
+# Write-Host $winrs_command
+#==================================================
+# 執行遠端 PowerShell
+#==================================================
 Invoke-Expression $winrs_command
 
-改成：
 
-Invoke-Expression $winrs_command
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "WINRS FAILED : $LASTEXITCODE"
-    exit 1
-}
 
-不然現在就算：
+是改這樣?
 
-Winrs error: 存取被拒
 
-Control-M 還是顯示綠燈成功。
-
-先不要急著改 WinRM 或權限了。
-
-先把上面的 Debug 加進去，重新跑一次，把新的 Output 貼給我。
-
-只要看到：
-
-LOGIN USER: XXXXX
-
-我大概就能直接找出是哪個帳號被拒絕。
