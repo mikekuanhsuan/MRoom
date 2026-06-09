@@ -1,119 +1,110 @@
-你不要直接整份重貼，因為你這支 VBA 很長。
+對，你說得對，我剛剛理解錯需求了。
 
-只要改 GenerateSqlFromRiskData() 裡面的 3 個地方即可。
+看你的圖：
 
-⸻
+需求月份	下次審查日
+202706	20270831
 
-1. 找到這段
+你要的是：
 
-If nextCheckMap.Exists(demand) Then
-    nextCheck = nextCheckMap(demand)
-Else
-    nextCheck = "YYYYMMDD_NotFound"
-End If
+SELECT CustomerNo, '20270831'
 
-改成：
+但是 ReviewDt 要抓的是：
 
-If nextCheckMap.Exists(demand) Then
-    nextCheck = nextCheckMap(demand)
-Else
-    nextCheck = "YYYYMMDD_NotFound"
-End If
-Dim reviewMonth As String
-Dim lastDay As String
-If nextCheck <> "YYYYMMDD_NotFound" Then
-    reviewMonth = Left(nextCheck, 6)
-Else
-    reviewMonth = supply
-End If
-lastDay = Format( _
-            Day(DateSerial( _
-                Left(reviewMonth, 4), _
-                CInt(Right(reviewMonth, 2)) + 1, _
-                0 _
-            )), _
-            "00")
+AND B.ReviewDt >= '20270801 00:00:00.000'
+AND B.ReviewDt <= '20270831 23:59:59.999'
+
+而不是：
+
+20270601 ~ 20270630
 
 ⸻
 
-2. 找到這兩行
+問題在哪
 
-目前是：
+你現在程式是：
 
-sqlTemplate = sqlTemplate & "    AND B.ReviewDt >= '" & supply & "01 00:00:00.000'" & vbCrLf
-sqlTemplate = sqlTemplate & "    AND B.ReviewDt <= '" & supply & Day(DateSerial(Left(supply, 4), Right(supply, 2) + 1, 0)) & " 23:59:59.999'" & vbCrLf
+reviewMonth = Left(nextCheck, 6)
+
+如果 nextCheck=20270831
+
+那 reviewMonth=202708
+
+其實是正確的。
+
+但你產出的 SQL 同時出現：
+
+AND B.ReviewDt >= '20260901'
+AND B.ReviewDt <= '20260930'
+AND B.ReviewDt <= '20270630'
+
+這代表你不是把舊程式碼換掉，
+
+而是把新程式碼加進去了。
 
 ⸻
 
-3. 改成
+你要把這兩行整個刪掉
+
+找到：
+
+sqlTemplate = sqlTemplate & _
+    "    AND B.ReviewDt >= '" & supply & _
+    "01 00:00:00.000'" & vbCrLf
+sqlTemplate = sqlTemplate & _
+    "    AND B.ReviewDt <= '" & supply & _
+    Day(DateSerial(Left(supply, 4), Right(supply, 2) + 1, 0)) & _
+    " 23:59:59.999'" & vbCrLf
+
+整段刪除。
+
+⸻
+
+改成
 
 sqlTemplate = sqlTemplate & _
     "    AND B.ReviewDt >= '" & _
-    reviewMonth & _
+    Left(nextCheck, 6) & _
     "01 00:00:00.000'" & vbCrLf
 sqlTemplate = sqlTemplate & _
     "    AND B.ReviewDt <= '" & _
-    reviewMonth & _
-    lastDay & _
+    nextCheck & _
     " 23:59:59.999'" & vbCrLf
 
 ⸻
 
-修改後效果
+這樣會得到
 
-例如：
+假設：
 
-風險資料：
-
-供給月份 = 202710
-需求月份 = 202612
-
-對照表：
-
-202612 → 20270228
+需求月份 = 202706
+下次審查日 = 20270831
 
 產出：
 
-SELECT CustomerNo, '20270228'
-
-且：
-
-AND B.ReviewDt >= '20270201 00:00:00.000'
-AND B.ReviewDt <= '20270228 23:59:59.999'
+SELECT CustomerNo, '20270831'
+AND B.ReviewDt >= '20270801 00:00:00.000'
+AND B.ReviewDt <= '20270831 23:59:59.999'
 
 ⸻
 
-但請再確認一件事
+從你第二張圖判斷，目前 VBA 裡面應該同時存在：
 
-依照你貼的 Excel：
+supply
 
-需求月份	下次審查日
-202710	20271231
+版的 ReviewDt
 
-如果你希望：
+以及
 
-SELECT CustomerNo, '20271231'
+nextCheck
 
-那代表是：
+版的 ReviewDt
 
-nextCheckMap(202710)
+所以 SQL 才會冒出兩組日期條件。
 
-也就是用 需求月份=202710 去查。
+把 GenerateSqlFromRiskData() 裡所有出現：
 
-而你前面 SQL 範例是：
+B.ReviewDt >=
+B.ReviewDt <=
 
-202710 供給 → 202612 需求
-
-這筆資料最後會查到：
-
-202612 → 20270228
-
-不是 20271231。
-
-所以從你貼出的對照表來看：
-
-✔ 程式目前用 demand 查表是正確的
-
-✔ 只需要把 ReviewDt 改成使用 reviewMonth 即可
-
-✔ 不需要改成 supply 查表。
+的地方搜尋一次，應該只保留我上面這兩行即可。這樣就會完全依照對照表的「下次審查日月份」來抓整個月。
