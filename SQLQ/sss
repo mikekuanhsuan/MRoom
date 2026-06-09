@@ -1,221 +1,149 @@
-可以，我直接對照你現在的程式告訴你改哪裡。
-
-⸻
-
-目前問題
-
-你現在有這段：
-
-Dim branchOffset As Object
-Set branchOffset = CreateObject("Scripting.Dictionary")
-
-後面又有：
-
-If branchOffset.Exists(branchLabelVariant) Then
-    startCnt = branchOffset(branchLabelVariant) + 1
-Else
-    startCnt = 1
-End If
-...
-branchOffset(branchLabelVariant) = endCnt
-
-因此 Dictionary 裡面存的是：
-
-0017 = 90
-0027 = 350
-0066 = 120
-
-所以只要看到分行 0017
-
-不管供給月份是：
-
-202706
-202707
-202708
-
-都會接著往下編號。
-
-⸻
-
-你要的規則
-
-同供給月份：
-
-202706 → 202607
-202706 → 202608
-202706 → 202609
-
-CNT 要累加：
-
-1~40
-41~70
-71~90
-
-但換供給月份：
-
-202707 → 202608
-
-要重新從：
-
-1~50
-
-開始。
-
-⸻
-
-第一步
-
-找到這段
-
-For Each branchLabelVariant In branchConditions.Keys
-    Dim allocCnt As Long
-    Dim startCnt As Long
-    Dim endCnt As Long
-    allocCnt = CLng(branchConditions(branchLabelVariant))
-    If branchOffset.Exists(branchLabelVariant) Then
-        startCnt = branchOffset(branchLabelVariant) + 1
-    Else
-        startCnt = 1
-    End If
-    endCnt = startCnt + allocCnt - 1
-    condList.Add _
-        "(BRNCH_NBR = '" & branchLabelVariant & _
-        "' AND CNT BETWEEN " & startCnt & _
-        " AND " & endCnt & ")"
-    branchOffset(branchLabelVariant) = endCnt
-Next branchLabelVariant
-
-⸻
-
-第二步
-
-在
-
-allocCnt = CLng(branchConditions(branchLabelVariant))
-
-下面新增：
-
-Dim offsetKey As String
-offsetKey = supply & "_" & branchLabelVariant
-
-變成：
-
-allocCnt = CLng(branchConditions(branchLabelVariant))
-Dim offsetKey As String
-offsetKey = supply & "_" & branchLabelVariant
-
-⸻
-
-第三步
-
-把這段：
-
-If branchOffset.Exists(branchLabelVariant) Then
-    startCnt = branchOffset(branchLabelVariant) + 1
-Else
-    startCnt = 1
-End If
-
-改成：
-
-If branchOffset.Exists(offsetKey) Then
-    startCnt = branchOffset(offsetKey) + 1
-Else
-    startCnt = 1
-End If
-
-⸻
-
-第四步
-
-把這段：
-
-branchOffset(branchLabelVariant) = endCnt
-
-改成：
-
-branchOffset(offsetKey) = endCnt
-
-⸻
-
-修改後完整區塊
-
-直接複製貼上即可：
-
-For Each branchLabelVariant In branchConditions.Keys
-    Dim allocCnt As Long
-    Dim startCnt As Long
-    Dim endCnt As Long
-    Dim offsetKey As String
-    allocCnt = CLng(branchConditions(branchLabelVariant))
-    offsetKey = supply & "_" & branchLabelVariant
-    If branchOffset.Exists(offsetKey) Then
-        startCnt = branchOffset(offsetKey) + 1
-    Else
-        startCnt = 1
-    End If
-    endCnt = startCnt + allocCnt - 1
-    condList.Add _
-        "(BRNCH_NBR = '" & branchLabelVariant & _
-        "' AND CNT BETWEEN " & startCnt & _
-        " AND " & endCnt & ")"
-    branchOffset(offsetKey) = endCnt
-Next branchLabelVariant
-
-⸻
-
-修改前
-
-Dictionary：
-
-0017 = 90
-
-所以：
-
-202706 → 1~40
-202706 → 41~70
-202706 → 71~90
-202707 → 91~140
-
-錯誤 ❌
-
-⸻
-
-修改後
-
-Dictionary：
-
-202706_0017 = 90
-202707_0017 = 50
-
-所以：
-
-202706 → 1~40
-202706 → 41~70
-202706 → 71~90
-202707 → 1~50
-
-正確 ✅
-
-⸻
-
-另外我還看到一個潛在問題：
-
-你目前排序是
-
-sortedKeys(i) > sortedKeys(j)
-
-字串排序。
-
-如果 Excel 有：
-
-202706_202607
-202706_202608
-202706_202609
-202707_202608
-
-沒問題。
-
-但如果未來格式改掉或月份不是固定 6 碼，有機會排序錯亂。
-
-如果你把「中風險」工作表前 10 筆資料貼給我（A欄到D欄），我可以順便幫你確認目前排序是否完全符合你的業務規則。
+function Get-WorkPath {
+    $workPath = $PWD.Path
+    if ($PSScriptRoot) { 
+        $workPath = $PSScriptRoot 
+    }
+    return $workPath
+}
+#台新資源密碼系統API 取得帳號/密碼，分別放在陣列 $idPwd[0]：帳號，$idPWd[1]：密碼
+function Get-IdPwd
+(
+[string]$svrIPPort,
+[string]$appResCode
+)
+{
+    try
+    {
+        if(-not ([System.Management.Automation.PSTypeName]'TaiShinGetPWD.Program').Type) 
+        {
+            Add-Type -TypeDefinition @'
+            using System;
+            using System.Text;
+            using System.Runtime.InteropServices;
+
+            namespace TaiShinGetPWD
+            {
+                public class Program
+                {
+                    [DllImport("PwDll64.dll")]
+                    public static extern int Init(string sSvrIP, int nSvrPort, StringBuilder sRtnMsg);
+                    [DllImport("PwDll64.dll")]
+                    public static extern int ReqToken(string sApCode, string sResCode, ref byte pToken, ref int nTokenSize, StringBuilder sRtnMsg);
+                    [DllImport("PwDll64.dll")]
+                    public static extern int GetCredential(ref byte pToken, int nTokenSize, StringBuilder sUID, StringBuilder sPWD, StringBuilder sRtnMsg);
+
+                    public static string[] getIdPwd(string svrIPPort, string appResCode)
+                    {
+                        int rtn;
+                        string[] idPwd=new string[2];
+                        string sSvrIP = svrIPPort.Split(',')[0];//"APSC2";
+                        int nSvrPort=int.Parse(svrIPPort.Split(',')[1]);//9999;
+                        StringBuilder sRtnMsg = new StringBuilder(2048);
+                        rtn=Init(sSvrIP, nSvrPort, sRtnMsg);
+                        if(rtn != 0){ Console.WriteLine("Init fail, msg:" + sRtnMsg);}
+
+                        string appcode=appResCode.Split(',')[0]; //"BIRPTT01";
+                        string rescode=appResCode.Split(',')[1];//"FTP_0002";  //FTP_0001
+
+                        StringBuilder sUID=new StringBuilder(256);
+                        StringBuilder sPWD=new StringBuilder(256);
+
+                        byte[] pToken=new byte[256];
+                        int nTokenSize = 256;
+                        rtn=ReqToken(appcode,rescode,ref pToken[0], ref nTokenSize, sRtnMsg);
+                        if(rtn==0)
+                        {
+                            /*
+                            Console.WriteLine("rtn=0, msg:reqToken SUCCESS");
+                            Console.WriteLine("pToken = " + pToken);
+                            Console.WriteLine("nTokenSize = " + nTokenSize);
+                            */
+
+                            rtn=GetCredential(ref pToken[0], nTokenSize, sUID, sPWD, sRtnMsg);
+                            if(rtn==0)
+                            {
+                                /*
+                                Console.WriteLine("sUID=" + sUID);
+                                Console.WriteLine("sPWD=" + sPWD);
+                                Console.WriteLine("sRrnMsg = " + sRtnMsg);
+                                */
+                                idPwd[0] = sUID.ToString().Trim();
+                                idPwd[1] = sPWD.ToString().Trim();
+                            }
+                            else
+                            {
+                                Console.WriteLine("GetCredential fail:" + sRtnMsg);
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("ReqToken fail:" + sRtnMsg);
+                        }
+                        return idPwd;
+                    }
+                }
+            }
+'@ -ErrorAction Stop
+        }
+        else
+        {
+            Write-Verbose -Message "Failed $($_.Exception.Message)"
+        }
+    }
+    catch
+    {
+        Write-Warning -Message "Failed $($_.Exception.Message)"
+		exit 1
+    }
+
+    $idPWD=[TaiShinGetPWD.Program]::getIdPwd($svrIPPort,$appResCode)
+    return $idPWD
+}
+##################################################
+# MAIN
+##################################################
+##$args="NBINST01.json"
+if ($args.Count -ne 1) {
+    Write-Host "Please provide THE CONFIG JSON FILE"
+    $dirname = Get-WorkPath
+    $scriptName = $MyInvocation.MyCommand.Name
+    Write-Host "USAGE: $dirname\$scriptName <LDAP CONF FILE>"
+  exit 0
+} else {
+  $ldapconf = $args[0]
+  ## DEBUG USE
+  ##Write-Host "Ldap config file: $ldapconf"
+}
+
+$configFile = Join-Path -Path (Get-WorkPath) -ChildPath "$ldapconf"
+if(Test-path $configFile -PathType leaf){
+   $config = Get-Content $configFile -Raw | ConvertFrom-Json
+} else {
+   write-host $configFile " NOT EXIST .. Please Check"
+   exit 0
+}
+
+$cmd = $config.ldapInfo.cmd
+$remoteIP = $config.ldapInfo.remoteIP
+$svrIPPort = $config.ldapInfo.svrIPPort
+$appResCode = $config.ldapInfo.appResCode
+$idPwd = Get-IdPwd -svrIPPort $svrIPPort -appResCode $appResCode
+$user=$idPwd[0]
+$password=$idPwd[1]
+## DEBUG USAGE
+# write-output $user
+# write-output $password
+## 等LDAP 設定完成, 就可以不需要下列 hard-coding password
+#$user="filescan"
+#$password="1qaz@WSX"
+$winrs_command="winrs -r:$remoteIP "
+$winrs_command=$winrs_command + "-u:$user -p:$password "
+$winrs_command=$winrs_command + "powershell $cmd"
+# write-host $winrs_command
+# 執行指令隱藏密碼資訊
+Invoke-Expression $winrs_command
+
+
+幫我看一下這在幹嘛
+
+因為我要照他的範例做一個自己的
