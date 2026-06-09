@@ -1,201 +1,34 @@
-建議你直接改成下面這版，重點修正：
+你貼的內容可以拆成兩層來看：
 
-✅ 移除 -Recurse，只掃 EXE 根目錄
-✅ 修正 AML_CHECK_SUM.csv.csv → AML_CHECK_SUM.csv
-✅ Log 顯示完整路徑，方便除錯
-✅ 增加重複檔案檢查
+資料查詢單在做什麼
+這張資料查詢單是為了從洗錢防制系統撈出「本月有調整到私銀高資產註記」的客戶資料。
+內容說明已經寫得很明白：
+「配合提案單…修正私銀高資產客戶於 AML 系統之客戶群體、分行，擬每月撈取有進行相關調整之客戶資料」
+也就是說，他們先從來源系統或 SFA 端抓出「這個月有異動的人」，再去確認 AML 系統裡的客戶群組、分行等欄位有沒有同步正確。
+為什麼每個月都要出一次 核心原因是： 「私銀高資產客戶的名單／註記會持續變動，但 AML 端未必會自動、完整同步，所以需要定期抓異動名單來補確認與調整。」
+你現在看到的三筆就是：
 
-# ============================================
-# Input Path（固定寫死）
-# ============================================
-$folderPath = "D:\AML_Source\20251114_新光資轉\EXE"
-# baseline file
-$baselineFile = Join-Path $folderPath "AML_CHECK_SUM.csv"
-# ============================================
-# Output / Log
-# ============================================
-$basePath = Get-Location
-$outputFile = Join-Path $basePath "result.csv"
-$logFile    = Join-Path $basePath "SKcheck.log"
-# ============================================
-# 刪除舊檔
-# ============================================
-if (Test-Path $outputFile) {
-    Remove-Item $outputFile -Force
-}
-if (Test-Path $logFile) {
-    Remove-Item $logFile -Force
-}
-# ============================================
-# Log function
-# ============================================
-function Write-Log {
-    param([string]$msg)
-    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path $logFile -Value "[$time] $msg"
-}
-# ============================================
-# Start
-# ============================================
-Write-Log "===== JOB START ====="
-Write-Log "Input Path: $folderPath"
-# ============================================
-# 檢查資料夾
-# ============================================
-if (!(Test-Path $folderPath)) {
-    Write-Log "ERROR: Input folder not found"
-    Write-Host "INPUT PATH NOT FOUND"
-    exit 1
-}
-# ============================================
-# 目標檔案
-# ============================================
-$fileList = @(
-    "AML_Acct.csv",
-    "AML_CUST.csv",
-    "AML_LoadTrxn.csv",
-    "AML_NameProperty_Cust.csv",
-    "AML_NameProperty_RP.csv",
-    "AML_SPEC_lowrisklistgroups.csv",
-    "AML_SPEC_OFAC_SPEC.csv",
-    "AML_CHECK_SUM.csv"
-)
-# ============================================
-# 只掃描 EXE 根目錄
-# ============================================
-$files = Get-ChildItem -Path $folderPath -File |
-    Where-Object { $fileList -contains $_.Name } |
-    Sort-Object Name
-Write-Log "Target File Count: $($files.Count)"
-foreach ($f in $files) {
-    Write-Log "FOUND FILE: $($f.FullName)"
-}
-if ($files.Count -eq 0) {
-    Write-Log "WARN: No target files found."
-}
-# ============================================
-# 產生 result.csv
-# ============================================
-Write-Log "===== Generating checksums ====="
-$actualResults = @{}
-$resultList = [System.Collections.Generic.List[string]]::new()
-foreach ($file in $files) {
-    try {
-        Write-Log "Processing: $($file.FullName)"
-        # 計算筆數
-        $lineCount = 0
-        $reader = New-Object System.IO.StreamReader($file.FullName)
-        while ($reader.ReadLine() -ne $null) {
-            $lineCount++
-        }
-        $reader.Close()
-        $reader.Dispose()
-        # MD5
-        $md5Hash = (
-            Get-FileHash `
-                -Path $file.FullName `
-                -Algorithm MD5
-        ).Hash.ToLowerInvariant()
-        $key = $file.Name.Trim().ToLowerInvariant()
-        $value = "$lineCount;$md5Hash"
-        $actualResults[$key] = $value
-        $resultList.Add(
-            "$($file.Name);$lineCount;$md5Hash"
-        )
-    }
-    catch {
-        Write-Log "ERROR: $($file.FullName)"
-        Write-Log $_.Exception.Message
-    }
-}
-$resultList |
-Out-File `
-    -FilePath $outputFile `
-    -Encoding utf8
-Write-Log "Generated result file: $outputFile"
-# ============================================
-# 比對 Baseline
-# ============================================
-Write-Log "===== Comparing with baseline ====="
-$hasError = $false
-if (!(Test-Path $baselineFile)) {
-    Write-Log "ERROR: Baseline not found"
-    Write-Host "BASELINE NOT FOUND"
-    exit 1
-}
-$baseline = @{}
-try {
-    Import-Csv `
-        -Path $baselineFile `
-        -Delimiter ";" `
-        -Header "FileName","Count","MD5" |
-    ForEach-Object {
-        if (
-            [string]::IsNullOrWhiteSpace($_.FileName)
-        ) {
-            return
-        }
-        $key = $_.FileName.Trim().ToLowerInvariant()
-        $value =
-            "$($_.Count.Trim());$($_.MD5.Trim().ToLowerInvariant())"
-        $baseline[$key] = $value
-    }
-}
-catch {
-    Write-Log "ERROR reading baseline"
-    Write-Log $_.Exception.Message
-    Write-Host "BASELINE FILE PARSE ERROR"
-    exit 1
-}
-# ============================================
-# Actual vs Baseline
-# ============================================
-foreach ($key in $actualResults.Keys) {
-    if ($baseline.ContainsKey($key)) {
-        if ($actualResults[$key] -eq $baseline[$key]) {
-            Write-Log "MATCH: $key"
-        }
-        else {
-            Write-Log "MISMATCH: $key"
-            Write-Log "  ACTUAL  : $($actualResults[$key])"
-            Write-Log "  EXPECTED: $($baseline[$key])"
-            $hasError = $true
-        }
-    }
-    else {
-        Write-Log "MISSING IN BASELINE: $key"
-        $hasError = $true
-    }
-}
-# ============================================
-# Baseline 有但資料夾沒有
-# ============================================
-foreach ($key in $baseline.Keys) {
-    if (-not $actualResults.ContainsKey($key)) {
-        Write-Log "MISSING IN FOLDER: $key"
-        $hasError = $true
-    }
-}
-# ============================================
-# End
-# ============================================
-Write-Log "===== JOB END ====="
-if ($hasError) {
-    Write-Log "RETURN CODE: 1 (FAILED)"
-    Write-Host "FAILED"
-    exit 1
-}
-else {
-    Write-Log "RETURN CODE: 0 (SUCCESS)"
-    Write-Host "SUCCESS"
-    exit 0
-}
+在這個月的比對結果中，
+這些 ID 應該已屬於高資產對象，
+但 AML 系統的客戶群組還不是高資產，
+所以才會請後續協助確認與變更。
+這種每月作業通常有幾個實務目的：
 
-另外如果你其實是想掃子目錄，但排除：
+確保 AML 客戶分群正確
+AML 很依賴客戶屬性、分群、風險分類做後續監控與審查；若高資產客戶沒有正確歸在對應群組，可能影響監控規則或審查流程。
 
-Backup
-checksum
-Logs
-AMLDataMigrator_20260605
+因應 KYC / CDD 持續更新
+AML 本來就不是一次建檔後永遠不動，而是要持續維護客戶身分、屬性與風險資料，客戶資料異動後要反映到 AML 流程中。
 
-我可以再幫你改成「保留 Recurse，但自動忽略這些資料夾」的版本。從你的 log 看起來，問題八成就是這些資料夾裡有舊的 AML_Cust.csv、AML_NameProperty_Cust.csv 被一起算進去了。
+避免系統間資料落差
+這封信已經點出來源是「SFA 註記私銀高資產客戶」，表示高資產身分可能先在前端業務／CRM 類系統更新，但 AML 端需要另外校正，所以才用每月撈檔方式做控管。
+
+簡單講一句話： 這不是「單純提供資料給他們」，而是「為了把 AML 裡面的高資產客戶標籤維持正確，每月定期抓異動名單做補正」。
+
+你可以這樣理解整個流程：
+
+SFA 或相關來源系統有高資產客戶異動
+每月撈出異動名單
+比對 AML 客戶群組／分行資料
+找出未同步成功或仍有落差的客戶
+請相關人員確認並變更
