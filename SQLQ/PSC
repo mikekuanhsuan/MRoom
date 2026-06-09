@@ -1,86 +1,10 @@
-對，大致上是這樣。
+Write-Host "USER = $user"
 
-不過你前面這幾行：
-
-' $idPwd = Get-IdPwd `
-'             -svrIPPort $svrIPPort `
-'             -appResCode $appResCode
-' $user     = $idPwd[0]
-' $password = $idPwd[1]
-
-PowerShell 的註解不是用 '。
-
-建議直接刪掉，或改成：
-
-# $idPwd = Get-IdPwd `
-#             -svrIPPort $svrIPPort `
-#             -appResCode $appResCode
-# $user     = $idPwd[0]
-# $password = $idPwd[1]
-
-⸻
-
-另外我建議再多加兩段。
-
-1. 印出 WinRS Command（不要印密碼）
-
-在這裡：
-
-$winrs_command = "winrs -r:$remoteIP "
-$winrs_command += "-u:$user -p:$password "
-$winrs_command += "powershell $cmd"
-
-下面加：
-
-Write-Host "WINRS USER : $user"
-Write-Host "WINRS HOST : $remoteIP"
-
-不要把 $password 印出來。
-
-⸻
-
-2. 檢查 WinRS Return Code
-
-把最後：
-
-Invoke-Expression $winrs_command
-
-改成：
-
-Invoke-Expression $winrs_command
-Write-Host "LASTEXITCODE = $LASTEXITCODE"
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "WINRS FAILED"
-    exit 1
+if ([string]::IsNullOrEmpty($password))
+{
+    Write-Host "PASSWORD IS EMPTY"
 }
-
-這樣如果真的失敗：
-
-Winrs error: 存取被拒
-LASTEXITCODE = x
-WINRS FAILED
-
-Control-M 就不會誤判成綠燈成功。
-
-⸻
-
-我現在最想看的其實是跑完後的 Output。
-
-理想狀況你會看到類似：
-
-===== DEBUG =====
-REMOTE IP : 10.13.60.30
-APP CODE  : AMLDBT2,FTP_0001
-LOGIN USER: abcxyz
-CMD       : powershell -ExecutionPolicy Bypass ...
-=================
-Winrs error: 存取被拒
-LASTEXITCODE = 5
-
-那我們就能直接知道：
-
-* 密碼系統取回的帳號是誰
-* 是不是那個帳號權限有問題
-* WinRS 回傳什麼錯誤碼
-
-先跑一次，把新的 Output 貼給我。這次應該就能把真正的帳號抓出來了。
+else
+{
+    Write-Host "PASSWORD LENGTH = $($password.Length)"
+}
