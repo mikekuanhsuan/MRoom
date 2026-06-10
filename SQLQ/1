@@ -1,119 +1,64 @@
-你這個問題其實已經從畫面看出來了。👍
+最終檢核總表（建議正式環境至少應存在）
+請確認以下 10 張表 已建立：
+dbo.Customer_Migrate_buffer
+dbo.Acct_Migrate_buffer
+dbo.LoadTrxn_Migrate_buffer
+dbo.Cust_NP_Migrate_buffer
+dbo.RP_NP_Migrate_buffer
+dbo.lowrisklistgroups_Migrate_buffer
+dbo.OFAC_SPEC_Migrate_buffer
+dbo.Migrator_LOG
+dbo.BANCS_SK_CUST_INFO
+dbo.XREF
 
-你現在 Control-M 裡面寫的是：
+一、必須「預先建立」的資料表（請務必確認存在）
+（A）資料遷移 Buffer Tables
+dbo.Customer_Migrate_buffer
+dbo.Acct_Migrate_buffer
+dbo.LoadTrxn_Migrate_buffer
+dbo.Cust_NP_Migrate_buffer
+dbo.RP_NP_Migrate_buffer
+dbo.lowrisklistgroups_Migrate_buffer
+dbo.OFAC_SPEC_Migrate_buffer
+用途：存放各模組待遷移資料（CIF / ACCT / TRXN / SPEC 等）
 
-powershell
-D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1
+（B）Log Table
+dbo.Migrator_LOG
+用途：記錄 DataMigrator_Integrate 執行成功或失敗紀錄
+此表必須存在，否則程序可能無法正確記錄執行結果。
 
-但你在 CMD 測試時執行：
+（C）Mapping 對應資料表（因設定檔啟用 Mapping = 'Y'）
+    
+    dbo.BANCS_SK_CUST_INFO
+    CIF 對應使用
+    SK_CUST_ID → TS_CUST_ID
+    CUST_RE_NO_FLG
 
-powershell D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1
+    dbo.XREF
+    帳號對應使用
+    EXTN_REF_NO → INTN_REF_NO
+    未對應帳號加前綴 SK_
+ 
 
-得到錯誤：
+二、不需要預先建立（預存程序會自動處理）
+以下資料表可「不必手動建立」：
+dbo.Customer_Migrate_Exception_Table
+執行 CIF 時會：
+若存在 → 先 DROP
+再 SELECT INTO 重建
+屬於每次執行動態產生
+dbo.CIF_Migrate_Mapping_TEMP
+dbo.lowrisklistgroups_Migrate_Mapping_TEMP
+程序會自行判斷不存在時建立
 
-CommandNotFoundException
-無法辨識 D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1
+三、補充提醒（實務風險控管建議）
+確認正式環境 Schema 是否皆為 dbo
+確認權限（INSERT / UPDATE / DELETE / SELECT）
+確認正式業務目標表存在，例如：
+BSA_SUB_CUST_FACT
+ACCT_XREF_DIM
+其他核心事實表
 
-代表 PowerShell 把它當成「指令名稱」而不是「腳本檔案」。
 
-⸻
 
-正確寫法
-
-Control-M Command 應該改成：
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1"
-
-或
-
-powershell.exe -ExecutionPolicy Bypass -File "D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1"
-
-⸻
-
-先確認檔案真的存在
-
-請到 CMD 執行：
-
-dir D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1
-
-如果出現：
-
-File Not Found
-
-那就是路徑錯了。
-
-如果出現：
-
-06/10/2026  08:00 AM    1,234 CALL_DMZSRV.PS1
-
-代表檔案存在。
-
-⸻
-
-再確認腳本能不能單獨跑
-
-CMD：
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1"
-
-如果這裡成功：
-
-SUCCESS
-
-或產生 log
-
-那 Control-M 就照抄這行即可。
-
-⸻
-
-我比較擔心的是另一個問題
-
-你的畫面看到：
-
-check_sk_csv_csv.ps1
-FAILED
-
-但沒有任何錯誤訊息。
-
-這通常表示：
-
-* ps1 有執行
-* 但裡面 return FAILED
-
-例如：
-
-if ($result -ne $expected) {
-    Write-Host "FAILED"
-    exit 1
-}
-
-所以目前可能有兩層問題：
-
-第一層
-
-Control-M Command 寫錯
-
-第二層
-
-checksum 檢查本身失敗
-
-⸻
-
-請幫我看一下
-
-把
-
-CALL_DMZSRV.PS1
-
-內容貼上來
-
-尤其是前面 30 行跟最後 30 行。
-
-我可以直接幫你確認：
-
-1. Control-M command 怎麼寫
-2. 要不要加 Working Directory
-3. 為什麼顯示 FAILED
-4. Exit Code 會回傳多少給 Control-M
-
-通常看完這支 ps1，5 分鐘內就能定位問題。
+幫我整理做成PDF
