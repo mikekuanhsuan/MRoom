@@ -1,66 +1,82 @@
--- CIF_KEY	IsSARFiled	PEPBitwiseCode	ReviewDt	HIGHRISK	RiskScore	Warn_Restrict_Account	SDST2400001	IsComplexStructure	IsBearerShares
+如果你是要留存成 SIT/UAT 測試證據文件，建議整理成「測試項目 + 驗證SQL + 預期結果」格式。
 
--- SELECT count(*) FROM Cust_NP_Migrate_buffer
--- SELECT * FROM BANCS_SK_CUST_INFO
+⸻
 
--- TC02：驗證符合轉入條件之來源資料筆數與目標系統匯入筆數一致
--- 新光來源資料總計 6153703 筆，實際寫入資料庫之總筆數為 6153703筆
+4. 客戶因子註記資料轉換規則驗證
 
+TC02 驗證符合轉入條件之來源資料筆數與目標系統匯入筆數一致
 
-SELECT count(*) FROM Cust_NP_Migrate_buffer
+測試目的
 
+確認符合轉入條件之新光客戶資料皆成功轉入 AML 系統。
 
--- TC03：多個 SK_CUST_ID 對應同一 TS_CUST_ID 之合併驗證
--- 案例說明：當多個 SK_CUST_ID 對應同一 TS_CUST_ID 時，驗證新光資料先進行合併，再與台新資料取其嚴
--- 前置條件/測試資料：
--- SK1 → TS1
--- SK2 → TS1
--- SK3 → TS1
--- 同一 TS_CUST_ID 對應之新光資料先合併後再轉入
+驗證SQL
+
+SELECT COUNT(*)
+FROM Cust_NP_Migrate_buffer
+
+預期結果
+
+來源資料總筆數與實際匯入資料筆數一致。
+
+⸻
+
+TC03 多個 SK_CUST_ID 對應同一 TS_CUST_ID 之合併驗證
+
+測試目的
+
+確認多個 SK_CUST_ID 對應同一 TS_CUST_ID 時：
+
+1. 新光資料先合併
+2. 再與台新資料依取其嚴規則合併
+
+驗證SQL
+
+找出多個 SK 對應同一 TS：
 
 SELECT TS_CUST_ID, COUNT(*) AS CNT
 FROM BANCS_SK_CUST_INFO
 GROUP BY TS_CUST_ID
 HAVING COUNT(*) > 2;
 
+查看案例：
 
-SELECT * FROM BANCS_SK_CUST_INFO WHERE TS_CUST_ID =   'B1767155210'
+SELECT *
+FROM BANCS_SK_CUST_INFO
+WHERE TS_CUST_ID = 'B1767155210';
 
-SELECT CustomerNo,* FROM Customer_Migrate_buffer WHERE CustomerNo 
-in
-('B176715521',
-'B176715521C',
-'B176715521D',
-'B176715521E')
+查看 Mapping：
 
-SELECT * FROM  CIF_Migrate_Mapping_TEMP WHERE SOURCE_CIF_KEY in
+SELECT *
+FROM CIF_Migrate_Mapping_TEMP
+WHERE SOURCE_CIF_KEY IN
 (
 '40530a9e-7216-e911-810f-005056a0528a',
 'daf15c97-e01f-e911-810f-005056a0528a',
 'a3b15efb-239c-ea11-811a-005056a0528a',
 '053e7562-85d0-ed11-a946-00505686dbae'
-)
+);
 
-SELECT CustomerNo,* FROM  BSA_SUB_CUST_FACT WHERE CIF_KEY = 'CBFFCF06-3C5B-4154-9095-C6172A3B0C21'
+預期結果
 
+同一 TS_CUST_ID 對應之所有 SK_CUST_ID 先完成客戶因子合併後再轉入。
 
--- TC04：驗證多個 SK_CUST_ID 合併後，再與台新既有資料依取其嚴規則合併
--- 最終客戶因子資料符合取其嚴規則
+⸻
 
--- SAR註記
--- 純台新，有或沒有SAR註記，記繼續用原本台新的註記 
+TC04 SAR註記驗證
 
--- 純台新
--- SELECT a.customerno
--- FROM BSA_SUB_CUST_FACT a
--- WHERE NOT EXISTS (
---     SELECT 1
---     FROM BANCS_SK_CUST_INFO b
---     WHERE b.TS_CUST_ID = a.customerno
--- );
+⸻
 
+情境1：純台新客戶
 
---  (檢查 VERIFY..BSA_SUB_CUST_FACT 的IsSARFiled 跟 BANCS_SK_CUST_INFO 的 IsSARFiled )
+規則
+
+保留原台新 SAR 註記。
+
+驗證SQL
+
+建立純台新客戶清單：
+
 SELECT a.customerno,
        a.IsSARFiled
 INTO #Temp_SAR_Cust
@@ -71,194 +87,107 @@ WHERE NOT EXISTS (
     WHERE b.TS_CUST_ID = a.customerno
 );
 
+比較轉換前後：
+
 SELECT a.customerno,
        a.IsSARFiled
 FROM #Temp_SAR_Cust a
-JOIN VERIFY..BSA_SUB_CUST_FACT b ON a.customerno = b.customerno
-WHERE a.IsSARFiled <> b.IsSARFiled
+JOIN VERIFY..BSA_SUB_CUST_FACT b
+    ON a.customerno = b.customerno
+WHERE a.IsSARFiled <> b.IsSARFiled;
 
+預期結果
 
+查無資料。
 
--- 純新光，若有SAR註記，則將純新光的SAR註記繼續用 
--- 純新光，若沒有SAR註記，則將純新光的SAR註記繼續用
---  (檢查 BSA_SUB_CUST_FACT 的IsSARFiled 跟 Cust_NP_Migrate_buffer 的 IsSARFiled 相同的數量是否一致)
+⸻
 
+情境2：純新光客戶
 
-------- 純新光
-SELECT  a.IsSARFiled , a.CIF_KEY , a.CustomerNo
+規則
+
+SAR註記直接沿用新光資料。
+
+驗證SQL
+
+SAR=1：
+
+SELECT a.IsSARFiled ,
+       a.CIF_KEY ,
+       a.CustomerNo
 FROM BSA_SUB_CUST_FACT a
-JOIN BANCS_SK_CUST_INFO b ON b.TS_CUST_ID = a.customerno
-WHERE b.CUST_RE_NO_FLG IN ('2','3') AND a.IsSARFiled = '1'
+JOIN BANCS_SK_CUST_INFO b
+ON b.TS_CUST_ID = a.customerno
+WHERE b.CUST_RE_NO_FLG IN ('2','3')
+AND a.IsSARFiled='1';
 
+對應來源：
 
-SELECT  a.IsSARFiled , b.NEW_CIF_KEY , b.SOURCE_CIF_KEY
+SELECT a.IsSARFiled ,
+       b.NEW_CIF_KEY ,
+       b.SOURCE_CIF_KEY
 FROM Cust_NP_Migrate_buffer a
-JOIN CIF_Migrate_Mapping_TEMP b on a.CIF_KEY = b.SOURCE_CIF_KEY
-WHERE b.NEW_CIF_KEY in
-(
-'1C88C2BD-E1BD-4E08-A649-BEF2F3E2D9C7',
-'8FAD3B66-E70E-43BA-B720-F33B8307FE9B',
-'FC5D7214-7295-4BDB-857D-2CB122AA6E6F'
-) 
+JOIN CIF_Migrate_Mapping_TEMP b
+ON a.CIF_KEY = b.SOURCE_CIF_KEY;
 
-SELECT  a.IsSARFiled , a.CIF_KEY , a.CustomerNo
-FROM BSA_SUB_CUST_FACT a
-JOIN BANCS_SK_CUST_INFO b ON b.TS_CUST_ID = a.customerno
-WHERE b.CUST_RE_NO_FLG IN ('2','3') AND a.IsSARFiled = '0'
+預期結果
 
-SELECT  a.IsSARFiled , b.NEW_CIF_KEY , b.SOURCE_CIF_KEY
-FROM Cust_NP_Migrate_buffer a
-JOIN CIF_Migrate_Mapping_TEMP b on a.CIF_KEY = b.SOURCE_CIF_KEY
-WHERE b.NEW_CIF_KEY in
-(
-'0268CB4F-FD99-4B4C-9F12-002CF8B81897',
-'585F07EF-31BD-4155-B2B2-002D1FF38E55',
-'390E1D1E-BB89-4C51-B7DE-002D2A4DC571'
-) 
+轉換後 SAR 與來源一致。
 
-SELECT  a.IsSARFiled , a.CIF_KEY , a.CustomerNo
-FROM BSA_SUB_CUST_FACT a
-JOIN BANCS_SK_CUST_INFO b ON b.TS_CUST_ID = a.customerno
-WHERE b.CUST_RE_NO_FLG IN ('2','3') AND a.IsSARFiled is NULL
+⸻
 
-SELECT  a.IsSARFiled , b.NEW_CIF_KEY , b.SOURCE_CIF_KEY
-FROM Cust_NP_Migrate_buffer a
-JOIN CIF_Migrate_Mapping_TEMP b on a.CIF_KEY = b.SOURCE_CIF_KEY
-WHERE b.NEW_CIF_KEY in
-(
-'F77087FB-1371-46CC-9C9B-CF67DDEDB0EE',
-'D29C6B10-8187-4B39-8BB5-7B682943087B',
-'ADD34A5C-3C4B-426C-A787-B8FD2F2D632C'
-) 
+情境3：共有戶
 
+規則
 
+台新有 SAR：
 
--- 2.針對台新的共有戶，若有SAR註記，則將台新的SAR註記蓋過
--- 3.針對台新的共有戶，若沒有SAR註記，則繼續使用新光的SAR註記
+以台新SAR為準
 
--- 2.針對台新的共有戶，若有SAR註記，則將台新的SAR註記蓋過
+驗證SQL
 
- SELECT 
-     a.IsSARFiled,
-     a.CIF_KEY,
-     a.CustomerNo
- FROM VERIFY..BSA_SUB_CUST_FACT a
- WHERE ISNULL(a.IsSARFiled,'0')='1'
- AND EXISTS (
-         SELECT 1
-         FROM BANCS_SK_CUST_INFO b
-         WHERE b.TS_CUST_ID = a.CustomerNo
-           AND b.CUST_RE_NO_FLG = '1'
- )
- AND NOT EXISTS (
-         SELECT 1
-         FROM BANCS_SK_CUST_INFO b
-         WHERE b.TS_CUST_ID = a.CustomerNo
-           AND b.CUST_RE_NO_FLG IN ('2','3')
+SELECT
+    a.IsSARFiled,
+    a.CIF_KEY,
+    a.CustomerNo
+FROM VERIFY..BSA_SUB_CUST_FACT a
+WHERE ISNULL(a.IsSARFiled,'0')='1'
+AND EXISTS (
+    SELECT 1
+    FROM BANCS_SK_CUST_INFO b
+    WHERE b.TS_CUST_ID = a.CustomerNo
+      AND b.CUST_RE_NO_FLG='1'
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM BANCS_SK_CUST_INFO b
+    WHERE b.TS_CUST_ID = a.CustomerNo
+      AND b.CUST_RE_NO_FLG IN ('2','3')
 );
 
+預期結果
 
- SELECT 
-     a.IsSARFiled,
-     a.CIF_KEY,
-     a.CustomerNo
- FROM VERIFY..BSA_SUB_CUST_FACT a
- WHERE a.CustomerNo in 
- (
-'90250703',                                         
-'42230911',                                         
-'90238194'                                           
- )
---  IsSARFiled	CIF_KEY	CustomerNo
--- 1	338864ED-85D6-EC11-B8E5-F8F21EB70D41	90238194                                          
--- 1	90B3A9B9-4FF8-EC11-B8E6-F8F21EB70D41	90250703                                          
--- 1	CE7C1E54-D4A0-EA11-8D96-0050568C9D95	42230911                                          
+轉換後 SAR 仍為 1。
 
+⸻
 
--- 3.針對台新的共有戶，若沒有SAR註記，則繼續使用新光的SAR註記
+TC05 客戶 Name Property 驗證
 
+(制裁名單、PEP、負面新聞)
 
+規則
 
- SELECT 
-     a.IsSARFiled,
-	 b.IsSARFiled,
-     a.CIF_KEY,
-     a.CustomerNo
- FROM VERIFY..BSA_SUB_CUST_FACT a
- JOIN BSA_SUB_CUST_FACT b ON a.CustomerNo = b.CustomerNo
- WHERE ISNULL(a.IsSARFiled,'0')='0'
- AND EXISTS (
-         SELECT 1
-         FROM BANCS_SK_CUST_INFO b
-         WHERE b.TS_CUST_ID = a.CustomerNo
-           AND b.CUST_RE_NO_FLG = '1'
- )
- AND NOT EXISTS (
-         SELECT 1
-         FROM BANCS_SK_CUST_INFO b
-         WHERE b.TS_CUST_ID = a.CustomerNo
-           AND b.CUST_RE_NO_FLG IN ('2','3')
-)
-AND  a.IsSARFiled <> b.IsSARFiled
-;
+共有戶需進行聯集(OR)合併。
 
+⸻
 
--- IsSARFiled	IsSARFiled	CIF_KEY	CustomerNo
--- 0	1	ED39F5B0-65AD-E511-80C0-0050568C5B10	22917147                                          
--- 0	1	2359FFB0-65AD-E511-80C0-0050568C5B10	27532389                                          
--- 0	1	64550EB1-65AD-E511-80C0-0050568C5B10	70805228                                          
--- 0	1	696913B1-65AD-E511-80C0-0050568C5B10	84827743                                          
--- 0	1	4B22CFB1-65AD-E511-80C0-0050568C5B10	A1697218030                                       
--- 0	1	1A050C56-A49A-E611-80C1-0050568C5B10	23837608                                          
+驗證SQL
 
+解析 PEPBitwiseCode：
 
- SELECT S4.IsSARFiled, S2.*
- FROM  (SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG = '1'
-        EXCEPT
-        SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG IN ('2', '3')
-        ) S1
- JOIN  BANCS_SK_CUST_INFO S2      ON S1.TS_CUST_ID=S2.TS_CUST_ID
- JOIN  Customer_Migrate_buffer S3 ON S2.SK_CUST_ID=S3.CustomerNo
- JOIN  Cust_NP_Migrate_buffer  S4 ON S3.CIF_KEY=S4.CIF_KEY
- WHERE  S2.TS_CUST_ID in
- (
-'22917147',                                          
-'27532389',                                          
-'70805228',                                          
-'84827743',                                          
-'A1697218030',                                       
-'23837608'         
- )
-
-
--- SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG = '1'
--- EXCEPT
--- SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG IN ('2', '3')
-
--- 新的共有戶，若有SAR註記，則將台新的SAR註記蓋過
-
--- SELECT S4.IsSARFiled, S2.*
--- FROM  (SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG = '1'
---        EXCEPT
---        SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG IN ('2', '3')
---        ) S1
--- JOIN  BANCS_SK_CUST_INFO S2      ON S1.TS_CUST_ID=S2.TS_CUST_ID
--- JOIN  Customer_Migrate_buffer S3 ON S2.SK_CUST_ID=S3.CustomerNo
--- JOIN  Cust_NP_Migrate_buffer  S4 ON S3.CIF_KEY=S4.CIF_KEY
--- WHERE  ISNULL(S4.IsSARFiled,'0')='1'
-
-
-
-
-
--- 客戶Name Property註記(包含制裁名單、PEP、負面新聞)
--- 4.針對台新的共有戶，若有PEPBitwiseCode，則將台新的加上去 (新光此客戶僅有制裁名單，台新有負面新聞，合併轉換後，此客戶需要有負面新聞+制裁名單)
--- 5.針對台新的共有戶，若沒有PEPBitwiseCode，則不須將台新的加上去，只需要沿用新光給的PEPBitwiseCode 資料
-
--- 5.針對台新的共有戶，若沒有PEPBitwiseCode，則不須將台新的加上去，只需要沿用新光給的PEPBitwiseCode 資料
-SELECT 
+SELECT
     a.customerno,
-	c.PEPBitwiseCode,
+    c.PEPBitwiseCode,
     CASE WHEN c.PEPBitwiseCode & 1   = 1   THEN 'Y' ELSE 'N' END AS BlackList,
     CASE WHEN c.PEPBitwiseCode & 2   = 2   THEN 'Y' ELSE 'N' END AS PEP,
     CASE WHEN c.PEPBitwiseCode & 4   = 4   THEN 'Y' ELSE 'N' END AS NN,
@@ -268,638 +197,226 @@ SELECT
     CASE WHEN c.PEPBitwiseCode & 64  = 64  THEN 'Y' ELSE 'N' END AS EfPEP,
     CASE WHEN c.PEPBitwiseCode & 128 = 128 THEN 'Y' ELSE 'N' END AS CustRPIsPEP
 FROM BSA_SUB_CUST_FACT a
-JOIN PB_CUSTOMER_FACT b 
-    ON b.cif_KEY = a.cif_KEY 
-JOIN BSA_SUB_CUST_FACT_Extension c 
-    ON c.cif_KEY = a.cif_KEY 
-JOIN (
-      SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG = '1'
-       EXCEPT
-       SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG IN ('2', '3')
-) d
-    ON a.customerno = d.TS_CUST_ID
-WHERE ISNULL(c.PEPBitwiseCode,'0')<>'0'
+JOIN BSA_SUB_CUST_FACT_Extension c
+ON a.CIF_KEY = c.CIF_KEY;
 
+來源資料：
 
-SELECT b.PEPBitwiseCode  , a.customerno FROM Customer_Migrate_buffer a
-JOIN Cust_NP_Migrate_buffer  b on a.cif_KEY = b.cif_KEY
-WHERE  ISNULL(b.PEPBitwiseCode,'0')<>'0'
+SELECT
+    b.PEPBitwiseCode,
+    a.CustomerNo
+FROM Customer_Migrate_buffer a
+JOIN Cust_NP_Migrate_buffer b
+ON a.CIF_KEY = b.CIF_KEY
+WHERE ISNULL(b.PEPBitwiseCode,'0')<>'0';
 
+預期結果
 
--- 4.針對台新的共有戶，若有PEPBitwiseCode，則將台新的加上去 (新光此客戶僅有制裁名單，台新有負面新聞，合併轉換後，此客戶需要有負面新聞+制裁名單)
-SELECT 
-    a.customerno,
-	c.PEPBitwiseCode,
-    CASE WHEN c.PEPBitwiseCode & 1   = 1   THEN 'Y' ELSE 'N' END AS BlackList,
-    CASE WHEN c.PEPBitwiseCode & 2   = 2   THEN 'Y' ELSE 'N' END AS PEP,
-    CASE WHEN c.PEPBitwiseCode & 4   = 4   THEN 'Y' ELSE 'N' END AS NN,
-    CASE WHEN c.PEPBitwiseCode & 8   = 8   THEN 'Y' ELSE 'N' END AS ForeignPEP,
-    CASE WHEN c.PEPBitwiseCode & 16  = 16  THEN 'Y' ELSE 'N' END AS LocalPEP,
-    CASE WHEN c.PEPBitwiseCode & 32  = 32  THEN 'Y' ELSE 'N' END AS ForeignOrgPEP,
-    CASE WHEN c.PEPBitwiseCode & 64  = 64  THEN 'Y' ELSE 'N' END AS EfPEP,
-    CASE WHEN c.PEPBitwiseCode & 128 = 128 THEN 'Y' ELSE 'N' END AS CustRPIsPEP
-FROM BSA_SUB_CUST_FACT a
-JOIN PB_CUSTOMER_FACT b 
-    ON b.cif_KEY = a.cif_KEY 
-JOIN BSA_SUB_CUST_FACT_Extension c 
-    ON c.cif_KEY = a.cif_KEY 
-JOIN (
-      SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG = '1'
-       EXCEPT
-       SELECT TS_CUST_ID FROM BANCS_SK_CUST_INFO WHERE CUST_RE_NO_FLG IN ('2', '3')
-) d
-    ON a.customerno = d.TS_CUST_ID
-WHERE ISNULL(c.PEPBitwiseCode,'0')<>'0'
+台新與新光之 Name Property 註記正確合併。
 
+⸻
 
-SELECT b.PEPBitwiseCode  , a.customerno FROM Customer_Migrate_buffer a
-JOIN Cust_NP_Migrate_buffer  b on a.cif_KEY = b.cif_KEY
-WHERE  ISNULL(b.PEPBitwiseCode,'0')<>'0'
+TC06 下次審查日驗證
 
+⸻
 
+規則1
 
+新光風險等級 > 台新風險等級
 
+取較近的 Review Date
 
+驗證SQL
 
--- 5.針對台新的共有戶，若沒有PEPBitwiseCode，則不須將台新的加上去，只需要沿用新光給的PEPBitwiseCode 資料
+查詢轉換後：
 
-
-
-
-
-
-
--- 下次審查日
-
--- 純台新
-SELECT a.customerno
-FROM BSA_SUB_CUST_FACT a
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM BANCS_SK_CUST_INFO b
-    WHERE b.TS_CUST_ID = a.customerno
-);
-
-------- 純新光
-SELECT  a.customerno , count(*)
-FROM BSA_SUB_CUST_FACT a
-JOIN BANCS_SK_CUST_INFO b ON b.TS_CUST_ID = a.customerno
-WHERE b.CUST_RE_NO_FLG IN ('2','3') group by a.customerno having count(*) > 1
-
-
-
-
--- 6.針對台新的共有戶，若新光客戶的風險等級高於台新客戶的風險等級，則下次審日要取兩邊較近的日期
--- 7.針對台新的共有戶，若新光客戶的風險等級低於或等於台新客戶的風險等級，則下次審日要按照台新的下審日
-SELECT * FROM EDD_ReviewSchedule WHERE CIFKEY='2913E40F-E63A-4A20-BCB8-A2E7C9D4C793'
-
-
--- 若新光客戶的風險等級高於台新客戶的風險等級，則下次審日要取兩邊較近的日期
-
-WITH FirstResult AS (
-    SELECT 
-        a.customerno,
-        a.HIGHRISK
-    FROM VERIFY..BSA_SUB_CUST_FACT a
-    JOIN VERIFY..PB_CUSTOMER_FACT b 
-        ON b.cif_KEY = a.cif_KEY 
-    JOIN (
-        SELECT TS_CUST_ID
-        FROM BANCS_SK_CUST_INFO
-        GROUP BY TS_CUST_ID
-        HAVING 
-            COUNT(*) > 1
-            AND SUM(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) > 0
-            AND SUM(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-    ) d
-        ON a.customerno = d.TS_CUST_ID
-)
-
-SELECT 
-    f.customerno,
-    f.HIGHRISK AS First_HIGHRISK,
-    b.HIGHRISK AS Second_HIGHRISK
-FROM FirstResult f
+SELECT *
+FROM EDD_ReviewSchedule a
 JOIN BSA_SUB_CUST_FACT b
-    ON f.customerno = b.customerno
-WHERE f.HIGHRISK < b.HIGHRISK;
+ON a.CIFKey = b.CIF_Key
+WHERE b.CustomerNo='R2453746390';
 
+查詢來源：
 
+SELECT
+    a.CustomerNo,
+    b.ReviewDt
+FROM Customer_Migrate_buffer a
+JOIN Cust_NP_Migrate_buffer b
+ON a.CIF_KEY=b.CIF_KEY
+JOIN BANCS_SK_CUST_INFO c
+ON a.CustomerNo=c.SK_CUST_ID
+WHERE c.TS_CUST_ID='R2453746390';
 
-SELECT * FROM EDD_ReviewSchedule  a
-JOIN BSA_SUB_CUST_FACT b on a.CIFKey = b.CIF_Key
-WHERE b.customerno = 'R2453746390'
+預期結果
 
+採用兩邊較近日期。
 
-select     
-	a.customerno,
-	b.ReviewDt
-from Customer_Migrate_buffer A
-join Cust_NP_Migrate_buffer B ON A.CIF_KEY = B.CIF_KEY
-join BANCS_SK_CUST_INFO c ON A.CustomerNo = C.SK_CUST_ID
-where c.TS_CUST_ID = 'R2453746390'
+⸻
 
+規則2
 
+新光風險等級 ≤ 台新風險等級
 
+驗證SQL
 
+SELECT *
+FROM EDD_ReviewSchedule a
+JOIN VERIFY..BSA_SUB_CUST_FACT b
+ON a.CIFKey=b.CIF_Key
+WHERE b.CustomerNo='A1691928660';
 
+預期結果
 
+沿用台新下次審查日。
 
--- 針對台新的共有戶，若新光客戶的風險等級低於或等於台新客戶的風險等級，則下次審日要按照台新的下審日
-WITH FirstResult AS (
-    SELECT 
-        a.customerno,
-        a.HIGHRISK
-    FROM VERIFY..BSA_SUB_CUST_FACT a
-    JOIN VERIFY..PB_CUSTOMER_FACT b 
-        ON b.cif_KEY = a.cif_KEY 
-    JOIN (
-        SELECT TS_CUST_ID
-        FROM BANCS_SK_CUST_INFO
-        GROUP BY TS_CUST_ID
-        HAVING 
-            COUNT(*) > 1
-            AND SUM(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) > 0
-            AND SUM(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-    ) d
-        ON a.customerno = d.TS_CUST_ID
-)
+⸻
 
-SELECT 
-    f.customerno,
-    f.HIGHRISK AS First_HIGHRISK,
-    b.HIGHRISK AS Second_HIGHRISK
-FROM FirstResult f
-JOIN BSA_SUB_CUST_FACT b
-    ON f.customerno = b.customerno
-WHERE f.HIGHRISK > b.HIGHRISK;
+TC07 風險等級驗證
 
+⸻
 
+純台新
 
-SELECT * FROM EDD_ReviewSchedule  a
-JOIN BSA_SUB_CUST_FACT b on a.CIFKey = b.CIF_Key
-WHERE b.customerno = 'A1691928660'
+驗證SQL
 
-SELECT * FROM EDD_ReviewSchedule  a
-JOIN VERIFY..BSA_SUB_CUST_FACT b on a.CIFKey = b.CIF_Key
-WHERE b.customerno = 'A1691928660'
-
-
-select     
-	a.customerno,
-	b.ReviewDt
-from Customer_Migrate_buffer A
-join Cust_NP_Migrate_buffer B ON A.CIF_KEY = B.CIF_KEY
-join BANCS_SK_CUST_INFO c ON A.CustomerNo = C.SK_CUST_ID
-where c.TS_CUST_ID = 'A1691928660'
-
-
-
-
--- 風險等級
--- 純台新 風險等級不會變  VERIFY..BSA_SUB_CUST_FACT 跟 BSA_SUB_CUST_FACT 比較
-
-SELECT 
-   a.customerno,
+SELECT
+    a.CustomerNo,
     a.HIGHRISK
 FROM VERIFY..BSA_SUB_CUST_FACT a
 WHERE NOT EXISTS (
     SELECT 1
     FROM BANCS_SK_CUST_INFO b
-    WHERE b.TS_CUST_ID = a.customerno
+    WHERE b.TS_CUST_ID=a.CustomerNo
 );
 
+預期結果
 
+風險等級不變。
 
-SELECT 
-   a.customerno,
-    a.HIGHRISK
-FROM BSA_SUB_CUST_FACT a
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM BANCS_SK_CUST_INFO b
-    WHERE b.TS_CUST_ID = a.customerno
-) AND a.customerno in (
-'00087396',                                       
-'00100845',                                        
-'00107306',                                        
-'00198220'
-);
+⸻
 
+純新光
 
--- 純新光 風險等級取高的
+驗證SQL
 
-SELECT  
-   a.customerno,
-    a.HIGHRISK
-FROM BSA_SUB_CUST_FACT a
-JOIN BANCS_SK_CUST_INFO b ON b.TS_CUST_ID = a.customerno
-WHERE b.CUST_RE_NO_FLG IN ('2','3') 
+SELECT
+    a.CustomerNo,
+    b.HIGHRISK
+FROM Customer_Migrate_buffer a
+JOIN Cust_NP_Migrate_buffer b
+ON a.CIF_KEY=b.CIF_KEY
+JOIN BANCS_SK_CUST_INFO c
+ON a.CustomerNo=c.SK_CUST_ID
+WHERE c.TS_CUST_ID='G1315777570'
+ORDER BY b.HIGHRISK DESC;
 
+預期結果
 
+取最高風險等級。
 
--- J1537536000
--- G1315777570
--- N2003023610
--- N2000077270
+⸻
 
+共有戶
 
-select     
-	a.customerno,
-     b.HIGHRISK
-from Customer_Migrate_buffer A
-join Cust_NP_Migrate_buffer B ON A.CIF_KEY = B.CIF_KEY
-join BANCS_SK_CUST_INFO c ON A.CustomerNo = C.SK_CUST_ID
-where c.TS_CUST_ID = 'G1315777570'
-ORDER BY 2 DESC
+驗證SQL
 
+SELECT CustomerNo,
+       HIGHRISK
+FROM BSA_SUB_CUST_FACT
+WHERE CustomerNo='A1666449340';
 
+預期結果
 
+台新與新光比較後取較高風險等級。
 
+⸻
 
+TC08 風險分數驗證
 
---	共有戶的風險等級需要取高的
--- 找出台新帳號是共有戶的
-SELECT 
-    a.customerno,
-    a.HIGHRISK
-FROM VERIFY..BSA_SUB_CUST_FACT a
-JOIN VERIFY..PB_CUSTOMER_FACT b 
-    ON b.cif_KEY = a.cif_KEY 
-JOIN (
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY TS_CUST_ID
-    HAVING 
-        COUNT(*) > 2
-        AND SUM(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) > 0
-        AND SUM(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-) d
-    ON a.customerno = d.TS_CUST_ID;
+⸻
 
+純台新
 
+驗證SQL
 
-customerno	HIGHRISK	BlackList	PEP	NN	ForeignPEP	LocalPEP	ForeignOrgPEP	EfPEP	CustRPIsPEP
-A1666449340                                       	L	N	N	N	N	N	N	N	N
-A1668623520                                       	M	N	N	N	N	N	N	N	N
-A1663059320                                       	L	N	N	N	N	N	N	N	N
-A1678238310                                       	L	N	N	N	N	N	N	N	N
-53863835                                          	L	N	N	N	N	N	N	N	N
-
--- 去看新光給的資料 共有戶 (多筆)
-	select     
-	a.customerno,
-     b.HIGHRISK
-from Customer_Migrate_buffer A
-join Cust_NP_Migrate_buffer B ON A.CIF_KEY = B.CIF_KEY
-join BANCS_SK_CUST_INFO c ON A.CustomerNo = C.SK_CUST_ID
-where c.TS_CUST_ID = 'A1666449340'
-ORDER BY 2 DESC
-
-
-SELECT customerno,HIGHRISK  FROM   BSA_SUB_CUST_FACT WHERE customerno = 'A1666449340'
-
-
-
-
-------------
-
-
-
-
--- 風險分數
--- 風險分數
--- 風險分數
--- 風險分數
-
-
-------- 純台新  -- 風險分數 沒動
-SELECT 
-        a.customerno,
-        a.HIGHRISK,
-        a.RiskScore
-FROM VERIFY..BSA_SUB_CUST_FACT a
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM BANCS_SK_CUST_INFO b
-    WHERE b.TS_CUST_ID = a.customerno
-);
-
-
-SELECT 
-        a.customerno,
-        a.HIGHRISK,
-        a.RiskScore
-FROM BSA_SUB_CUST_FACT a
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM BANCS_SK_CUST_INFO b
-    WHERE b.TS_CUST_ID = a.customerno
-) AND a.customerno in (
+SELECT
+    CustomerNo,
+    RiskScore
+FROM VERIFY..BSA_SUB_CUST_FACT
+WHERE CustomerNo IN
+(
 'F2665292240',
 'F2665293950',
-'F2665294930',
-'F2665295460',
-'F2665296080',
-'F2665296170'
+'F2665294930'
 );
 
+預期結果
 
-------- 純新光  -- 風險分數 
----- 如果台新有就沿用台新的 
---- 如果台新沒有就用新光的
-SELECT  
-        a.customerno,
-        a.HIGHRISK,
-        a.RiskScore
-FROM VERIFY..BSA_SUB_CUST_FACT a
-JOIN BANCS_SK_CUST_INFO b ON b.TS_CUST_ID = a.customerno
-WHERE b.CUST_RE_NO_FLG IN ('2','3') 
+RiskScore 不變。
 
+⸻
 
-SELECT RiskScore FROM BSA_SUB_CUST_FACT WHERE customerno = 'J2650136590'
+純新光
 
+驗證SQL
 
-select     
-	a.customerno,
-	b.RiskScore,
-     b.HIGHRISK
-from Customer_Migrate_buffer A
-join Cust_NP_Migrate_buffer B ON A.CIF_KEY = B.CIF_KEY
-join BANCS_SK_CUST_INFO c ON A.CustomerNo = C.SK_CUST_ID
-where c.TS_CUST_ID = 'S1454089970'
-ORDER BY 2 DESC
-
-
-
-
-
-
--- 共有戶的風險分數，如果風險等級是取新光的，分數就取新光的
--- 	共有戶的風險分數，如果風險等級是取台新的，就以台新分數為準，
-
--- 共有戶的風險分數，如果風險等級是取新光的，分數就取新光的
-
--------------------------
-WITH FirstResult AS (
-    SELECT 
-        a.customerno,
-        a.HIGHRISK
-    FROM VERIFY..BSA_SUB_CUST_FACT a
-    JOIN VERIFY..PB_CUSTOMER_FACT b 
-        ON b.cif_KEY = a.cif_KEY 
-    JOIN (
-        SELECT TS_CUST_ID
-        FROM BANCS_SK_CUST_INFO
-        GROUP BY TS_CUST_ID
-        HAVING 
-            COUNT(*) > 1
-            AND SUM(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) > 0
-            AND SUM(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-    ) d
-        ON a.customerno = d.TS_CUST_ID
-)
-
-SELECT 
-    f.customerno,
-    f.HIGHRISK AS First_HIGHRISK,
-    b.HIGHRISK AS Second_HIGHRISK
-FROM FirstResult f
-JOIN BSA_SUB_CUST_FACT b
-    ON f.customerno = b.customerno
-WHERE f.HIGHRISK <> b.HIGHRISK;
-
---38987793   
-
-
-SELECT customerno,RiskScore  FROM   VERIFY..BSA_SUB_CUST_FACT WHERE customerno = '38987793'
-
-select     
-	a.customerno,
-    b.HIGHRISK,
+SELECT
+    a.CustomerNo,
     b.RiskScore,
-from Customer_Migrate_buffer A
-join Cust_NP_Migrate_buffer B ON A.CIF_KEY = B.CIF_KEY
-join BANCS_SK_CUST_INFO c ON A.CustomerNo = C.SK_CUST_ID
-where c.TS_CUST_ID = '38987793'
-ORDER BY 3 DESC
+    b.HIGHRISK
+FROM Customer_Migrate_buffer a
+JOIN Cust_NP_Migrate_buffer b
+ON a.CIF_KEY=b.CIF_KEY
+JOIN BANCS_SK_CUST_INFO c
+ON a.CustomerNo=c.SK_CUST_ID
+WHERE c.TS_CUST_ID='S1454089970';
 
+預期結果
 
-SELECT customerno,RiskScore  FROM   BSA_SUB_CUST_FACT WHERE customerno = '38987793'
+沿用新光 RiskScore。
 
+⸻
 
+共有戶
 
+驗證SQL
 
+台新分數：
 
------------ 	共有戶的風險分數，如果風險等級是取台新的，就以台新分數為準，
-WITH FirstResult AS (
-    SELECT 
-        a.customerno,
-        a.HIGHRISK
-    FROM VERIFY..BSA_SUB_CUST_FACT a
-    JOIN VERIFY..PB_CUSTOMER_FACT b 
-        ON b.cif_KEY = a.cif_KEY 
-    JOIN (
-        SELECT TS_CUST_ID
-        FROM BANCS_SK_CUST_INFO
-        GROUP BY TS_CUST_ID
-        HAVING 
-            COUNT(*) > 1
-            AND SUM(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) > 0
-            AND SUM(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-    ) d
-        ON a.customerno = d.TS_CUST_ID
-)
+SELECT CustomerNo,RiskScore
+FROM VERIFY..BSA_SUB_CUST_FACT
+WHERE CustomerNo='A1628437710';
 
-SELECT 
-    f.customerno,
-    f.HIGHRISK AS First_HIGHRISK,
-    b.HIGHRISK AS Second_HIGHRISK
-FROM FirstResult f
-JOIN BSA_SUB_CUST_FACT b
-    ON f.customerno = b.customerno
-WHERE f.HIGHRISK = b.HIGHRISK;
+轉換後：
 
+SELECT CustomerNo,RiskScore
+FROM BSA_SUB_CUST_FACT
+WHERE CustomerNo='A1628437710';
 
+預期結果
 
--- A1628437710
-SELECT customerno,RiskScore  FROM   VERIFY..BSA_SUB_CUST_FACT WHERE customerno = 'A1628437710'
+若最終風險等級取台新 → 採用台新 RiskScore。
 
-SELECT customerno,RiskScore  FROM   BSA_SUB_CUST_FACT WHERE customerno = 'A1628437710'
+若最終風險等級取新光 → 採用新光 RiskScore。
 
+⸻
 
+TC09 其他客戶因子驗證
 
+驗證項目
 
+新光來源	台新欄位
+F5	SDST2400001
+F4	CIPT1700061
+Warn_Restrict_Account	CIPT1700061
+IsComplexStructure	CIPT1300004
+Cust_With_Bearer_Shares	CIPT1600002
 
+預期結果
 
+各欄位依 Mapping Rule 正確轉入 AML 系統。
 
+⸻
 
-
-
-
-
---------------------------------
---------------------------------
---------------------------------
---------------------------------
---------------------------------
---------------------------------
-
-
-
-
------------------------
-
-SELECT 
-    a.customerno,
-    a.RiskScore,
-
-    CASE WHEN c.PEPBitwiseCode & 1   = 1   THEN 'Y' ELSE 'N' END AS BlackList,
-    CASE WHEN c.PEPBitwiseCode & 2   = 2   THEN 'Y' ELSE 'N' END AS PEP,
-    CASE WHEN c.PEPBitwiseCode & 4   = 4   THEN 'Y' ELSE 'N' END AS NN,
-    CASE WHEN c.PEPBitwiseCode & 8   = 8   THEN 'Y' ELSE 'N' END AS ForeignPEP,
-    CASE WHEN c.PEPBitwiseCode & 16  = 16  THEN 'Y' ELSE 'N' END AS LocalPEP,
-    CASE WHEN c.PEPBitwiseCode & 32  = 32  THEN 'Y' ELSE 'N' END AS ForeignOrgPEP,
-    CASE WHEN c.PEPBitwiseCode & 64  = 64  THEN 'Y' ELSE 'N' END AS EfPEP,
-    CASE WHEN c.PEPBitwiseCode & 128 = 128 THEN 'Y' ELSE 'N' END AS CustRPIsPEP
-FROM VERIFY..BSA_SUB_CUST_FACT a
-JOIN VERIFY..PB_CUSTOMER_FACT b 
-    ON b.cif_KEY = a.cif_KEY 
-JOIN BSA_SUB_CUST_FACT_Extension c 
-    ON c.cif_KEY = a.cif_KEY 
-JOIN (
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY TS_CUST_ID
-    HAVING 
-        COUNT(*) > 5
-        AND SUM(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) > 0
-        AND SUM(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-) d
-    ON a.customerno = d.TS_CUST_ID;
-
-
--- customerno	HIGHRISK	RiskScore	IsSARFiled	IsComplexStructure	PEPBitwiseCode	Warn_Restrict_Account	IsComplexStructure	Cust_With_Bearer_Shares	BlackList	PEP	NN	ForeignPEP	LocalPEP	ForeignOrgPEP	EfPEP	CustRPIsPEP
--- 53863835                                          	L	46.00	0	0	0	N	0	NULL	N	N	N	N	N	N	N	N
--- A1666449340                                       	L	42.00	0	0	0	NULL	0	N	N	N	N	N	N	N	N	N
--- A1668623520                                       	M	72.00	0	NULL	0	N	NULL	NULL	N	N	N	N	N	N	N	N
--- A1663059320                                       	L	NULL	0	NULL	0	NULL	NULL	NULL	N	N	N	N	N	N	N	N
--- A1678238310                                       	L	27.00	0	NULL	0	NULL	NULL	NULL	N	N	N	N	N	N	N	N
-
-
-select     
-    -- b.PEPBitwiseCode,
-	a.customerno,
-    -- b.HIGHRISK,
-    b.RiskScore,
-
-from Customer_Migrate_buffer A
-join Cust_NP_Migrate_buffer B ON A.CIF_KEY = B.CIF_KEY
-join BANCS_SK_CUST_INFO c ON A.CustomerNo = C.SK_CUST_ID
-where c.TS_CUST_ID = '53863835'
-ORDER BY 3 DESC
-
-
-SELECT customerno,RiskScore  FROM   BSA_SUB_CUST_FACT WHERE customerno = '53863835'
-
-
-
-
--- SELECT A.*
--- FROM BANCS_SK_CUST_INFO A
--- JOIN (
---     -- 出現超過 5 筆的客戶
---     SELECT TS_CUST_ID
---     FROM BANCS_SK_CUST_INFO
---     GROUP BY TS_CUST_ID
---     HAVING COUNT(*) > 5
--- ) B ON A.TS_CUST_ID = B.TS_CUST_ID
--- WHERE A.TS_CUST_ID IN (
---     -- 有 1 但沒有 2 或 3 的客戶
---     SELECT TS_CUST_ID
---     FROM BANCS_SK_CUST_INFO
---     GROUP BY TS_CUST_ID
---     HAVING 
---         SUM(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) > 0
---         AND
---         SUM(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
--- );
-
-
-
-
-
-
-SELECT 
-    a.customerno,
-    -- a.HIGHRISK,
-    a.RiskScore,
-    -- a.IsSARFiled,
-    -- a.IsComplexStructure,
-
-    -- c.PEPBitwiseCode,
-    -- a.Warn_Restrict_Account,
-    -- a.IsComplexStructure,
-    -- a.Cust_With_Bearer_Shares,
-
-    CASE WHEN c.PEPBitwiseCode & 1   = 1   THEN 'Y' ELSE 'N' END AS BlackList,
-    CASE WHEN c.PEPBitwiseCode & 2   = 2   THEN 'Y' ELSE 'N' END AS PEP,
-    CASE WHEN c.PEPBitwiseCode & 4   = 4   THEN 'Y' ELSE 'N' END AS NN,
-    CASE WHEN c.PEPBitwiseCode & 8   = 8   THEN 'Y' ELSE 'N' END AS ForeignPEP,
-    CASE WHEN c.PEPBitwiseCode & 16  = 16  THEN 'Y' ELSE 'N' END AS LocalPEP,
-    CASE WHEN c.PEPBitwiseCode & 32  = 32  THEN 'Y' ELSE 'N' END AS ForeignOrgPEP,
-    CASE WHEN c.PEPBitwiseCode & 64  = 64  THEN 'Y' ELSE 'N' END AS EfPEP,
-    CASE WHEN c.PEPBitwiseCode & 128 = 128 THEN 'Y' ELSE 'N' END AS CustRPIsPEP
-FROM VERIFY..BSA_SUB_CUST_FACT a
-JOIN VERIFY..PB_CUSTOMER_FACT b 
-    ON b.cif_KEY = a.cif_KEY 
-JOIN BSA_SUB_CUST_FACT_Extension c 
-    ON c.cif_KEY = a.cif_KEY 
-JOIN (
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY TS_CUST_ID
-    HAVING 
-        COUNT(*) > 5
-        AND SUM(CASE WHEN CUST_RE_NO_FLG = '1' THEN 1 ELSE 0 END) > 0
-        AND SUM(CASE WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1 ELSE 0 END) = 0
-) d
-    ON a.customerno = d.TS_CUST_ID;
-
-
-
-
-全部幫我整理一下我在驗測什麼
-
-4.	客戶因子註記資料轉換規則：
-	所有新光客戶的註記都須轉入，再根據mapping table去做合併，但共有戶會有其特殊邏輯，大方向是要取其嚴
-	若合併進來，TS_CUST_ID有多個，客戶因子資訊取其嚴先合併，如下表範例，TS_CUST_ID向下去找會對應到三個SK_CUST_ID，這三個的客戶因子資訊都需要合併後，再跟台新的取其嚴，再進到台新
-SK_CUST_ID	TS_CUST_ID	CUST_RE_NO_FLG	匯入結果
-A123456789	A1234567890	2	 直接帶入註記&因子
-A1234567891	A1234567891	3	需要先行合併，再跟台新的合併
-A1234567892	A1234567891	1	
-A1234567893	A1234567891	1	
-A1234567894	A1234567892	3	直接帶入註記&因子
-
-	欲轉入的欄位資料有
-	SAR註記
-	共有戶若有SAR註記，則將台新的蓋過
-	客戶Name Property註記(包含制裁名單、PEP、負面新聞)
-	共有戶若有則將台新的加上去，例:新光此客戶僅有制裁名單，在台新僅有PEP，合併轉換後，此客戶需要有制裁名單+PEP的註記
-	下次審查日
-	共有戶的下審日若新光的客戶風險等級高於在台新的客戶風險等級，則下審日要取兩邊較近的日期，
-
-其餘共有戶的下審日則按照台新的下審日
-	風險等級
-	共有戶的風險等級需要取高的
-	風險分數
-	共有戶的風險分數，如果風險等級是取台新的，就以台新分數為準，反之以新光分數為準。
-	告誡戶因子
-	新光的產品風險代碼「F5」轉入至台新的自定義情境因子(SDST2400001)
-	衍生管制帳戶因子
-	新光的產品風險代碼「F4」轉入至台新的警示戶因子(CIPT1700061)
-	警示戶因子(CIPT1700061)
-	複雜結構(CIPT1300004)
-	無記名股票(CIPT1600002)
-
-
+這份就已經是可以直接放進 SIT/UAT 驗測報告的版本了，而且保留了你實際驗證時使用的 SQL。
