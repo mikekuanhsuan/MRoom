@@ -1,144 +1,232 @@
-function Get-WorkPath {
-    $workPath = $PWD.Path
-    if ($PSScriptRoot) { 
-        $workPath = $PSScriptRoot 
-    }
-    return $workPath
-}
-#台新資源密碼系統API 取得帳號/密碼，分別放在陣列 $idPwd[0]：帳號，$idPWd[1]：密碼
-function Get-IdPwd
+AML Customer Migration 匯入失敗查證紀錄
+
+一、問題現象
+
+執行 Customer Migration 時，AMLDataMigrator 匯入 AML_Cust.csv 失敗。
+
+錯誤訊息：
+
+Violation of PRIMARY KEY constraint 'pk_PB_CustPurposeOfAcc'
+Cannot insert duplicate key in object 'dbo.PB_CustPurposeOfAcc'
+Duplicate key value is:
+(41acf298-19b9-45fa-94e3-15c11d24bfad, 11)
+
+⸻
+
+二、查證過程
+
+1. 確認 Primary Key 結構
+
+查詢 PB_CustPurposeOfAcc Table Definition：
+
+Primary Key:
+(CIF_KEY, CODE)
+
+確認錯誤中的：
+
+(41acf298-19b9-45fa-94e3-15c11d24bfad, 11)
+
+代表：
+
+CIF_KEY = 41acf298-19b9-45fa-94e3-15c11d24bfad
+CODE    = 11
+
+發生重複。
+
+⸻
+
+2. 確認目標表是否已有資料
+
+查詢：
+
+SELECT *
+FROM PB_CustPurposeOfAcc
+WHERE CIF_KEY = '41acf298-19b9-45fa-94e3-15c11d24bfad';
+
+結果：
+
+0 筆資料
+
+結論：
+
+* 非目標表既有資料造成衝突
+* 非重覆執行 Migration 所導致
+
+⸻
+
+3. 確認 CIF Mapping
+
+查詢：
+
+SELECT *
+FROM CIF_Migrate_Mapping_TEMP
+WHERE NEW_CIF_KEY = '41acf298-19b9-45fa-94e3-15c11d24bfad';
+
+結果：
+
+SOURCE_CIF_KEY
+161ca4cc-2beb-e511-80c8-0050568c710a
+NEW_CIF_KEY
+41acf298-19b9-45fa-94e3-15c11d24bfad
+
+結論：
+
+* 僅存在一筆 Mapping
+* 非多個 Source CIF Mapping 至同一個 New CIF 所造成
+
+⸻
+
+4. 追查 Customer Import 程式
+
+檢視 CustomerImportData Stored Procedure。
+
+發現匯入邏輯：
+
+INSERT INTO dbo.PB_CustPurposeOfAcc
 (
-[string]$svrIPPort,
-[string]$appResCode
+    CIF_KEY,
+    CODE,
+    LastUpdatedBy,
+    LastUpdatedDate_UTC
 )
-{
-    try
-    {
-        if(-not ([System.Management.Automation.PSTypeName]'TaiShinGetPWD.Program').Type) 
-        {
-            Add-Type -TypeDefinition @'
-            using System;
-            using System.Text;
-            using System.Runtime.InteropServices;
+SELECT
+    NEW_CIF_KEY,
+    F.Value,
+    @UserId,
+    @DateUTC
+FROM Customer_Migrate_buffer A
+INNER JOIN CIF_Migrate_Mapping_TEMP B
+    ON A.CIF_KEY = B.SOURCE_CIF_KEY
+CROSS APPLY dbo.fnStringSplitter(A.CustPurposeOfAcc,'|') F
 
-            namespace TaiShinGetPWD
-            {
-                public class Program
-                {
-                    [DllImport("PwDll64.dll")]
-                    public static extern int Init(string sSvrIP, int nSvrPort, StringBuilder sRtnMsg);
-                    [DllImport("PwDll64.dll")]
-                    public static extern int ReqToken(string sApCode, string sResCode, ref byte pToken, ref int nTokenSize, StringBuilder sRtnMsg);
-                    [DllImport("PwDll64.dll")]
-                    public static extern int GetCredential(ref byte pToken, int nTokenSize, StringBuilder sUID, StringBuilder sPWD, StringBuilder sRtnMsg);
+表示：
 
-                    public static string[] getIdPwd(string svrIPPort, string appResCode)
-                    {
-                        int rtn;
-                        string[] idPwd=new string[2];
-                        string sSvrIP = svrIPPort.Split(',')[0];//"APSC2";
-                        int nSvrPort=int.Parse(svrIPPort.Split(',')[1]);//9999;
-                        StringBuilder sRtnMsg = new StringBuilder(2048);
-                        rtn=Init(sSvrIP, nSvrPort, sRtnMsg);
-                        if(rtn != 0){ Console.WriteLine("Init fail, msg:" + sRtnMsg);}
+CustPurposeOfAcc
+↓
+fnStringSplitter('|')
+↓
+拆成多筆 CODE
+↓
+寫入 PB_CustPurposeOfAcc
 
-                        string appcode=appResCode.Split(',')[0]; //"BIRPTT01";
-                        string rescode=appResCode.Split(',')[1];//"FTP_0002";  //FTP_0001
+⸻
 
-                        StringBuilder sUID=new StringBuilder(256);
-                        StringBuilder sPWD=new StringBuilder(256);
+5. 確認來源資料
 
-                        byte[] pToken=new byte[256];
-                        int nTokenSize = 256;
-                        rtn=ReqToken(appcode,rescode,ref pToken[0], ref nTokenSize, sRtnMsg);
-                        if(rtn==0)
-                        {
-                            /*
-                            Console.WriteLine("rtn=0, msg:reqToken SUCCESS");
-                            Console.WriteLine("pToken = " + pToken);
-                            Console.WriteLine("nTokenSize = " + nTokenSize);
-                            */
+查詢：
 
-                            rtn=GetCredential(ref pToken[0], nTokenSize, sUID, sPWD, sRtnMsg);
-                            if(rtn==0)
-                            {
-                                /*
-                                Console.WriteLine("sUID=" + sUID);
-                                Console.WriteLine("sPWD=" + sPWD);
-                                Console.WriteLine("sRrnMsg = " + sRtnMsg);
-                                */
-                                idPwd[0] = sUID.ToString().Trim();
-                                idPwd[1] = sPWD.ToString().Trim();
-                            }
-                            else
-                            {
-                                Console.WriteLine("GetCredential fail:" + sRtnMsg);
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine("ReqToken fail:" + sRtnMsg);
-                        }
-                        return idPwd;
-                    }
-                }
-            }
-'@ -ErrorAction Stop
-        }
-        else
-        {
-            Write-Verbose -Message "Failed $($_.Exception.Message)"
-        }
-    }
-    catch
-    {
-        Write-Warning -Message "Failed $($_.Exception.Message)"
-		exit 1
-    }
+SELECT CustPurposeOfAcc
+FROM Customer_Migrate_buffer
+WHERE CIF_KEY='161ca4cc-2beb-e511-80c8-0050568c710a';
 
-    $idPWD=[TaiShinGetPWD.Program]::getIdPwd($svrIPPort,$appResCode)
-    return $idPWD
-}
-##################################################
-# MAIN
-##################################################
-##$args="NBINST01.json"
-if ($args.Count -ne 1) {
-    Write-Host "Please provide THE CONFIG JSON FILE"
-    $dirname = Get-WorkPath
-    $scriptName = $MyInvocation.MyCommand.Name
-    Write-Host "USAGE: $dirname\$scriptName <LDAP CONF FILE>"
-  exit 0
-} else {
-  $ldapconf = $args[0]
-  ## DEBUG USE
-  ##Write-Host "Ldap config file: $ldapconf"
-}
+結果：
 
-$configFile = Join-Path -Path (Get-WorkPath) -ChildPath "$ldapconf"
-if(Test-path $configFile -PathType leaf){
-   $config = Get-Content $configFile -Raw | ConvertFrom-Json
-} else {
-   write-host $configFile " NOT EXIST .. Please Check"
-   exit 0
-}
+11|10|11
 
-$cmd = $config.ldapInfo.cmd
-$remoteIP = $config.ldapInfo.remoteIP
-$svrIPPort = $config.ldapInfo.svrIPPort
-$appResCode = $config.ldapInfo.appResCode
-$idPwd = Get-IdPwd -svrIPPort $svrIPPort -appResCode $appResCode
-$user=$idPwd[0]
-$password=$idPwd[1]
-## DEBUG USAGE
-# write-output $user
-# write-output $password
-## 等LDAP 設定完成, 就可以不需要下列 hard-coding password
-#$user="filescan"
-#$password="1qaz@WSX"
-$winrs_command="winrs -r:$remoteIP "
-$winrs_command=$winrs_command + "-u:$user -p:$password "
-$winrs_command=$winrs_command + "powershell $cmd"
-# write-host $winrs_command
-# 執行指令隱藏密碼資訊
-Invoke-Expression $winrs_command
+拆解後實際產生：
+
+11
+10
+11
+
+⸻
+
+三、分析結果
+
+原先判斷：
+
+來源資料存在重複值 11
+
+因此造成：
+
+(CIF_KEY,11)
+(CIF_KEY,10)
+(CIF_KEY,11)
+
+第二筆 CODE=11 插入時違反 PK。
+
+⸻
+
+四、與廠商確認結果
+
+廠商說明：
+
+可能存在不同來源代碼
+(SK Code、TS Code)
+經 Mapping 後
+對應到相同 AML Code
+
+例如：
+
+SK → 11
+TS → 11
+
+轉換後形成：
+
+11|10|11
+
+因此：
+
+來源代碼不同
+↓
+AML Mapping後相同
+↓
+同一 CIF 出現兩筆 CODE=11
+↓
+違反 PK(CIF_KEY,CODE)
+
+⸻
+
+五、結論（Root Cause）
+
+本次問題並非：
+
+* PB_CustPurposeOfAcc 已有既存資料
+* CIF Mapping 重複
+* Migration 執行重覆
+
+而是：
+
+不同來源用途代碼
+(SK / TS)
+經 AML Mapping 後
+轉換成相同 CODE = 11
+導致 CustomerImportData
+透過 fnStringSplitter 拆分後
+產生重複資料：
+(CIF_KEY,11)
+最終違反
+PK(CIF_KEY,CODE)
+
+⸻
+
+六、建議處理方式
+
+方案一（資料面）
+
+確認 Mapping 規則
+避免多個來源代碼 Mapping 至相同 AML Code
+
+方案二（程式面，較建議）
+
+於匯入程式增加去重處理：
+
+SELECT DISTINCT
+       NEW_CIF_KEY,
+       F.Value,
+       @UserId,
+       @DateUTC
+
+或
+
+GROUP BY
+    NEW_CIF_KEY,
+    F.Value
+
+避免同一 CIF 下重覆寫入相同 CODE。
+
+⸻
+
+一句話摘要
+
+本次 Customer Migration 失敗原因為 不同來源用途代碼（SK/TS）經 AML Mapping 後轉為相同 CODE=11，導致 PB_CustPurposeOfAcc 寫入重複 (CIF_KEY,CODE) 組合而觸發 Primary Key Constraint Error。
