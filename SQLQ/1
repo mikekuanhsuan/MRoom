@@ -1,1 +1,119 @@
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\check_sk_csv_csv.ps1"
+你這個問題其實已經從畫面看出來了。👍
+
+你現在 Control-M 裡面寫的是：
+
+powershell
+D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1
+
+但你在 CMD 測試時執行：
+
+powershell D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1
+
+得到錯誤：
+
+CommandNotFoundException
+無法辨識 D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1
+
+代表 PowerShell 把它當成「指令名稱」而不是「腳本檔案」。
+
+⸻
+
+正確寫法
+
+Control-M Command 應該改成：
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1"
+
+或
+
+powershell.exe -ExecutionPolicy Bypass -File "D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1"
+
+⸻
+
+先確認檔案真的存在
+
+請到 CMD 執行：
+
+dir D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1
+
+如果出現：
+
+File Not Found
+
+那就是路徑錯了。
+
+如果出現：
+
+06/10/2026  08:00 AM    1,234 CALL_DMZSRV.PS1
+
+代表檔案存在。
+
+⸻
+
+再確認腳本能不能單獨跑
+
+CMD：
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\AML\SK\EXE\checksum\CALL_DMZSRV.PS1"
+
+如果這裡成功：
+
+SUCCESS
+
+或產生 log
+
+那 Control-M 就照抄這行即可。
+
+⸻
+
+我比較擔心的是另一個問題
+
+你的畫面看到：
+
+check_sk_csv_csv.ps1
+FAILED
+
+但沒有任何錯誤訊息。
+
+這通常表示：
+
+* ps1 有執行
+* 但裡面 return FAILED
+
+例如：
+
+if ($result -ne $expected) {
+    Write-Host "FAILED"
+    exit 1
+}
+
+所以目前可能有兩層問題：
+
+第一層
+
+Control-M Command 寫錯
+
+第二層
+
+checksum 檢查本身失敗
+
+⸻
+
+請幫我看一下
+
+把
+
+CALL_DMZSRV.PS1
+
+內容貼上來
+
+尤其是前面 30 行跟最後 30 行。
+
+我可以直接幫你確認：
+
+1. Control-M command 怎麼寫
+2. 要不要加 Working Directory
+3. 為什麼顯示 FAILED
+4. Exit Code 會回傳多少給 Control-M
+
+通常看完這支 ps1，5 分鐘內就能定位問題。
