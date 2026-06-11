@@ -1,133 +1,50 @@
-那邏輯就完全反過來了。
+SELECT 
+	top 10 
+	a.CustomerNo,
+	a.cif_key
+FROM BSA_SUB_CUST_FACT a
+INNER JOIN VERIFY..BSA_SUB_CUST_FACT v    ON a.CustomerNo = v.CustomerNo
+INNER JOIN CIF_Migrate_Mapping_TEMP b    ON a.cif_key = b.NEW_CIF_KEY;
 
-依你前面貼的資料看起來：
 
-Cust_NP_Migrate_buffer   ← 來源
-       ↓
-BSA_SUB_CUST_FACT        ← 寫入結果
 
-所以驗證應該是：
+找出 A2730571670 他是共有戶
 
-NP 的最高 HIGHRISK
 
-是否正確寫入到 BSA_SUB_CUST_FACT
 
-而不是拿 BSA_SUB_CUST_FACT 當來源。
 
-⸻
+SELECT * FROM BANCS_SK_CUST_INFO WHERE TS_CUST_ID  = 'A2730571670'
 
-以你的例子：
 
-NP
+找出 A2730571670 他對應的sk 用戶帳號
+
+
+CUST_NO	SK_CUST_ID	TS_CUST_ID
+0000001000726046	A273057167	A2730571670
+0000001000726046	A273057167C	A2730571670
+0000001000726046	A273057167D	A2730571670
+
+
+找出 sk 用戶帳號 對應的等級
+
+SELECT a.CustomerNo, b.HIGHRISK,* FROM Customer_Migrate_buffer  a
+join  Cust_NP_Migrate_buffer b on a.CIF_KEY = b.CIF_KEY
+WHERE CustomerNo in (
+'A273057167',
+'A273057167C',
+'A273057167D'
+)
 
 CustomerNo	HIGHRISK
-F235186557	H
-F235186557C	L
+A273057167D	L
+A273057167C	L
+A273057167	M
 
-最高：
+確認該名A2730571670 用戶 是有選等級高的 嚴格塞選
+select HIGHRISK from BSA_SUB_CUST_FACT WHERE CustomerNo  = 'A2730571670'
 
-H
+M
 
-⸻
 
-BSA_SUB_CUST_FACT
 
-CustomerNo	HIGHRISK
-F2351865570	H
-
-結果：
-
-H = H
-
-✅ 正確
-
-⸻
-
-最簡單驗證方式
-
-直接找出寫錯的客戶：
-
-SELECT
-    bsa.CustomerNo,
-    bsa.HIGHRISK AS BSA_RISK,
-    MAX(
-        CASE np.HIGHRISK
-            WHEN 'H' THEN 3
-            WHEN 'M' THEN 2
-            WHEN 'L' THEN 1
-        END
-    ) AS NP_MAX_RISK
-FROM BSA_SUB_CUST_FACT bsa
-JOIN BANCS_SK_CUST_INFO sk
-    ON bsa.CustomerNo = sk.TS_CUST_ID
-JOIN Customer_Migrate_buffer cm
-    ON sk.SK_CUST_ID = cm.CustomerNo
-JOIN Cust_NP_Migrate_buffer np
-    ON cm.CIF_KEY = np.CIF_KEY
-GROUP BY
-    bsa.CustomerNo,
-    bsa.HIGHRISK
-HAVING
-    CASE bsa.HIGHRISK
-        WHEN 'H' THEN 3
-        WHEN 'M' THEN 2
-        WHEN 'L' THEN 1
-    END
-    <>
-    MAX(
-        CASE np.HIGHRISK
-            WHEN 'H' THEN 3
-            WHEN 'M' THEN 2
-            WHEN 'L' THEN 1
-        END
-    );
-
-⸻
-
-結果解讀：
-
-沒資料
-
-0 rows
-
-表示：
-
-✅ BSA_SUB_CUST_FACT 的 HIGHRISK 都等於 NP 的最高 HIGHRISK
-
-⸻
-
-有資料
-
-例如：
-
-CustomerNo	BSA_RISK	NP_MAX_RISK
-F2351865570	M	3
-
-代表：
-
-NP最高 = H
-BSA寫成 = M
-
-❌ 寫入錯誤
-
-⸻
-
-如果你現在是在驗證：
-
-VERIFY..BSA_SUB_CUST_FACT
-
-跟
-
-BSA_SUB_CUST_FACT
-
-資轉前後是否一致，
-
-那又是另一個驗證邏輯，我可以幫你把整個資料流整理成：
-
-Cust_NP_Migrate_buffer
-        ↓
-BSA_SUB_CUST_FACT
-        ↓
-VERIFY..BSA_SUB_CUST_FACT
-
-然後告訴你每一段該怎麼驗。現在看起來你的案例就是這種流程。
+要怎麼用數量來驗證 這邏輯 所有客戶都沒問題
