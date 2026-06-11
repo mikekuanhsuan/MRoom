@@ -1,173 +1,79 @@
-了解，你不是要驗證某幾筆，而是要驗證：
+有，而且其實你不一定要先建 Temp Table。
 
-所有 Migration 的客戶，如果 TS_CUST_ID 對應多個 SK_CUST_ID(CustomerNo)，是否都有保留來源最高的 HIGHRISK。
+你的驗證重點只有一句：
 
-這種情況建議直接做「來源最高風險 vs 目標最高風險」全量比對。
+來源 CustomerNo 的 HIGHRISK = Migration 後同一個 TS_CUST_ID 底下所有 CustomerNo 的最高 HIGHRISK
 
-⸻
+直接查出異常即可。
 
-驗證邏輯
-
-例如：
-
-來源
-
-TS_CUST_ID	HIGHRISK
-A1234567890	H
-
-Migration後
-
-CustomerNo	HIGHRISK
-A123456789	L
-A123456789C	H
-
-最高仍是 H
-
-✅ PASS
-
-⸻
-
-另一種：
-
-來源
-
-TS_CUST_ID	HIGHRISK
-A1234567890	H
-
-Migration後
-
-CustomerNo	HIGHRISK
-A123456789	L
-A123456789C	L
-
-最高變成 L
-
-❌ FAIL
-
-⸻
-
-Step 1 建立來源最高風險
-
-IF OBJECT_ID('tempdb..#SRC_RISK') IS NOT NULL
-    DROP TABLE #SRC_RISK;
 SELECT
-    a.CustomerNo AS TS_CUST_ID,
-    MAX(
-        CASE a.HIGHRISK
-            WHEN 'H' THEN 3
-            WHEN 'M' THEN 2
-            WHEN 'L' THEN 1
-            ELSE 0
-        END
-    ) AS SRC_RISK
-INTO #SRC_RISK
-FROM BSA_SUB_CUST_FACT a
-GROUP BY a.CustomerNo;
-
-⸻
-
-Step 2 建立 Migration 後最高風險
-
-透過 BANCS_SK_CUST_INFO 找回原本 TS_CUST_ID
-
-IF OBJECT_ID('tempdb..#TGT_RISK') IS NOT NULL
-    DROP TABLE #TGT_RISK;
-SELECT
-    s.TS_CUST_ID,
+    src.CustomerNo AS TS_CUST_ID,
+    src.HIGHRISK   AS SRC_HIGHRISK,
     MAX(
         CASE np.HIGHRISK
             WHEN 'H' THEN 3
             WHEN 'M' THEN 2
             WHEN 'L' THEN 1
-            ELSE 0
         END
     ) AS TGT_RISK
-INTO #TGT_RISK
-FROM BANCS_SK_CUST_INFO s
-JOIN Customer_Migrate_buffer c
-    ON s.SK_CUST_ID = c.CustomerNo
+FROM BSA_SUB_CUST_FACT src
+JOIN BANCS_SK_CUST_INFO sk
+    ON src.CustomerNo = sk.TS_CUST_ID
+JOIN Customer_Migrate_buffer cm
+    ON sk.SK_CUST_ID = cm.CustomerNo
 JOIN Cust_NP_Migrate_buffer np
-    ON c.CIF_KEY = np.CIF_KEY
-GROUP BY s.TS_CUST_ID;
+    ON cm.CIF_KEY = np.CIF_KEY
+GROUP BY
+    src.CustomerNo,
+    src.HIGHRISK
+HAVING
+    CASE src.HIGHRISK
+        WHEN 'H' THEN 3
+        WHEN 'M' THEN 2
+        WHEN 'L' THEN 1
+    END
+    <>
+    MAX(
+        CASE np.HIGHRISK
+            WHEN 'H' THEN 3
+            WHEN 'M' THEN 2
+            WHEN 'L' THEN 1
+        END
+    );
 
 ⸻
 
-Step 3 找出不一致的客戶
+結果判讀
 
-SELECT
-    s.TS_CUST_ID,
-    s.SRC_RISK,
-    t.TGT_RISK
-FROM #SRC_RISK s
-LEFT JOIN #TGT_RISK t
-    ON s.TS_CUST_ID = t.TS_CUST_ID
-WHERE
-       t.TS_CUST_ID IS NULL
-    OR s.SRC_RISK <> t.TGT_RISK
-ORDER BY s.TS_CUST_ID;
+有資料：
 
-⸻
+TS_CUST_ID	SRC_HIGHRISK	TGT_RISK
+F2351865570	H	1
 
-Step 4 把數字轉回 H/M/L
+表示：
 
-比較好看：
+來源 = H
+Migration後最高 = L
 
-SELECT
-    s.TS_CUST_ID,
-    CASE s.SRC_RISK
-        WHEN 3 THEN 'H'
-        WHEN 2 THEN 'M'
-        WHEN 1 THEN 'L'
-    END AS SRC_HIGHRISK,
-    CASE t.TGT_RISK
-        WHEN 3 THEN 'H'
-        WHEN 2 THEN 'M'
-        WHEN 1 THEN 'L'
-    END AS TGT_HIGHRISK
-FROM #SRC_RISK s
-LEFT JOIN #TGT_RISK t
-    ON s.TS_CUST_ID = t.TS_CUST_ID
-WHERE
-       t.TS_CUST_ID IS NULL
-    OR s.SRC_RISK <> t.TGT_RISK
-ORDER BY s.TS_CUST_ID;
+❌ 有問題
 
 ⸻
 
-Step 5 驗證總數
+沒資料：
 
-PASS 筆數：
+0 rows
 
-SELECT COUNT(*)
-FROM #SRC_RISK s
-JOIN #TGT_RISK t
-    ON s.TS_CUST_ID = t.TS_CUST_ID
-WHERE s.SRC_RISK = t.TGT_RISK;
-
-FAIL 筆數：
-
-SELECT COUNT(*)
-FROM #SRC_RISK s
-LEFT JOIN #TGT_RISK t
-    ON s.TS_CUST_ID = t.TS_CUST_ID
-WHERE
-       t.TS_CUST_ID IS NULL
-    OR s.SRC_RISK <> t.TGT_RISK;
+✅ 全部客戶都符合「取最高風險等級」邏輯
 
 ⸻
 
-最終判斷
+如果你想先驗證你那批遺失客戶（VERIFY..BSA_SUB_CUST_FACT 沒有的客戶），再加個條件：
 
-如果 FAIL 筆數 = 0
+WHERE NOT EXISTS
+(
+    SELECT 1
+    FROM VERIFY..BSA_SUB_CUST_FACT v
+    WHERE v.CustomerNo = src.CustomerNo
+)
 
-代表：
-
-✅ 所有客戶最高風險等級皆正確保留
-
-✅ H 沒被降成 M 或 L
-
-✅ M 沒被降成 L
-
-✅ 多個 CustomerNo 的情況也都有挑到最高風險
-
-這才是完整驗證你描述的 AML Migration 邏輯。
+這樣只驗證你目前正在追的那批客戶，比全庫跑起來快很多。
