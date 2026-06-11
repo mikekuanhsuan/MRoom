@@ -1,47 +1,15 @@
-根據你前面提供的案例，我理解你的驗證目標是：
+如果你的規則是：
 
-驗證規則
+驗證條件
 
-共有戶：
+1. 只驗證共有戶 (TS_CUST_ID 對應多個 SK_CUST_ID)
+2. 只要該 TS_CUST_ID 底下有任何一筆 CUST_RE_NO_FLG IN (2,3)，整個 TS 跳過
+3. 剩下的共有戶，比對：
+    * 來源：所有 SK 客戶的最高風險等級
+    * 目標：BSA_SUB_CUST_FACT.HIGHRISK
+4. 差異筆數必須為 0
 
-TS_CUST_ID
-    ↓
-多個 SK_CUST_ID
-    ↓
-多個 CIF
-    ↓
-多個 HIGHRISK
-
-最終寫入：
-
-BSA_SUB_CUST_FACT.HIGHRISK
-
-必須等於
-
-該 TS_CUST_ID 底下所有 SK 客戶的最高風險等級
-(H > M > L)
-
-⸻
-
-1. 找出所有共有戶
-
-SELECT
-    TS_CUST_ID,
-    COUNT(*) CNT
-FROM BANCS_SK_CUST_INFO
-GROUP BY TS_CUST_ID
-HAVING COUNT(*) > 1;
-
-⸻
-
-2. 驗證明細（推薦交 QA）
-
-這支會列出：
-
-* TS_CUST_ID
-* 來源最高風險
-* BSA實際風險
-* 是否一致
+那完整驗證 SQL 可以寫成：
 
 WITH JOINT_CUST AS
 (
@@ -49,6 +17,13 @@ WITH JOINT_CUST AS
     FROM BANCS_SK_CUST_INFO
     GROUP BY TS_CUST_ID
     HAVING COUNT(*) > 1
+       AND MAX(
+            CASE
+                WHEN CUST_RE_NO_FLG IN (2,3)
+                THEN 1
+                ELSE 0
+            END
+       ) = 0
 ),
 SRC AS
 (
@@ -94,125 +69,84 @@ SELECT
         WHEN 3 THEN 'H'
         WHEN 2 THEN 'M'
         WHEN 1 THEN 'L'
-    END AS TARGET_RISK,
-    CASE
-        WHEN s.SRC_RISK_NUM = t.TGT_RISK_NUM
-        THEN 'PASS'
-        ELSE 'FAIL'
-    END AS RESULT
+    END AS TARGET_RISK
 FROM SRC s
 JOIN TGT t
     ON s.TS_CUST_ID = t.CustomerNo
-ORDER BY RESULT DESC,
-         s.TS_CUST_ID;
+WHERE s.SRC_RISK_NUM <> t.TGT_RISK_NUM
+ORDER BY s.TS_CUST_ID;
 
 ⸻
 
-3. 只抓錯誤資料
+驗證結果
 
-這支最重要。
+如果回傳：
 
-如果回傳 0 筆：
+0 rows
 
-全部共有戶驗證通過
-WITH JOINT_CUST AS
+代表：
+
+PASS
+共有戶(排除 FLG=2、3)
+全部都取到最高風險等級
+沒有任何客戶被降級
+
+⸻
+
+順便驗證總數
+
+共有戶(排除 FLG=2、3)總數：
+
+SELECT COUNT(*)
+FROM
 (
     SELECT TS_CUST_ID
     FROM BANCS_SK_CUST_INFO
     GROUP BY TS_CUST_ID
     HAVING COUNT(*) > 1
-),
-SRC AS
-(
-    SELECT
-        s.TS_CUST_ID,
-        MAX(
-            CASE n.HIGHRISK
-                WHEN 'H' THEN 3
-                WHEN 'M' THEN 2
-                WHEN 'L' THEN 1
+       AND MAX(
+            CASE
+                WHEN CUST_RE_NO_FLG IN (2,3)
+                THEN 1
                 ELSE 0
             END
-        ) AS SRC_RISK_NUM
-    FROM JOINT_CUST j
-    JOIN BANCS_SK_CUST_INFO s
-        ON j.TS_CUST_ID = s.TS_CUST_ID
-    JOIN Customer_Migrate_buffer c
-        ON s.SK_CUST_ID = c.CustomerNo
-    JOIN Cust_NP_Migrate_buffer n
-        ON c.CIF_KEY = n.CIF_KEY
-    GROUP BY s.TS_CUST_ID
-),
-TGT AS
-(
-    SELECT
-        CustomerNo,
-        CASE HIGHRISK
-            WHEN 'H' THEN 3
-            WHEN 'M' THEN 2
-            WHEN 'L' THEN 1
-            ELSE 0
-        END AS TGT_RISK_NUM
-    FROM BSA_SUB_CUST_FACT
-)
-SELECT
-    s.TS_CUST_ID,
-    s.SRC_RISK_NUM,
-    t.TGT_RISK_NUM
-FROM SRC s
-JOIN TGT t
-    ON s.TS_CUST_ID = t.CustomerNo
-WHERE s.SRC_RISK_NUM <> t.TGT_RISK_NUM;
-
-⸻
-
-4. 數量驗證（最終報告用）
-
-共有戶總數：
-
-WITH JOINT_CUST AS
-(
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY TS_CUST_ID
-    HAVING COUNT(*) > 1
-)
-SELECT COUNT(*)
-FROM JOINT_CUST;
+       ) = 0
+) A;
 
 錯誤筆數：
 
--- 第3支SQL
+SELECT COUNT(*)
+FROM
+(
+    -- 上面那支驗證SQL
+) X;
 
-驗證結果應為：
+最終報告可以寫：
 
-共有戶總數 : XXXXX
+共有戶(排除 FLG=2、3)總數 : XXXX
 驗證失敗筆數 : 0
-驗證結論 :
-所有共有戶之 HIGHRISK
-均取其所屬 SK 客戶最高風險等級，
-與規格一致。
+驗證結果 :
+BSA_SUB_CUST_FACT.HIGHRISK
+皆與來源共有戶最高風險等級一致，
+符合規格。
 
-不過我有點懷疑一件事：
+不過有一個地方我想再確認：
 
-你一開始貼的 SQL 是透過
+你前面找共有戶是用
 
-CIF_Migrate_Mapping_TEMP
+SELECT DISTINCT
+       a.CustomerNo,
+       a.cif_key
+FROM BSA_SUB_CUST_FACT a
+INNER JOIN VERIFY..BSA_SUB_CUST_FACT v
+    ON a.CustomerNo = v.CustomerNo
+INNER JOIN CIF_Migrate_Mapping_TEMP b
+    ON a.cif_key = b.NEW_CIF_KEY
 
-去找共有戶，而不是用
+而我這版是用
 
 BANCS_SK_CUST_INFO
 
-如果你們專案定義的「共有戶」其實是從 CIF_Migrate_Mapping_TEMP 判斷，那上面這套驗證來源就錯了。
+判斷共有戶。
 
-你貼一下：
-
-SELECT TOP 20 *
-FROM CIF_Migrate_Mapping_TEMP
-
-以及
-
-SELECT TOP 20 *
-FROM BANCS_SK_CUST_INFO
-
-我可以直接幫你改成符合你們資轉規格的最終版驗證 SQL。
+如果你們專案定義的共有戶是 CIF_Migrate_Mapping_TEMP 篩出來那批客戶，那我可以幫你把 SQL 改成完全依照你現在驗證名單的版本。這樣會比用 BANCS_SK_CUST_INFO COUNT(*) > 1 更準。
