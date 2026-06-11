@@ -1,50 +1,180 @@
-SELECT 
-	top 10 
-	a.CustomerNo,
-	a.cif_key
-FROM BSA_SUB_CUST_FACT a
-INNER JOIN VERIFY..BSA_SUB_CUST_FACT v    ON a.CustomerNo = v.CustomerNo
-INNER JOIN CIF_Migrate_Mapping_TEMP b    ON a.cif_key = b.NEW_CIF_KEY;
+你的邏輯其實是在驗證：
 
+BSA_SUB_CUST_FACT 最終寫入的 HIGHRISK
 
+= 同一個 TS_CUST_ID 底下所有 SK 帳號所對應的最高風險等級
 
-找出 A2730571670 他是共有戶
+你的案例：
 
+TS_CUST_ID	SK_CUST_ID	HIGHRISK
+A2730571670	A273057167	M
+A2730571670	A273057167C	L
+A2730571670	A273057167D	L
 
+最高等級是 M
 
+而最終：
 
-SELECT * FROM BANCS_SK_CUST_INFO WHERE TS_CUST_ID  = 'A2730571670'
+select HIGHRISK
+from BSA_SUB_CUST_FACT
+where CustomerNo='A2730571670'
 
-
-找出 A2730571670 他對應的sk 用戶帳號
-
-
-CUST_NO	SK_CUST_ID	TS_CUST_ID
-0000001000726046	A273057167	A2730571670
-0000001000726046	A273057167C	A2730571670
-0000001000726046	A273057167D	A2730571670
-
-
-找出 sk 用戶帳號 對應的等級
-
-SELECT a.CustomerNo, b.HIGHRISK,* FROM Customer_Migrate_buffer  a
-join  Cust_NP_Migrate_buffer b on a.CIF_KEY = b.CIF_KEY
-WHERE CustomerNo in (
-'A273057167',
-'A273057167C',
-'A273057167D'
-)
-
-CustomerNo	HIGHRISK
-A273057167D	L
-A273057167C	L
-A273057167	M
-
-確認該名A2730571670 用戶 是有選等級高的 嚴格塞選
-select HIGHRISK from BSA_SUB_CUST_FACT WHERE CustomerNo  = 'A2730571670'
+結果：
 
 M
 
+符合邏輯。
 
+⸻
 
-要怎麼用數量來驗證 這邏輯 所有客戶都沒問題
+驗證全部客戶最簡單方式
+
+先把風險等級轉成數字：
+
+H = 3
+M = 2
+L = 1
+
+然後找出每個 TS_CUST_ID 對應 SK 客戶中的最高等級。
+
+⸻
+
+Step1 找出來源應有的最高等級
+
+WITH SRC AS
+(
+    SELECT
+        s.TS_CUST_ID,
+        MAX(
+            CASE n.HIGHRISK
+                WHEN 'H' THEN 3
+                WHEN 'M' THEN 2
+                WHEN 'L' THEN 1
+            END
+        ) AS SRC_RISK
+    FROM BANCS_SK_CUST_INFO s
+    JOIN Customer_Migrate_buffer c
+        ON s.SK_CUST_ID = c.CustomerNo
+    JOIN Cust_NP_Migrate_buffer n
+        ON c.CIF_KEY = n.CIF_KEY
+    GROUP BY s.TS_CUST_ID
+)
+SELECT *
+FROM SRC;
+
+⸻
+
+Step2 取出 BSA 寫入結果
+
+WITH TGT AS
+(
+    SELECT
+        CustomerNo,
+        CASE HIGHRISK
+            WHEN 'H' THEN 3
+            WHEN 'M' THEN 2
+            WHEN 'L' THEN 1
+        END AS TGT_RISK
+    FROM BSA_SUB_CUST_FACT
+)
+SELECT *
+FROM TGT;
+
+⸻
+
+Step3 比對差異
+
+WITH SRC AS
+(
+    SELECT
+        s.TS_CUST_ID,
+        MAX(
+            CASE n.HIGHRISK
+                WHEN 'H' THEN 3
+                WHEN 'M' THEN 2
+                WHEN 'L' THEN 1
+            END
+        ) AS SRC_RISK
+    FROM BANCS_SK_CUST_INFO s
+    JOIN Customer_Migrate_buffer c
+        ON s.SK_CUST_ID = c.CustomerNo
+    JOIN Cust_NP_Migrate_buffer n
+        ON c.CIF_KEY = n.CIF_KEY
+    GROUP BY s.TS_CUST_ID
+),
+TGT AS
+(
+    SELECT
+        CustomerNo,
+        CASE HIGHRISK
+            WHEN 'H' THEN 3
+            WHEN 'M' THEN 2
+            WHEN 'L' THEN 1
+        END AS TGT_RISK
+    FROM BSA_SUB_CUST_FACT
+)
+SELECT
+    s.TS_CUST_ID,
+    s.SRC_RISK,
+    t.TGT_RISK
+FROM SRC s
+JOIN TGT t
+    ON s.TS_CUST_ID = t.CustomerNo
+WHERE s.SRC_RISK <> t.TGT_RISK;
+
+⸻
+
+如果結果 = 0 筆
+
+再驗證數量：
+
+WITH SRC AS
+(
+    SELECT
+        s.TS_CUST_ID,
+        MAX(
+            CASE n.HIGHRISK
+                WHEN 'H' THEN 3
+                WHEN 'M' THEN 2
+                WHEN 'L' THEN 1
+            END
+        ) AS SRC_RISK
+    FROM BANCS_SK_CUST_INFO s
+    JOIN Customer_Migrate_buffer c
+        ON s.SK_CUST_ID = c.CustomerNo
+    JOIN Cust_NP_Migrate_buffer n
+        ON c.CIF_KEY = n.CIF_KEY
+    GROUP BY s.TS_CUST_ID
+)
+SELECT COUNT(*) AS SRC_CNT
+FROM SRC;
+SELECT COUNT(*) AS TGT_CNT
+FROM BSA_SUB_CUST_FACT;
+
+再跑：
+
+-- 差異筆數
+SELECT COUNT(*)
+FROM
+(
+    WITH SRC AS (...)
+    ,TGT AS (...)
+    SELECT s.TS_CUST_ID
+    FROM SRC s
+    JOIN TGT t
+        ON s.TS_CUST_ID=t.CustomerNo
+    WHERE s.SRC_RISK<>t.TGT_RISK
+) X;
+
+驗證標準：
+
+SRC_CNT = TGT_CNT
+差異筆數 = 0
+
+就能證明：
+
+✓ 所有共有戶都取最高風險等級
+✓ 沒有任何客戶被降級
+✓ BSA_SUB_CUST_FACT 寫入結果完全符合規格
+
+其實對 AML 驗證來說，這種「來源最大風險等級 vs 寫入結果」的差異筆數 = 0，就是最乾淨、最好交付給 QA 或客戶的驗證方式。
