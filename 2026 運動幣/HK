@@ -1,15 +1,15 @@
 # ============================================
 # Input Path（固定寫死）
 # ============================================
-$folderPath = "D:\AML_Source\20251114_新光資轉\EXE\data"
+$folderPath = "D:\AML_Source\20251114_新光資轉\EXE"
 # baseline file
-$baselineFile = Join-Path $folderPath "AML_RM_CHECK_SUM.csv"
+$baselineFile = Join-Path $folderPath "AML_CHECK_SUM.csv"
 # ============================================
 # Output / Log
 # ============================================
 $basePath = Get-Location
-$outputFile = Join-Path $basePath "result_rm.csv"
-$logFile    = Join-Path $basePath "SKcheck_rm.log"
+$outputFile = Join-Path $basePath "result.csv"
+$logFile    = Join-Path $basePath "SKcheck.log"
 # ============================================
 # 刪除舊檔
 # ============================================
@@ -44,23 +44,13 @@ if (!(Test-Path $folderPath)) {
 # 目標檔案
 # ============================================
 $fileList = @(
-    "RM_OPEN_CASE.csv",
-    "CDC_OPEN_CASE.csv",
-    "BatchControl.Table.sql",
-    "DOC_CUST_LIST.Table.sql",
-    "SAR_Acct_Info.Table.sql",
-    "SAR_Case_Main.Table.sql",
-    "SAR_Case_Trxn_Branch.Table.sql",
-    "SAR_Case_Trxn_Date_Range.Table.sql",
-    "SAR_Conductor_Info.Table.sql",
-    "SAR_Matched_Scenarios.Table.sql",
-    "SAR_Suspect_Info.Table.sql",
-    "SAR_Trxn_Detail.Table.sql",
-    "SAR_Trxn_Detail_All.Table.sql",
-    "SAR_Trxn_Detail_T1200017.Table.sql",
-    "SAR_Trxn_Detail_T1200162.Table.sql",
-    "SAR_Trxn_Summary.Table.sql",
-    "SK_SAR_SuspiciousActivityCharacteristicsDim_TW_20260415.Table.sql"
+    "AML_Acct.csv",
+    "AML_Cust.csv",
+    "AML_LoadTrxn.csv",
+    "AML_NameProperty_Cust.csv",
+    "AML_NameProperty_RP.csv",
+    "AML_SPEC_lowrisklistgroups.csv",
+    "AML_SPEC_OFAC_SPEC.csv"
 )
 # ============================================
 # 只掃描 EXE 根目錄
@@ -192,7 +182,6 @@ else {
     Write-Host "SUCCESS"
     exit 0
 }
-
 
 
 給我一個適合的ps1檔案名稱
