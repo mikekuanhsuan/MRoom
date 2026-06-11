@@ -1,48 +1,201 @@
+你的目標其實是在驗證：
+
+同一個 TS_CUST_ID 底下可能有多個 CustomerNo（例如 F235186557、F235186557C）
+
+AML Migration 後是否有正確挑選最高風險等級(H > M > L)
+
+先不要急著一次寫成大魔王 SQL，可以拆成幾步驗證。
+
+⸻
+
+Step 1. 找出 Migration 後缺少的 CustomerNo
+
+這個你已經有了：
 
 SELECT DISTINCT
        a.CustomerNo,
-	 a.HIGHRISK,
+       a.HIGHRISK,
        a.cif_key
 FROM BSA_SUB_CUST_FACT a
-INNER JOIN CIF_Migrate_Mapping_TEMP b    ON a.cif_key = b.NEW_CIF_KEY
-LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v    ON a.CustomerNo = v.CustomerNo
+INNER JOIN CIF_Migrate_Mapping_TEMP b
+    ON a.cif_key = b.NEW_CIF_KEY
+LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
+    ON a.CustomerNo = v.CustomerNo
 WHERE v.CustomerNo IS NULL;
 
-CustomerNo	HIGHRISK	cif_key
-N1905543150	L	8FAA86D2-8C18-4C8D-B38C-00060087D303
-L2874952630	M	19609B7E-FCFD-4B3A-8B0A-0006BFF569DB
-O2899158510	M	F6A860A3-75B0-4A46-8C91-001293BC5715
-F2351865570	H	3BD3343D-88F1-43AF-BE0B-001593CAA83D
+例如：
 
+CustomerNo	HIGHRISK
+F2351865570	H
 
+⸻
 
-SELECT * FROM BANCS_SK_CUST_INFO WHERE TS_CUST_ID  = 'F2351865570'
-CUST_NO	SK_CUST_ID	TS_CUST_ID	CUST_RE_NO_FLG
-0000001001843711	F235186557	F2351865570	2
-0000001001843711	F235186557C	F2351865570	1
+Step 2. 找出對應的 TS_CUST_ID
 
+SELECT *
+FROM BANCS_SK_CUST_INFO
+WHERE TS_CUST_ID = 'F2351865570';
 
+結果：
 
-SELECT a.CustomerNo, b.HIGHRISK,* FROM Customer_Migrate_buffer  a
-join  Cust_NP_Migrate_buffer b on a.CIF_KEY = b.CIF_KEY
-WHERE CustomerNo in ('F235186557' ,  'F235186557C')
+SK_CUST_ID
+
+F235186557
+
+F235186557C
+
+代表：
+
+F2351865570
+    ↓
+F235186557
+F235186557C
+
+⸻
+
+Step 3. 看 Migration 後實際有哪些風險等級
+
+SELECT
+    a.CustomerNo,
+    b.HIGHRISK
+FROM Customer_Migrate_buffer a
+JOIN Cust_NP_Migrate_buffer b
+    ON a.CIF_KEY = b.CIF_KEY
+WHERE a.CustomerNo IN
+(
+    'F235186557',
+    'F235186557C'
+);
+
+結果：
 
 CustomerNo	HIGHRISK
 F235186557	H
 F235186557C	L
 
+⸻
 
-確認他是有挑高的等級
+Step 4. 驗證最高等級是否存在
 
+因為來源：
 
+F2351865570 = H
 
+目標：
 
+F235186557 = H
+F235186557C = L
 
+只要 H 還存在：
 
+來源最高 = H
+目標最高 = H
 
+就算正確。
 
-因為有很多個客戶，我要怎麼讞才可以完整驗證
+⸻
 
-可以不用一次寫完 可以分步驟
+Step 5. 大量驗證思路
 
+不要比 CustomerNo。
 
+應該比：
+
+TS_CUST_ID
+↓
+最高風險等級
+
+⸻
+
+先把風險等級轉數值：
+
+CASE HIGHRISK
+    WHEN 'H' THEN 3
+    WHEN 'M' THEN 2
+    WHEN 'L' THEN 1
+END
+
+⸻
+
+來源最高等級
+
+SELECT
+    s.TS_CUST_ID,
+    MAX(
+        CASE a.HIGHRISK
+            WHEN 'H' THEN 3
+            WHEN 'M' THEN 2
+            WHEN 'L' THEN 1
+        END
+    ) AS SRC_RISK
+FROM BSA_SUB_CUST_FACT a
+JOIN BANCS_SK_CUST_INFO s
+    ON a.CustomerNo = s.TS_CUST_ID
+GROUP BY s.TS_CUST_ID;
+
+⸻
+
+目標最高等級
+
+SELECT
+    s.TS_CUST_ID,
+    MAX(
+        CASE b.HIGHRISK
+            WHEN 'H' THEN 3
+            WHEN 'M' THEN 2
+            WHEN 'L' THEN 1
+        END
+    ) AS TGT_RISK
+FROM Customer_Migrate_buffer a
+JOIN Cust_NP_Migrate_buffer b
+    ON a.CIF_KEY = b.CIF_KEY
+JOIN BANCS_SK_CUST_INFO s
+    ON a.CustomerNo = s.SK_CUST_ID
+GROUP BY s.TS_CUST_ID;
+
+⸻
+
+Step 6. 最終比對
+
+把兩邊 Join：
+
+WITH SRC AS
+(
+    ...
+),
+TGT AS
+(
+    ...
+)
+SELECT
+    SRC.TS_CUST_ID,
+    SRC.SRC_RISK,
+    TGT.TGT_RISK
+FROM SRC
+LEFT JOIN TGT
+    ON SRC.TS_CUST_ID = TGT.TS_CUST_ID
+WHERE SRC.SRC_RISK <> TGT.TGT_RISK
+   OR TGT.TS_CUST_ID IS NULL;
+
+如果結果：
+
+0 Rows
+
+代表：
+
+✅ 所有客戶都成功保留最高風險等級
+
+⸻
+
+建議先不要直接做全庫驗證，先做一個中間檢查：
+
+SELECT
+    s.TS_CUST_ID,
+    COUNT(*) AS CNT
+FROM BANCS_SK_CUST_INFO s
+GROUP BY s.TS_CUST_ID
+HAVING COUNT(*) > 1
+
+先確認有多少個 TS_CUST_ID 對應多個 SK_CUST_ID。
+
+把這批「一對多客戶」先抽出來驗證最高風險是否正確，這樣比較容易確認 AML 的邏輯是否真的有做到「取最高風險等級」。
