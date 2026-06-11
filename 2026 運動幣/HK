@@ -1,201 +1,173 @@
-你的目標其實是在驗證：
+了解，你不是要驗證某幾筆，而是要驗證：
 
-同一個 TS_CUST_ID 底下可能有多個 CustomerNo（例如 F235186557、F235186557C）
+所有 Migration 的客戶，如果 TS_CUST_ID 對應多個 SK_CUST_ID(CustomerNo)，是否都有保留來源最高的 HIGHRISK。
 
-AML Migration 後是否有正確挑選最高風險等級(H > M > L)
-
-先不要急著一次寫成大魔王 SQL，可以拆成幾步驗證。
+這種情況建議直接做「來源最高風險 vs 目標最高風險」全量比對。
 
 ⸻
 
-Step 1. 找出 Migration 後缺少的 CustomerNo
-
-這個你已經有了：
-
-SELECT DISTINCT
-       a.CustomerNo,
-       a.HIGHRISK,
-       a.cif_key
-FROM BSA_SUB_CUST_FACT a
-INNER JOIN CIF_Migrate_Mapping_TEMP b
-    ON a.cif_key = b.NEW_CIF_KEY
-LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
-    ON a.CustomerNo = v.CustomerNo
-WHERE v.CustomerNo IS NULL;
+驗證邏輯
 
 例如：
 
-CustomerNo	HIGHRISK
-F2351865570	H
+來源
 
-⸻
+TS_CUST_ID	HIGHRISK
+A1234567890	H
 
-Step 2. 找出對應的 TS_CUST_ID
-
-SELECT *
-FROM BANCS_SK_CUST_INFO
-WHERE TS_CUST_ID = 'F2351865570';
-
-結果：
-
-SK_CUST_ID
-
-F235186557
-
-F235186557C
-
-代表：
-
-F2351865570
-    ↓
-F235186557
-F235186557C
-
-⸻
-
-Step 3. 看 Migration 後實際有哪些風險等級
-
-SELECT
-    a.CustomerNo,
-    b.HIGHRISK
-FROM Customer_Migrate_buffer a
-JOIN Cust_NP_Migrate_buffer b
-    ON a.CIF_KEY = b.CIF_KEY
-WHERE a.CustomerNo IN
-(
-    'F235186557',
-    'F235186557C'
-);
-
-結果：
+Migration後
 
 CustomerNo	HIGHRISK
-F235186557	H
-F235186557C	L
+A123456789	L
+A123456789C	H
+
+最高仍是 H
+
+✅ PASS
 
 ⸻
 
-Step 4. 驗證最高等級是否存在
+另一種：
 
-因為來源：
+來源
 
-F2351865570 = H
+TS_CUST_ID	HIGHRISK
+A1234567890	H
 
-目標：
+Migration後
 
-F235186557 = H
-F235186557C = L
+CustomerNo	HIGHRISK
+A123456789	L
+A123456789C	L
 
-只要 H 還存在：
+最高變成 L
 
-來源最高 = H
-目標最高 = H
-
-就算正確。
-
-⸻
-
-Step 5. 大量驗證思路
-
-不要比 CustomerNo。
-
-應該比：
-
-TS_CUST_ID
-↓
-最高風險等級
+❌ FAIL
 
 ⸻
 
-先把風險等級轉數值：
+Step 1 建立來源最高風險
 
-CASE HIGHRISK
-    WHEN 'H' THEN 3
-    WHEN 'M' THEN 2
-    WHEN 'L' THEN 1
-END
-
-⸻
-
-來源最高等級
-
+IF OBJECT_ID('tempdb..#SRC_RISK') IS NOT NULL
+    DROP TABLE #SRC_RISK;
 SELECT
-    s.TS_CUST_ID,
+    a.CustomerNo AS TS_CUST_ID,
     MAX(
         CASE a.HIGHRISK
             WHEN 'H' THEN 3
             WHEN 'M' THEN 2
             WHEN 'L' THEN 1
+            ELSE 0
         END
     ) AS SRC_RISK
+INTO #SRC_RISK
 FROM BSA_SUB_CUST_FACT a
-JOIN BANCS_SK_CUST_INFO s
-    ON a.CustomerNo = s.TS_CUST_ID
-GROUP BY s.TS_CUST_ID;
+GROUP BY a.CustomerNo;
 
 ⸻
 
-目標最高等級
+Step 2 建立 Migration 後最高風險
 
+透過 BANCS_SK_CUST_INFO 找回原本 TS_CUST_ID
+
+IF OBJECT_ID('tempdb..#TGT_RISK') IS NOT NULL
+    DROP TABLE #TGT_RISK;
 SELECT
     s.TS_CUST_ID,
     MAX(
-        CASE b.HIGHRISK
+        CASE np.HIGHRISK
             WHEN 'H' THEN 3
             WHEN 'M' THEN 2
             WHEN 'L' THEN 1
+            ELSE 0
         END
     ) AS TGT_RISK
-FROM Customer_Migrate_buffer a
-JOIN Cust_NP_Migrate_buffer b
-    ON a.CIF_KEY = b.CIF_KEY
-JOIN BANCS_SK_CUST_INFO s
-    ON a.CustomerNo = s.SK_CUST_ID
+INTO #TGT_RISK
+FROM BANCS_SK_CUST_INFO s
+JOIN Customer_Migrate_buffer c
+    ON s.SK_CUST_ID = c.CustomerNo
+JOIN Cust_NP_Migrate_buffer np
+    ON c.CIF_KEY = np.CIF_KEY
 GROUP BY s.TS_CUST_ID;
 
 ⸻
 
-Step 6. 最終比對
-
-把兩邊 Join：
-
-WITH SRC AS
-(
-    ...
-),
-TGT AS
-(
-    ...
-)
-SELECT
-    SRC.TS_CUST_ID,
-    SRC.SRC_RISK,
-    TGT.TGT_RISK
-FROM SRC
-LEFT JOIN TGT
-    ON SRC.TS_CUST_ID = TGT.TS_CUST_ID
-WHERE SRC.SRC_RISK <> TGT.TGT_RISK
-   OR TGT.TS_CUST_ID IS NULL;
-
-如果結果：
-
-0 Rows
-
-代表：
-
-✅ 所有客戶都成功保留最高風險等級
-
-⸻
-
-建議先不要直接做全庫驗證，先做一個中間檢查：
+Step 3 找出不一致的客戶
 
 SELECT
     s.TS_CUST_ID,
-    COUNT(*) AS CNT
-FROM BANCS_SK_CUST_INFO s
-GROUP BY s.TS_CUST_ID
-HAVING COUNT(*) > 1
+    s.SRC_RISK,
+    t.TGT_RISK
+FROM #SRC_RISK s
+LEFT JOIN #TGT_RISK t
+    ON s.TS_CUST_ID = t.TS_CUST_ID
+WHERE
+       t.TS_CUST_ID IS NULL
+    OR s.SRC_RISK <> t.TGT_RISK
+ORDER BY s.TS_CUST_ID;
 
-先確認有多少個 TS_CUST_ID 對應多個 SK_CUST_ID。
+⸻
 
-把這批「一對多客戶」先抽出來驗證最高風險是否正確，這樣比較容易確認 AML 的邏輯是否真的有做到「取最高風險等級」。
+Step 4 把數字轉回 H/M/L
+
+比較好看：
+
+SELECT
+    s.TS_CUST_ID,
+    CASE s.SRC_RISK
+        WHEN 3 THEN 'H'
+        WHEN 2 THEN 'M'
+        WHEN 1 THEN 'L'
+    END AS SRC_HIGHRISK,
+    CASE t.TGT_RISK
+        WHEN 3 THEN 'H'
+        WHEN 2 THEN 'M'
+        WHEN 1 THEN 'L'
+    END AS TGT_HIGHRISK
+FROM #SRC_RISK s
+LEFT JOIN #TGT_RISK t
+    ON s.TS_CUST_ID = t.TS_CUST_ID
+WHERE
+       t.TS_CUST_ID IS NULL
+    OR s.SRC_RISK <> t.TGT_RISK
+ORDER BY s.TS_CUST_ID;
+
+⸻
+
+Step 5 驗證總數
+
+PASS 筆數：
+
+SELECT COUNT(*)
+FROM #SRC_RISK s
+JOIN #TGT_RISK t
+    ON s.TS_CUST_ID = t.TS_CUST_ID
+WHERE s.SRC_RISK = t.TGT_RISK;
+
+FAIL 筆數：
+
+SELECT COUNT(*)
+FROM #SRC_RISK s
+LEFT JOIN #TGT_RISK t
+    ON s.TS_CUST_ID = t.TS_CUST_ID
+WHERE
+       t.TS_CUST_ID IS NULL
+    OR s.SRC_RISK <> t.TGT_RISK;
+
+⸻
+
+最終判斷
+
+如果 FAIL 筆數 = 0
+
+代表：
+
+✅ 所有客戶最高風險等級皆正確保留
+
+✅ H 沒被降成 M 或 L
+
+✅ M 沒被降成 L
+
+✅ 多個 CustomerNo 的情況也都有挑到最高風險
+
+這才是完整驗證你描述的 AML Migration 邏輯。
