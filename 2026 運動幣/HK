@@ -1,33 +1,74 @@
-有，而且其實你不一定要先建 Temp Table。
+那邏輯就完全反過來了。
 
-你的驗證重點只有一句：
+依你前面貼的資料看起來：
 
-來源 CustomerNo 的 HIGHRISK = Migration 後同一個 TS_CUST_ID 底下所有 CustomerNo 的最高 HIGHRISK
+Cust_NP_Migrate_buffer   ← 來源
+       ↓
+BSA_SUB_CUST_FACT        ← 寫入結果
 
-直接查出異常即可。
+所以驗證應該是：
+
+NP 的最高 HIGHRISK
+
+是否正確寫入到 BSA_SUB_CUST_FACT
+
+而不是拿 BSA_SUB_CUST_FACT 當來源。
+
+⸻
+
+以你的例子：
+
+NP
+
+CustomerNo	HIGHRISK
+F235186557	H
+F235186557C	L
+
+最高：
+
+H
+
+⸻
+
+BSA_SUB_CUST_FACT
+
+CustomerNo	HIGHRISK
+F2351865570	H
+
+結果：
+
+H = H
+
+✅ 正確
+
+⸻
+
+最簡單驗證方式
+
+直接找出寫錯的客戶：
 
 SELECT
-    src.CustomerNo AS TS_CUST_ID,
-    src.HIGHRISK   AS SRC_HIGHRISK,
+    bsa.CustomerNo,
+    bsa.HIGHRISK AS BSA_RISK,
     MAX(
         CASE np.HIGHRISK
             WHEN 'H' THEN 3
             WHEN 'M' THEN 2
             WHEN 'L' THEN 1
         END
-    ) AS TGT_RISK
-FROM BSA_SUB_CUST_FACT src
+    ) AS NP_MAX_RISK
+FROM BSA_SUB_CUST_FACT bsa
 JOIN BANCS_SK_CUST_INFO sk
-    ON src.CustomerNo = sk.TS_CUST_ID
+    ON bsa.CustomerNo = sk.TS_CUST_ID
 JOIN Customer_Migrate_buffer cm
     ON sk.SK_CUST_ID = cm.CustomerNo
 JOIN Cust_NP_Migrate_buffer np
     ON cm.CIF_KEY = np.CIF_KEY
 GROUP BY
-    src.CustomerNo,
-    src.HIGHRISK
+    bsa.CustomerNo,
+    bsa.HIGHRISK
 HAVING
-    CASE src.HIGHRISK
+    CASE bsa.HIGHRISK
         WHEN 'H' THEN 3
         WHEN 'M' THEN 2
         WHEN 'L' THEN 1
@@ -43,37 +84,50 @@ HAVING
 
 ⸻
 
-結果判讀
+結果解讀：
 
-有資料：
-
-TS_CUST_ID	SRC_HIGHRISK	TGT_RISK
-F2351865570	H	1
-
-表示：
-
-來源 = H
-Migration後最高 = L
-
-❌ 有問題
-
-⸻
-
-沒資料：
+沒資料
 
 0 rows
 
-✅ 全部客戶都符合「取最高風險等級」邏輯
+表示：
+
+✅ BSA_SUB_CUST_FACT 的 HIGHRISK 都等於 NP 的最高 HIGHRISK
 
 ⸻
 
-如果你想先驗證你那批遺失客戶（VERIFY..BSA_SUB_CUST_FACT 沒有的客戶），再加個條件：
+有資料
 
-WHERE NOT EXISTS
-(
-    SELECT 1
-    FROM VERIFY..BSA_SUB_CUST_FACT v
-    WHERE v.CustomerNo = src.CustomerNo
-)
+例如：
 
-這樣只驗證你目前正在追的那批客戶，比全庫跑起來快很多。
+CustomerNo	BSA_RISK	NP_MAX_RISK
+F2351865570	M	3
+
+代表：
+
+NP最高 = H
+BSA寫成 = M
+
+❌ 寫入錯誤
+
+⸻
+
+如果你現在是在驗證：
+
+VERIFY..BSA_SUB_CUST_FACT
+
+跟
+
+BSA_SUB_CUST_FACT
+
+資轉前後是否一致，
+
+那又是另一個驗證邏輯，我可以幫你把整個資料流整理成：
+
+Cust_NP_Migrate_buffer
+        ↓
+BSA_SUB_CUST_FACT
+        ↓
+VERIFY..BSA_SUB_CUST_FACT
+
+然後告訴你每一段該怎麼驗。現在看起來你的案例就是這種流程。
