@@ -1,5 +1,102 @@
-select HIGHRISK from VERIFY..BSA_SUB_CUST_FACT 
+了解，你現在的「純新光」定義又多了一個條件：
 
-這邊純新光的要再加上
-CustomerNo 不再VERIFY..BSA_SUB_CUST_FACT  裏頭
+純新光條件
 
+1. CUST_RE_NO_FLG IN (2,3)
+2. 計算風險時只看 FLG=2、3 的 SK
+3. CustomerNo 不存在於 VERIFY..BSA_SUB_CUST_FACT
+
+也就是：
+
+NOT EXISTS
+(
+    SELECT 1
+    FROM VERIFY..BSA_SUB_CUST_FACT v
+    WHERE v.CustomerNo = s.TS_CUST_ID
+)
+
+⸻
+
+完整版可以這樣寫：
+
+WITH PURE_SK AS
+(
+    SELECT DISTINCT
+           s.TS_CUST_ID
+    FROM BANCS_SK_CUST_INFO s
+    WHERE s.CUST_RE_NO_FLG IN (2,3)
+      AND NOT EXISTS
+      (
+          SELECT 1
+          FROM VERIFY..BSA_SUB_CUST_FACT v
+          WHERE v.CustomerNo = s.TS_CUST_ID
+      )
+),
+SRC AS
+(
+    SELECT
+        s.TS_CUST_ID,
+        MAX(
+            CASE n.HIGHRISK
+                WHEN 'H' THEN 3
+                WHEN 'M' THEN 2
+                WHEN 'L' THEN 1
+                ELSE 0
+            END
+        ) AS SRC_RISK_NUM
+    FROM PURE_SK p
+    JOIN BANCS_SK_CUST_INFO s
+      ON p.TS_CUST_ID = s.TS_CUST_ID
+     AND s.CUST_RE_NO_FLG IN (2,3)
+    JOIN Customer_Migrate_buffer c
+      ON s.SK_CUST_ID = c.CustomerNo
+    JOIN Cust_NP_Migrate_buffer n
+      ON c.CIF_KEY = n.CIF_KEY
+    GROUP BY s.TS_CUST_ID
+),
+TGT AS
+(
+    SELECT
+        CustomerNo,
+        CASE HIGHRISK
+            WHEN 'H' THEN 3
+            WHEN 'M' THEN 2
+            WHEN 'L' THEN 1
+            ELSE 0
+        END AS TGT_RISK_NUM
+    FROM BSA_SUB_CUST_FACT
+)
+SELECT
+    s.TS_CUST_ID,
+    CASE s.SRC_RISK_NUM
+        WHEN 3 THEN 'H'
+        WHEN 2 THEN 'M'
+        WHEN 1 THEN 'L'
+    END AS SOURCE_RISK,
+    CASE t.TGT_RISK_NUM
+        WHEN 3 THEN 'H'
+        WHEN 2 THEN 'M'
+        WHEN 1 THEN 'L'
+    END AS TARGET_RISK
+FROM SRC s
+JOIN TGT t
+    ON s.TS_CUST_ID = t.CustomerNo
+WHERE s.SRC_RISK_NUM <> t.TGT_RISK_NUM
+ORDER BY s.TS_CUST_ID;
+
+⸻
+
+如果你只是想先確認「純新光名單有多少人」，可以先跑：
+
+SELECT DISTINCT
+       s.TS_CUST_ID
+FROM BANCS_SK_CUST_INFO s
+WHERE s.CUST_RE_NO_FLG IN (2,3)
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM VERIFY..BSA_SUB_CUST_FACT v
+      WHERE v.CustomerNo = s.TS_CUST_ID
+  );
+
+這樣就能看到實際進入驗證的純新光客戶數。
