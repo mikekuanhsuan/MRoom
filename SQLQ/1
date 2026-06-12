@@ -4,8 +4,9 @@ SELECT TS_CUST_ID,
 
 FROM BANCS_SK_CUST_INFO
 
-WHERE CUST_RE_NO_FLG IN ('2','3')
-
 GROUP BY TS_CUST_ID
 
 HAVING COUNT(*) > 1;
+
+
+我想找出多個 但我又想要同一個 TS_CUST_ID 裡面有包含FLG = 2或3的
