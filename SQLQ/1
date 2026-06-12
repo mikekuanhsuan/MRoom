@@ -1,6 +1,6 @@
-我要update CustomerNo = 'JENCH01SC'  改成  'C'
-
-
-SELECT RecordStatus FROM BSA_SUB_CUST_FACT a
-JOIN  PB_CUSTOMER_FACT b on a.CIF_KEY = b.CIF_KEY
-WHERE a.CustomerNo = 'JENCH01SC'
+UPDATE a
+SET a.RecordStatus = 'C'
+FROM BSA_SUB_CUST_FACT a
+JOIN PB_CUSTOMER_FACT b
+    ON a.CIF_KEY = b.CIF_KEY
+WHERE a.CustomerNo = 'JENCH01SC';
