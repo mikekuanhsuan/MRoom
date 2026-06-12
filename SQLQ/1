@@ -1,6 +1,6 @@
-沒問題，給你最精簡的 3 句版，方便你直接貼上：
-> **工作說明：修正低風險客戶 SQL 產生器之日期篩選邏輯**
->  1. **變更目的**：將 SQL 腳本中的審查日期（ReviewDt）篩選基準，由「供給月份」改為「該月份對應之下次審查日」。
->  2. **技術修正**：於程式中導入 nextCheckMap 對照表，動態取出對應的審查年月，並自動計算該月月底日。
->  3. **預期效益**：確保產出的 SQL 審查區間精確符合業務對照邏輯，避免人工調整造成的派案資料錯漏。
-> 
+我要update CustomerNo = 'JENCH01SC'  改成  'C'
+
+
+SELECT RecordStatus FROM BSA_SUB_CUST_FACT a
+JOIN  PB_CUSTOMER_FACT b on a.CIF_KEY = b.CIF_KEY
+WHERE a.CustomerNo = 'JENCH01SC'
