@@ -1,4 +1,6 @@
-我就是要帶入指定的共有戶!!
+懂了，你不是要比全部客戶。
+
+你是要比這批：
 
 WITH CUST_LIST AS
 (
@@ -9,3 +11,75 @@ WITH CUST_LIST AS
     SELECT TS_CUST_ID
     FROM BANCS_SK_CUST_INFO
     WHERE CUST_RE_NO_FLG IN ('2','3')
+)
+
+也就是：
+
+純新光戶 (只有 Flag=1，沒有 Flag=2、3)
+
+然後驗證這些客戶在：
+
+VERIFY..BSA_SUB_CUST_FACT
+
+與
+
+BSA_SUB_CUST_FACT
+
+的 IsSARFiled 是否一致。
+
+直接這樣寫：
+
+WITH CUST_LIST AS
+(
+    SELECT TS_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE CUST_RE_NO_FLG = '1'
+    EXCEPT
+    SELECT TS_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE CUST_RE_NO_FLG IN ('2','3')
+)
+SELECT
+    c.TS_CUST_ID,
+    CAST(v.IsSARFiled AS INT) AS VERIFY_IsSARFiled,
+    CAST(b.IsSARFiled AS INT) AS BSA_IsSARFiled,
+    CASE
+        WHEN ISNULL(CAST(v.IsSARFiled AS INT),0)
+           = ISNULL(CAST(b.IsSARFiled AS INT),0)
+        THEN 'Same'
+        ELSE 'Different'
+    END AS CompareResult
+FROM CUST_LIST c
+LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
+    ON c.TS_CUST_ID = v.CustomerNo
+LEFT JOIN BSA_SUB_CUST_FACT b
+    ON c.TS_CUST_ID = b.CustomerNo
+ORDER BY c.TS_CUST_ID;
+
+⸻
+
+如果你只想看有問題的：
+
+WITH CUST_LIST AS
+(
+    SELECT TS_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE CUST_RE_NO_FLG = '1'
+    EXCEPT
+    SELECT TS_CUST_ID
+    FROM BANCS_SK_CUST_INFO
+    WHERE CUST_RE_NO_FLG IN ('2','3')
+)
+SELECT
+    c.TS_CUST_ID,
+    CAST(v.IsSARFiled AS INT) AS VERIFY_IsSARFiled,
+    CAST(b.IsSARFiled AS INT) AS BSA_IsSARFiled
+FROM CUST_LIST c
+LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
+    ON c.TS_CUST_ID = v.CustomerNo
+LEFT JOIN BSA_SUB_CUST_FACT b
+    ON c.TS_CUST_ID = b.CustomerNo
+WHERE ISNULL(CAST(v.IsSARFiled AS INT),0)
+   <> ISNULL(CAST(b.IsSARFiled AS INT),0);
+
+如果這支回傳 0 筆，就表示這批共有戶（純 Flag=1 客戶）的 IsSARFiled 完全沒被改到。 ✅
