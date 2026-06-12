@@ -1,24 +1,101 @@
-SELECT CustomerNo,IsSARFiled FROM BSA_SUB_CUST_FACT WHERE CustomerNo
-in
+你現在是在驗證：
+
+VERIFY..BSA_SUB_CUST_FACT 有，但實際資轉後 BSA_SUB_CUST_FACT 沒有的客戶，
+
+確認他們的 IsSARFiled 是否一致（或是否被錯誤修改）。
+
+其實可以直接做成一張比對表：
+
+WITH MISSING_CUST AS
 (
-	SELECT CustomerNo
-	FROM VERIFY..BSA_SUB_CUST_FACT
-	EXCEPT
-	SELECT CustomerNo
-	FROM BSA_SUB_CUST_FACT a
-	JOIN CIF_Migrate_Mapping_TEMP b    ON a.cif_key = b.NEW_CIF_KEY
+    SELECT CustomerNo
+    FROM VERIFY..BSA_SUB_CUST_FACT
+    EXCEPT
+    SELECT a.CustomerNo
+    FROM BSA_SUB_CUST_FACT a
+    JOIN CIF_Migrate_Mapping_TEMP b
+        ON a.cif_key = b.NEW_CIF_KEY
 )
+SELECT
+    v.CustomerNo,
+    v.IsSARFiled AS VERIFY_IsSARFiled,
+    b.IsSARFiled AS BSA_IsSARFiled,
+    CASE
+        WHEN ISNULL(v.IsSARFiled,0) = ISNULL(b.IsSARFiled,0)
+            THEN 'Same'
+        ELSE 'Different'
+    END AS CompareResult
+FROM MISSING_CUST m
+LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
+    ON m.CustomerNo = v.CustomerNo
+LEFT JOIN BSA_SUB_CUST_FACT b
+    ON m.CustomerNo = b.CustomerNo
+ORDER BY m.CustomerNo;
 
-SELECT CustomerNo,IsSARFiled FROM VERIFY..BSA_SUB_CUST_FACT WHERE CustomerNo
-in
-(
-	SELECT CustomerNo
-	FROM VERIFY..BSA_SUB_CUST_FACT
-	EXCEPT
-	SELECT CustomerNo
-	FROM BSA_SUB_CUST_FACT a
-	JOIN CIF_Migrate_Mapping_TEMP b    ON a.cif_key = b.NEW_CIF_KEY
-)
+⸻
 
-我要驗正他們沒有變 需要做一個表
+不過看你的 SQL：
 
+SELECT CustomerNo
+FROM VERIFY..BSA_SUB_CUST_FACT
+EXCEPT
+SELECT a.CustomerNo
+FROM BSA_SUB_CUST_FACT a
+JOIN CIF_Migrate_Mapping_TEMP b
+    ON a.cif_key = b.NEW_CIF_KEY
+
+這個 EXCEPT 找出來的客戶理論上就是：
+
+VERIFY 有
+BSA 沒有
+
+既然 BSA 沒有，
+
+LEFT JOIN BSA_SUB_CUST_FACT b
+
+得到的 BSA_IsSARFiled 會全部是 NULL。
+
+所以其實沒有東西可以比較。
+
+⸻
+
+如果你的目的是：
+
+驗證同一個 CustomerNo 的 IsSARFiled 是否一致
+
+應該直接：
+
+SELECT
+    v.CustomerNo,
+    v.IsSARFiled AS VERIFY_IsSARFiled,
+    b.IsSARFiled AS BSA_IsSARFiled,
+    CASE
+        WHEN ISNULL(v.IsSARFiled,0) = ISNULL(b.IsSARFiled,0)
+            THEN 'Same'
+        ELSE 'Different'
+    END AS CompareResult
+FROM VERIFY..BSA_SUB_CUST_FACT v
+JOIN BSA_SUB_CUST_FACT b
+    ON v.CustomerNo = b.CustomerNo
+ORDER BY v.CustomerNo;
+
+或只看不一致：
+
+SELECT
+    v.CustomerNo,
+    v.IsSARFiled AS VERIFY_IsSARFiled,
+    b.IsSARFiled AS BSA_IsSARFiled
+FROM VERIFY..BSA_SUB_CUST_FACT v
+JOIN BSA_SUB_CUST_FACT b
+    ON v.CustomerNo = b.CustomerNo
+WHERE ISNULL(v.IsSARFiled,0) <> ISNULL(b.IsSARFiled,0);
+
+⸻
+
+你這邊我有點不確定驗證目標：
+
+1. 驗證 EXCEPT 找出來那批漏轉客戶的 IsSARFiled
+2. 驗證兩張表相同 CustomerNo 的 IsSARFiled 是否一致
+3. 驗證 CIF Merge 後 IsSARFiled 是否被正確保留
+
+如果是第 3 種（看起來比較像你最近一直在做的資轉驗證），我可以幫你直接寫出完整驗證 SQL。
