@@ -1,16 +1,3 @@
-你的需求我理解成：
-
-1. 找出同一個 TS_CUST_ID 底下有多個 SK_CUST_ID，且包含 FLG=2/3 的客戶。
-2. 從 Cust_NP_Migrate_buffer 找出這些 SK 對應的 IsSARFiled。
-3. 同一個 TS 底下可能有多個 SK，因此取 最高的 IsSARFiled。
-4. 再跟 BSA_SUB_CUST_FACT 裡該 TS_CUST_ID 的 IsSARFiled 比較。
-5. 輸出：
-    * TS_CUST_ID
-    * NP來源最高 IsSARFiled
-    * BSA_SUB_CUST_FACT IsSARFiled
-    * 是否不同
-
-可以直接寫成：
 
 WITH TARGET_TS AS
 (
@@ -29,7 +16,7 @@ NP_RESULT AS
 (
     SELECT
         b.TS_CUST_ID,
-        MAX(ISNULL(c.IsSARFiled,0)) AS NP_IsSARFiled
+        MAX(CAST(ISNULL(c.IsSARFiled,0) AS INT)) AS NP_IsSARFiled
     FROM BANCS_SK_CUST_INFO b
     INNER JOIN Customer_Migrate_buffer m
         ON b.SK_CUST_ID = m.CustomerNo
@@ -56,16 +43,5 @@ LEFT JOIN BSA_SUB_CUST_FACT f
     ON n.TS_CUST_ID = f.CustomerNo
 ORDER BY n.TS_CUST_ID;
 
-範例結果
 
-TS_CUST_ID	NP_IsSARFiled	BSA_IsSARFiled	CompareResult
-T001	1	1	Same
-T002	1	0	Different
-T003	0	0	Same
-
-如果 IsSARFiled 只有 0 / 1，MAX() 就代表：
-
-* 只要任何一個 SK = 1 → TS 取 1
-* 全部都是 0 → TS 取 0
-
-這通常就是資轉驗證最合理的做法。
+註解一下
