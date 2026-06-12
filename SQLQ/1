@@ -20,3 +20,8 @@ EXCEPT
 SELECT CustomerNo
 FROM BSA_SUB_CUST_FACT a
 JOIN CIF_Migrate_Mapping_TEMP b    ON a.cif_key = b.NEW_CIF_KEY
+
+
+
+-- 驗證同一個 CustomerNo 的 HIGHRISK 是否不一
+這也幫我改
