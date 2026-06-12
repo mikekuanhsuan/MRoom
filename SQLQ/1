@@ -1,77 +1,8 @@
-如果你的意思是：
 
-1. 先找出 只存在 CUST_RE_NO_FLG='1'，但不存在於 2、3 的 TS_CUST_ID
-2. 再確認這些 TS_CUST_ID 是否同時存在於
-    * BSA_SUB_CUST_FACT
-    * VERIFY..BSA_SUB_CUST_FACT
+那我要找
+CUST_RE_NO_FLG 有 2或3 然後也有1的
 
-可以這樣寫：
+TS_CUST_ID
 
-WITH CUST_LIST AS
-(
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG = '1'
-    EXCEPT
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG IN ('2','3')
-)
-SELECT
-    c.TS_CUST_ID,
-    b.CustomerNo AS BSA_CustomerNo,
-    v.CustomerNo AS VERIFY_CustomerNo
-FROM CUST_LIST c
-LEFT JOIN BSA_SUB_CUST_FACT b
-    ON c.TS_CUST_ID = b.CustomerNo
-LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
-    ON c.TS_CUST_ID = v.CustomerNo;
 
-⸻
-
-如果只是要看 有存在於兩邊的客戶：
-
-WITH CUST_LIST AS
-(
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG = '1'
-    EXCEPT
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG IN ('2','3')
-)
-SELECT DISTINCT
-       c.TS_CUST_ID
-FROM CUST_LIST c
-INNER JOIN BSA_SUB_CUST_FACT b
-    ON c.TS_CUST_ID = b.CustomerNo
-INNER JOIN VERIFY..BSA_SUB_CUST_FACT v
-    ON c.TS_CUST_ID = v.CustomerNo;
-
-⸻
-
-如果你是要驗證這批客戶在兩張表的風險等級是否一致，可以直接帶出欄位比較：
-
-WITH CUST_LIST AS
-(
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG = '1'
-    EXCEPT
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG IN ('2','3')
-)
-SELECT
-    c.TS_CUST_ID,
-    b.HIGHRISK AS SRC_HIGHRISK,
-    v.HIGHRISK AS VERIFY_HIGHRISK
-FROM CUST_LIST c
-INNER JOIN BSA_SUB_CUST_FACT b
-    ON c.TS_CUST_ID = b.CustomerNo
-INNER JOIN VERIFY..BSA_SUB_CUST_FACT v
-    ON c.TS_CUST_ID = v.CustomerNo
-WHERE ISNULL(b.HIGHRISK,'') <> ISNULL(v.HIGHRISK,'');
-
-這樣會直接抓出 這批純 Flag=1 客戶中，來源與驗證環境 HIGHRISK 不一致的人。如果你是在做 AML 資轉驗證，這個通常比較有價值。
+然後不再 BSA_SUB_CUST_FACT 裡面
