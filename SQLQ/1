@@ -1,107 +1,24 @@
-幫你加上詳細註解版：
-
-/* ==========================================================
-   Step 1
-   找出：
-   1. 同一個 TS_CUST_ID 出現超過 1 筆
-   2. 且至少有一筆 CUST_RE_NO_FLG = 2 或 3
-   ========================================================== */
-WITH TARGET_TS AS
+SELECT CustomerNo,IsSARFiled FROM BSA_SUB_CUST_FACT WHERE CustomerNo
+in
 (
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    GROUP BY TS_CUST_ID
-    HAVING COUNT(*) > 1
-       AND SUM(
-                CASE
-                    WHEN CUST_RE_NO_FLG IN ('2','3')
-                        THEN 1
-                    ELSE 0
-                END
-              ) > 0
-),
-/* ==========================================================
-   Step 2
-   將同一個 TS_CUST_ID 底下所有 SK_CUST_ID
-   對應到 NP 資料來源的 IsSARFiled
-   因為一個 TS 可能對應多個 SK
-   所以取最高值：
-   只要其中一個 SK 的 IsSARFiled = 1
-   則整個 TS 視為 1
-   ========================================================== */
-NP_RESULT AS
-(
-    SELECT
-        b.TS_CUST_ID,
-        -- 將 bit 轉成 int 後取最大值
-        MAX(CAST(ISNULL(c.IsSARFiled,0) AS INT))
-            AS NP_IsSARFiled
-    FROM BANCS_SK_CUST_INFO b
-        -- SK -> CIF_KEY 對應表
-        INNER JOIN Customer_Migrate_buffer m
-            ON b.SK_CUST_ID = m.CustomerNo
-        -- NP來源資料
-        INNER JOIN Cust_NP_Migrate_buffer c
-            ON m.CIF_KEY = c.CIF_KEY
-    WHERE b.TS_CUST_ID IN
-    (
-        SELECT TS_CUST_ID
-        FROM TARGET_TS
-    )
-    GROUP BY b.TS_CUST_ID
+	SELECT CustomerNo
+	FROM VERIFY..BSA_SUB_CUST_FACT
+	EXCEPT
+	SELECT CustomerNo
+	FROM BSA_SUB_CUST_FACT a
+	JOIN CIF_Migrate_Mapping_TEMP b    ON a.cif_key = b.NEW_CIF_KEY
 )
-/* ==========================================================
-   Step 3
-   與資轉後 BSA_SUB_CUST_FACT 比較
-   輸出：
-   - TS_CUST_ID
-   - NP來源最高 IsSARFiled
-   - BSA_SUB_CUST_FACT IsSARFiled
-   - 是否一致
-   ========================================================== */
-SELECT
-    n.TS_CUST_ID,
-    -- NP來源整理後結果
-    n.NP_IsSARFiled,
-    -- 資轉後結果
-    ISNULL(f.IsSARFiled,0) AS BSA_IsSARFiled,
-    -- 比較結果
-    CASE
-        WHEN n.NP_IsSARFiled = ISNULL(f.IsSARFiled,0)
-            THEN 'Same'
-        ELSE 'Different'
-    END AS CompareResult
-FROM NP_RESULT n
-    LEFT JOIN BSA_SUB_CUST_FACT f
-        ON n.TS_CUST_ID = f.CustomerNo
-ORDER BY n.TS_CUST_ID;
 
-這支 SQL 的驗證邏輯
+SELECT CustomerNo,IsSARFiled FROM VERIFY..BSA_SUB_CUST_FACT WHERE CustomerNo
+in
+(
+	SELECT CustomerNo
+	FROM VERIFY..BSA_SUB_CUST_FACT
+	EXCEPT
+	SELECT CustomerNo
+	FROM BSA_SUB_CUST_FACT a
+	JOIN CIF_Migrate_Mapping_TEMP b    ON a.cif_key = b.NEW_CIF_KEY
+)
 
-TS_CUST_ID
-    ↓
-找出有多個 SK 的客戶
-    ↓
-SK_CUST_ID
-    ↓
-Customer_Migrate_buffer
-    ↓
-CIF_KEY
-    ↓
-Cust_NP_Migrate_buffer
-    ↓
-取得所有 IsSARFiled
-    ↓
-取 MAX (只要有一個 1 就是 1)
-    ↓
-得到 TS 的 NP_IsSARFiled
-    ↓
-比對 BSA_SUB_CUST_FACT.IsSARFiled
-    ↓
-輸出 Same / Different
+我要驗正他們沒有變 需要做一個表
 
-如果你最後只想看有問題的客戶，可以在最外層再加：
-
-WHERE n.NP_IsSARFiled <> ISNULL(f.IsSARFiled,0)
-
-這樣直接只剩下 Different 的名單。
