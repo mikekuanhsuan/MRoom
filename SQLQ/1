@@ -1,52 +1,71 @@
-SELECT IsSARFiled FROM Cust_NP_Migrate_buffer WHERE CIF_KEY 
-in
+你的需求我理解成：
+
+1. 找出同一個 TS_CUST_ID 底下有多個 SK_CUST_ID，且包含 FLG=2/3 的客戶。
+2. 從 Cust_NP_Migrate_buffer 找出這些 SK 對應的 IsSARFiled。
+3. 同一個 TS 底下可能有多個 SK，因此取 最高的 IsSARFiled。
+4. 再跟 BSA_SUB_CUST_FACT 裡該 TS_CUST_ID 的 IsSARFiled 比較。
+5. 輸出：
+    * TS_CUST_ID
+    * NP來源最高 IsSARFiled
+    * BSA_SUB_CUST_FACT IsSARFiled
+    * 是否不同
+
+可以直接寫成：
+
+WITH TARGET_TS AS
 (
-
-
-SELECT CIF_KEY FROM Customer_Migrate_buffer WHERE CustomerNo 
-in
-(
-	SELECT SK_CUST_ID FROM BANCS_SK_CUST_INFO WHERE TS_CUST_ID 
-	in
-	( 
-		SELECT TS_CUST_ID
-		FROM BANCS_SK_CUST_INFO
-		GROUP BY TS_CUST_ID
-		HAVING COUNT(*) > 1
-		AND SUM(
-				CASE
-					WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1
-					ELSE 0
-				END
-				) > 0
-	)
-)
-
-)
-
----
-
-SELECT CustomerNo,IsSARFiled FROM BSA_SUB_CUST_FACT WHERE CustomerNo 
-in 
-(
-    -- 17049
     SELECT TS_CUST_ID
     FROM BANCS_SK_CUST_INFO
     GROUP BY TS_CUST_ID
     HAVING COUNT(*) > 1
-    AND SUM(
-            CASE
-                WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1
-                ELSE 0
-            END
-            ) > 0;
+       AND SUM(
+                CASE
+                    WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1
+                    ELSE 0
+                END
+              ) > 0
+),
+NP_RESULT AS
+(
+    SELECT
+        b.TS_CUST_ID,
+        MAX(ISNULL(c.IsSARFiled,0)) AS NP_IsSARFiled
+    FROM BANCS_SK_CUST_INFO b
+    INNER JOIN Customer_Migrate_buffer m
+        ON b.SK_CUST_ID = m.CustomerNo
+    INNER JOIN Cust_NP_Migrate_buffer c
+        ON m.CIF_KEY = c.CIF_KEY
+    WHERE b.TS_CUST_ID IN
+    (
+        SELECT TS_CUST_ID
+        FROM TARGET_TS
+    )
+    GROUP BY b.TS_CUST_ID
 )
+SELECT
+    n.TS_CUST_ID,
+    n.NP_IsSARFiled,
+    ISNULL(f.IsSARFiled,0) AS BSA_IsSARFiled,
+    CASE
+        WHEN n.NP_IsSARFiled = ISNULL(f.IsSARFiled,0)
+            THEN 'Same'
+        ELSE 'Different'
+    END AS CompareResult
+FROM NP_RESULT n
+LEFT JOIN BSA_SUB_CUST_FACT f
+    ON n.TS_CUST_ID = f.CustomerNo
+ORDER BY n.TS_CUST_ID;
 
+範例結果
 
----
+TS_CUST_ID	NP_IsSARFiled	BSA_IsSARFiled	CompareResult
+T001	1	1	Same
+T002	1	0	Different
+T003	0	0	Same
 
-因為1個TS 有對應多個SK
+如果 IsSARFiled 只有 0 / 1，MAX() 就代表：
 
-我現在要做的是把多個SK 對應到的IsSARFiled 找出最高的 整理後 跟他對應的TS 的IsSARFiled 做比較
+* 只要任何一個 SK = 1 → TS 取 1
+* 全部都是 0 → TS 取 0
 
-做成一個表然後多一個欄位寫是否有不同
+這通常就是資轉驗證最合理的做法。
