@@ -1,17 +1,10 @@
-如果 SAR 也要改成只驗證你那批 純台新戶：
+加一個條件 CustomerNo 有在 Customer_Migrate_buffer 裡面
 
-SELECT CustomerNo
-FROM VERIFY..BSA_SUB_CUST_FACT
-EXCEPT
-SELECT a.CustomerNo
-FROM BSA_SUB_CUST_FACT a
-JOIN CIF_Migrate_Mapping_TEMP b
-    ON a.cif_key = b.NEW_CIF_KEY
+SELECT CustomerNo FROM Customer_Migrate_buffer 
 
-那改成這樣：
-
-驗證結果表
-
+先幫我改這個
+-- 純台新
+-- 預期結果，風險等級不變。
 WITH PURE_TS AS
 (
     SELECT CustomerNo
@@ -24,25 +17,20 @@ WITH PURE_TS AS
 )
 SELECT
     p.CustomerNo,
-    v.IsSARFiled AS VERIFY_IsSARFiled,
-    b.IsSARFiled AS BSA_IsSARFiled,
+    v.HIGHRISK AS VERIFY_HIGHRISK,
+    b.HIGHRISK AS BSA_HIGHRISK,
     CASE
-        WHEN ISNULL(CAST(v.IsSARFiled AS INT),0)
-           = ISNULL(CAST(b.IsSARFiled AS INT),0)
-        THEN 'Same'
+        WHEN ISNULL(v.HIGHRISK,0) = ISNULL(b.HIGHRISK,0)
+            THEN 'Same'
         ELSE 'Different'
     END AS CompareResult
 FROM PURE_TS p
-LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
-    ON p.CustomerNo = v.CustomerNo
-LEFT JOIN BSA_SUB_CUST_FACT b
-    ON p.CustomerNo = b.CustomerNo
+LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v    ON p.CustomerNo = v.CustomerNo
+LEFT JOIN BSA_SUB_CUST_FACT b    ON p.CustomerNo = b.CustomerNo
 ORDER BY p.CustomerNo;
 
-⸻
 
-只看有差異的客戶
-
+-- 驗證同一個 CustomerNo 的 HIGHRISK 是否不一致
 WITH PURE_TS AS
 (
     SELECT CustomerNo
@@ -55,18 +43,10 @@ WITH PURE_TS AS
 )
 SELECT
     p.CustomerNo,
-    v.IsSARFiled AS VERIFY_IsSARFiled,
-    b.IsSARFiled AS BSA_IsSARFiled
+    v.HIGHRISK AS VERIFY_HIGHRISK,
+    b.HIGHRISK AS BSA_HIGHRISK
 FROM PURE_TS p
-LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
-    ON p.CustomerNo = v.CustomerNo
-LEFT JOIN BSA_SUB_CUST_FACT b
-    ON p.CustomerNo = b.CustomerNo
-WHERE ISNULL(CAST(v.IsSARFiled AS INT),0)
-   <> ISNULL(CAST(b.IsSARFiled AS INT),0)
+LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v    ON p.CustomerNo = v.CustomerNo
+LEFT JOIN BSA_SUB_CUST_FACT b    ON p.CustomerNo = b.CustomerNo
+WHERE ISNULL(v.HIGHRISK,0) <> ISNULL(b.HIGHRISK,0)
 ORDER BY p.CustomerNo;
-
-如果第二支查詢結果是 0 筆，就代表：
-
-✅ 純台新戶的 IsSARFiled 資轉前後完全一致。
-✅ 沒有因為 Merge 或 Mapping 被改掉。
