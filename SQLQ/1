@@ -1,34 +1,9 @@
-你這段 SQL 有幾個問題：
+剛剛打錯了ˊ
 
-1. WITH 不能直接寫在 IN (...) 裡面。
-2. 最後一句：
 
-SELECT CustomerNo,IsSARFiled FROM BANCS_SK_CUST_INFO
-
-看起來不對，因為你前面都在用 TS_CUST_ID，而且 BANCS_SK_CUST_INFO 應該沒有 IsSARFiled 欄位。
-
-⸻
-
-如果你的驗證邏輯是：
-
-Step 1
-
-找出
-
-只有 FLG=1
-沒有 FLG=2、3
-
-的 TS_CUST_ID
-
-Step 2
-
-確認這些客戶在 VERIFY 的 BSA_SUB_CUST_FACT 裡 IsSARFiled=1
-
-Step 3
-
-查看這些客戶在來源資料(SK/NP)的 SAR 狀態是否也是 1
-
-那我建議直接做成比對表：
+SELECT IsSARFiled FROM VERIFY..BSA_SUB_CUST_FACT WHERE CustomerNo 
+in 
+(
 
 WITH CUST_LIST AS
 (
@@ -42,74 +17,27 @@ WITH CUST_LIST AS
 )
 SELECT
     c.TS_CUST_ID,
-    v.IsSARFiled AS VERIFY_IsSARFiled
+    b.CustomerNo AS BSA_CustomerNo,
+    v.CustomerNo AS VERIFY_CustomerNo
 FROM CUST_LIST c
-JOIN VERIFY..BSA_SUB_CUST_FACT v
-    ON c.TS_CUST_ID = v.CustomerNo
-WHERE v.IsSARFiled = 1
-ORDER BY c.TS_CUST_ID;
+LEFT JOIN BSA_SUB_CUST_FACT b    ON c.TS_CUST_ID = b.CustomerNo
+LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v    ON c.TS_CUST_ID = v.CustomerNo
+WHERE b.CustomerNo is not null 
 
-如果你要再跟來源 NP 的資料比：
-
-WITH CUST_LIST AS
-(
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG = '1'
-    EXCEPT
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG IN ('2','3')
-),
-NP_RESULT AS
-(
-    SELECT
-        b.TS_CUST_ID,
-        MAX(CAST(ISNULL(n.IsSARFiled,0) AS INT)) AS NP_IsSARFiled
-    FROM BANCS_SK_CUST_INFO b
-    JOIN Customer_Migrate_buffer m
-        ON b.SK_CUST_ID = m.CustomerNo
-    JOIN Cust_NP_Migrate_buffer n
-        ON m.CIF_KEY = n.CIF_KEY
-    GROUP BY b.TS_CUST_ID
 )
-SELECT
-    c.TS_CUST_ID,
-    p.NP_IsSARFiled,
-    v.IsSARFiled AS VERIFY_IsSARFiled,
-    CASE
-        WHEN p.NP_IsSARFiled = CAST(v.IsSARFiled AS INT)
-        THEN 'Same'
-        ELSE 'Different'
-    END AS CompareResult
-FROM CUST_LIST c
-JOIN VERIFY..BSA_SUB_CUST_FACT v
-    ON c.TS_CUST_ID = v.CustomerNo
-LEFT JOIN NP_RESULT p
-    ON c.TS_CUST_ID = p.TS_CUST_ID
-WHERE v.IsSARFiled = 1
-ORDER BY c.TS_CUST_ID;
 
-不過我需要確認一件事：
+WHERE IsSARFiled = '1'
 
-你說的
 
-「再看看是不是跟 SELECT CustomerNo,IsSARFiled FROM BANCS_SK_CUST_INFO 一樣」
+找出是1 的客戶
 
-這句應該是打錯表名吧？
 
-因為 BANCS_SK_CUST_INFO 前面看起來只有：
+然後再看看是不是跟
+SELECT CustomerNo,IsSARFiled FROM BSA_SUB_CUST_FACT 依樣
 
-* TS_CUST_ID
-* SK_CUST_ID
-* CUST_RE_NO_FLG
 
-沒有 IsSARFiled。
 
-你要比的來源表應該是：
-
-* Cust_NP_Migrate_buffer
-* 還是 Customer_Migrate_buffer
-* 還是另一張有 IsSARFiled 的來源表？
-
-告訴我真正來源表名，我直接幫你組成最終驗證 SQL。
+我只是要看
+SELECT CustomerNo,IsSARFiled FROM VERIFY..BSA_SUB_CUST_FACT
+SELECT CustomerNo,IsSARFiled FROM BSA_SUB_CUST_FACT
+跟 是不是依樣
