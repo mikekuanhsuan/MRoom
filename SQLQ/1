@@ -1,51 +1,22 @@
-那就把條件加在 VERIFY..BSA_SUB_CUST_FACT 上。
-
-如果你的驗證邏輯是：
-
-1. 找出純新光戶 (Flag=1 且沒有 2/3)
-2. VERIFY 的 IsSARFiled = 1
-3. 比對 BSA_SUB_CUST_FACT 的 IsSARFiled 是否相同
-
-SQL：
-
-WITH CUST_LIST AS
-(
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG = '1'
-    EXCEPT
-    SELECT TS_CUST_ID
-    FROM BANCS_SK_CUST_INFO
-    WHERE CUST_RE_NO_FLG IN ('2','3')
-)
 SELECT
-    c.TS_CUST_ID,
-    CAST(v.IsSARFiled AS INT) AS VERIFY_IsSARFiled,
-    CAST(b.IsSARFiled AS INT) AS BSA_IsSARFiled,
-    CASE
-        WHEN ISNULL(CAST(v.IsSARFiled AS INT),0)
-           = ISNULL(CAST(b.IsSARFiled AS INT),0)
+v.CustomerNo,
+v.HIGHRISK AS VERIFY_HIGHRISK,
+b.HIGHRISK AS BSA_HIGHRISK,
+CASE
+    WHEN ISNULL(v.HIGHRISK,0) = ISNULL(b.HIGHRISK,0)
         THEN 'Same'
-        ELSE 'Different'
-    END AS CompareResult
-FROM CUST_LIST c
-INNER JOIN VERIFY..BSA_SUB_CUST_FACT v
-    ON c.TS_CUST_ID = v.CustomerNo
-LEFT JOIN BSA_SUB_CUST_FACT b
-    ON c.TS_CUST_ID = b.CustomerNo
-WHERE v.IsSARFiled = 1
-ORDER BY c.TS_CUST_ID;
+    ELSE 'Different'
+END AS CompareResult
+FROM VERIFY..BSA_SUB_CUST_FACT v
+JOIN BSA_SUB_CUST_FACT b    ON v.CustomerNo = b.CustomerNo
+ORDER BY v.CustomerNo;
 
-如果你只想看有問題的：
 
-...
-WHERE v.IsSARFiled = 1
-  AND ISNULL(CAST(v.IsSARFiled AS INT),0)
-      <> ISNULL(CAST(b.IsSARFiled AS INT),0);
-
-理論上如果資轉正確，這批客戶應該都是：
-
-TS_CUST_ID	VERIFY_IsSARFiled	BSA_IsSARFiled	CompareResult
-xxx	1	1	Same
-
-而最後那支「只看差異」的 SQL 應該回傳 0 筆。這就是最好的驗證結果。 ✅
+這邊錯了
+我的customer 就是要用這邊塞選出來的純台新
+SELECT CustomerNo
+FROM VERIFY..BSA_SUB_CUST_FACT
+EXCEPT
+SELECT CustomerNo
+FROM BSA_SUB_CUST_FACT a
+JOIN CIF_Migrate_Mapping_TEMP b    ON a.cif_key = b.NEW_CIF_KEY
