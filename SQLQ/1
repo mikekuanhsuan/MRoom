@@ -1,28 +1,72 @@
+如果 SAR 也要改成只驗證你那批 純台新戶：
+
+SELECT CustomerNo
+FROM VERIFY..BSA_SUB_CUST_FACT
+EXCEPT
+SELECT a.CustomerNo
+FROM BSA_SUB_CUST_FACT a
+JOIN CIF_Migrate_Mapping_TEMP b
+    ON a.cif_key = b.NEW_CIF_KEY
+
+那改成這樣：
+
+驗證結果表
+
+WITH PURE_TS AS
+(
+    SELECT CustomerNo
+    FROM VERIFY..BSA_SUB_CUST_FACT
+    EXCEPT
+    SELECT a.CustomerNo
+    FROM BSA_SUB_CUST_FACT a
+    JOIN CIF_Migrate_Mapping_TEMP b
+        ON a.cif_key = b.NEW_CIF_KEY
+)
 SELECT
-    v.CustomerNo,
+    p.CustomerNo,
     v.IsSARFiled AS VERIFY_IsSARFiled,
     b.IsSARFiled AS BSA_IsSARFiled,
     CASE
-        WHEN ISNULL(v.IsSARFiled,0) = ISNULL(b.IsSARFiled,0)
-            THEN 'Same'
+        WHEN ISNULL(CAST(v.IsSARFiled AS INT),0)
+           = ISNULL(CAST(b.IsSARFiled AS INT),0)
+        THEN 'Same'
         ELSE 'Different'
     END AS CompareResult
-FROM VERIFY..BSA_SUB_CUST_FACT v
-JOIN BSA_SUB_CUST_FACT b    ON v.CustomerNo = b.CustomerNo
-ORDER BY v.CustomerNo;
+FROM PURE_TS p
+LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
+    ON p.CustomerNo = v.CustomerNo
+LEFT JOIN BSA_SUB_CUST_FACT b
+    ON p.CustomerNo = b.CustomerNo
+ORDER BY p.CustomerNo;
 
--- 驗證同一個 CustomerNo 的 IsSARFiled 是否不一致
+⸻
+
+只看有差異的客戶
+
+WITH PURE_TS AS
+(
+    SELECT CustomerNo
+    FROM VERIFY..BSA_SUB_CUST_FACT
+    EXCEPT
+    SELECT a.CustomerNo
+    FROM BSA_SUB_CUST_FACT a
+    JOIN CIF_Migrate_Mapping_TEMP b
+        ON a.cif_key = b.NEW_CIF_KEY
+)
 SELECT
-    v.CustomerNo,
+    p.CustomerNo,
     v.IsSARFiled AS VERIFY_IsSARFiled,
     b.IsSARFiled AS BSA_IsSARFiled
-FROM VERIFY..BSA_SUB_CUST_FACT v
-JOIN BSA_SUB_CUST_FACT b    ON v.CustomerNo = b.CustomerNo
-WHERE ISNULL(v.IsSARFiled,0) <> ISNULL(b.IsSARFiled,0);
+FROM PURE_TS p
+LEFT JOIN VERIFY..BSA_SUB_CUST_FACT v
+    ON p.CustomerNo = v.CustomerNo
+LEFT JOIN BSA_SUB_CUST_FACT b
+    ON p.CustomerNo = b.CustomerNo
+WHERE ISNULL(CAST(v.IsSARFiled AS INT),0)
+   <> ISNULL(CAST(b.IsSARFiled AS INT),0)
+ORDER BY p.CustomerNo;
 
+如果第二支查詢結果是 0 筆，就代表：
 
-
-這個原本的SAR
-
-也幫我改一下
-
+✅ 純台新戶的 IsSARFiled 資轉前後完全一致。
+✅ 沒有因為 Merge 或 Mapping 被改掉。
