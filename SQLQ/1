@@ -1,67 +1,52 @@
-SELECT TS_CUST_ID
-FROM BANCS_SK_CUST_INFO
-GROUP BY TS_CUST_ID
-HAVING COUNT(*) > 1
-   AND SUM(
-           CASE
-               WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1
-               ELSE 0
-           END
-          ) > 0;
-
-如果你的條件是：
-
-* TS_CUST_ID 出現超過 1 筆
-* 而且這些資料中至少有一筆 CUST_RE_NO_FLG = 2 或 3
-
-可以這樣寫：
-
-SELECT TS_CUST_ID,
-       COUNT(*) AS CNT
-FROM BANCS_SK_CUST_INFO
-GROUP BY TS_CUST_ID
-HAVING COUNT(*) > 1
-   AND SUM(
-           CASE
-               WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1
-               ELSE 0
-           END
-          ) > 0;
-
-如果想看這些客戶的所有明細：
-
-SELECT *
-FROM BANCS_SK_CUST_INFO
-WHERE TS_CUST_ID IN
+SELECT IsSARFiled FROM Cust_NP_Migrate_buffer WHERE CIF_KEY 
+in
 (
+
+
+SELECT CIF_KEY FROM Customer_Migrate_buffer WHERE CustomerNo 
+in
+(
+	SELECT SK_CUST_ID FROM BANCS_SK_CUST_INFO WHERE TS_CUST_ID 
+	in
+	( 
+		SELECT TS_CUST_ID
+		FROM BANCS_SK_CUST_INFO
+		GROUP BY TS_CUST_ID
+		HAVING COUNT(*) > 1
+		AND SUM(
+				CASE
+					WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1
+					ELSE 0
+				END
+				) > 0
+	)
+)
+
+)
+
+---
+
+SELECT CustomerNo,IsSARFiled FROM BSA_SUB_CUST_FACT WHERE CustomerNo 
+in 
+(
+    -- 17049
     SELECT TS_CUST_ID
     FROM BANCS_SK_CUST_INFO
     GROUP BY TS_CUST_ID
     HAVING COUNT(*) > 1
-       AND SUM(
-               CASE
-                   WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1
-                   ELSE 0
-               END
-              ) > 0
+    AND SUM(
+            CASE
+                WHEN CUST_RE_NO_FLG IN ('2','3') THEN 1
+                ELSE 0
+            END
+            ) > 0;
 )
-ORDER BY TS_CUST_ID;
 
-範例
 
-TS_CUST_ID	FLG
-A	1
-A	2
-B	1
-B	1
-C	2
-C	3
+---
 
-結果會找到：
+因為1個TS 有對應多個SK
 
-* A (有重複且含 2)
-* C (有重複且含 2/3)
+我現在要做的是把多個SK 對應到的IsSARFiled 找出最高的 整理後 跟他對應的TS 的IsSARFiled 做比較
 
-不會找到：
-
-* B (雖然重複，但沒有 2 或 3)
+做成一個表然後多一個欄位寫是否有不同
